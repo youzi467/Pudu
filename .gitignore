@@ -1,0 +1,24 @@
+build/
+out/
+.vs/
+.vscode/settings.json
+CMakeUserPresets.json
+vcpkg_installed/
+
+# 运行时产物
+*.exe
+*.dll
+*.pdb
+*.ilk
+
+# 测试数据(保留目录但不上传具体文件)
+data/*.png
+data/*.jpg
+data/*.jpeg
+data/*.pdf
+data/*.xml
+data/*.musicxml
+!data/.gitkeep
+
+# AI 协作工具的项目本地记忆（不纳入版本控制）
+.workbuddy/

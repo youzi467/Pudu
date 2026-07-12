@@ -1,0 +1,8 @@
+{
+  "name": "pudu",
+  "version": "0.1.0",
+  "description": "Pudu (谱渡): Optical Music Recognition tool for staff/jianpu conversion",
+  "dependencies": [
+    "pugixml"
+  ]
+}

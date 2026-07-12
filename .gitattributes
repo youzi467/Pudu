@@ -1,0 +1,6 @@
+# 统一换行符：仓库内一律以 LF 存储，检出时也保持 LF（消除 CRLF 警告）
+* text=auto eol=lf
+
+# Windows 批处理脚本需 CRLF 才能正确执行
+*.bat text eol=crlf
+*.cmd text eol=crlf
