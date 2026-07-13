@@ -22,3 +22,8 @@ data/*.musicxml
 
 # AI 协作工具的项目本地记忆（不纳入版本控制）
 .workbuddy/
+
+# 本地构建/配置临时日志（不纳入版本控制）
+build.log
+cfg.log
+*.log

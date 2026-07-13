@@ -41,7 +41,15 @@ find_package(pugixml CONFIG REQUIRED)
 # ----------------------------------------------------------------------
 # 3. 构建目标
 # ----------------------------------------------------------------------
-add_executable(Pudu src/main.cpp)
+add_executable(Pudu
+    src/main.cpp
+    src/musicxml_parser.cpp
+)
+
+# 头文件目录（score_model.hpp / musicxml_parser.hpp 位于 include/）
+target_include_directories(Pudu PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
 
 # 强制 MSVC 以 UTF-8 读取源码（源码含中文注释，默认按代码页936/GBK解析会触发
 # C4819 并导致标识符被误判为"未声明"，进而连锁报错。加此选项后彻底消除）

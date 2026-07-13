@@ -1,112 +1,131 @@
+// ----------------------------------------------------------------------
+// 谱渡 Pudu · MusicXML 解析骨架演示
+//
+// 演示 MusicXMLParser 的基本流程：
+//   加载(文件或内嵌样例) -> 遍历关键节点 -> 填充 Score -> 打印 -> 断言首音
+//
+// 构建：cmake --preset windows-msvc-vcpkg && cmake --build build
+// 运行：build/Pudu.exe  [可选: 自定义 .musicxml 路径]
+// ----------------------------------------------------------------------
+
 #include <iostream>
-#include <pugixml.hpp>
+#include <string>
 
-// ----------------------------------------------------------------------
-// 用 pugixml 生成一个最小 MusicXML（score-partwise：单声部、一个小节、一个中央 C 全音符）
-// 这就是谱渡（Pudu）识别流水线最终要"写出"的中间格式雏形。
-// ----------------------------------------------------------------------
-static bool writeMinimalMusicXML(const char* path)
-{
-    pugi::xml_document doc;
+#include "musicxml_parser.hpp"
+#include "score_model.hpp"
 
-    // XML 声明
-    auto decl = doc.append_child(pugi::node_declaration);
-    decl.append_attribute("version") = "1.0";
-    decl.append_attribute("encoding") = "UTF-8";
+namespace {
 
-    // <score-partwise>
-    auto score = doc.append_child("score-partwise");
-    score.append_attribute("version") = "4.0";
-
-    // <part-list><score-part id="P1"><part-name>Music</part-name>
-    auto partList = score.append_child("part-list");
-    auto scorePart = partList.append_child("score-part");
-    scorePart.append_attribute("id") = "P1";
-    scorePart.append_child("part-name").text() = "Music";
-
-    // <part id="P1"><measure number="1">
-    auto part = score.append_child("part");
-    part.append_attribute("id") = "P1";
-    auto measure = part.append_child("measure");
-    measure.append_attribute("number") = "1";
-
-    // <attributes>：divisions / key / time / clef（C 大调 4/4 高音谱号）
-    auto attributes = measure.append_child("attributes");
-    attributes.append_child("divisions").text() = "1";
-    auto key = attributes.append_child("key");
-    key.append_child("fifths").text() = "0";           // 0 个升降号 = C 大调
-    auto time = attributes.append_child("time");
-    time.append_child("beats").text() = "4";
-    time.append_child("beat-type").text() = "4";
-    auto clef = attributes.append_child("clef");
-    clef.append_child("sign").text() = "G";
-    clef.append_child("line").text() = "2";
-
-    // <note>：中央 C 全音符
-    auto note = measure.append_child("note");
-    auto pitch = note.append_child("pitch");
-    pitch.append_child("step").text() = "C";
-    pitch.append_child("octave").text() = "4";
-    note.append_child("duration").text() = "4";
-    note.append_child("type").text() = "whole";
-
-    return doc.save_file(path, "  ");
+// fifths(五度圈步数) -> 调名（MVP 仅覆盖 ≤2 升降号）
+std::string keyName(int fifths, const std::string& mode) {
+    static const std::string majorPos[] = {"C", "G", "D", "A", "E", "B", "F#", "C#"};
+    static const std::string majorNeg[] = {"C", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"};
+    static const std::string minorPos[] = {"a", "e", "b", "f#", "c#", "g#", "d#", "a#"};
+    static const std::string minorNeg[] = {"a", "d", "g", "c", "f", "bb", "eb", "ab"};
+    const std::string* table;
+    int idx;
+    if (mode == "minor") { table = (fifths >= 0) ? minorPos : minorNeg; }
+    else                 { table = (fifths >= 0) ? majorPos : majorNeg; }
+    idx = (fifths >= 0) ? fifths : -fifths;
+    if (idx > 7) idx = 7;
+    return std::string(table[idx]) + (mode == "minor" ? " 小调" : " 大调");
 }
 
-// ----------------------------------------------------------------------
-// 用 pugixml 读回刚写的 MusicXML，取出第一个音符的音高，验证读取链路
-// ----------------------------------------------------------------------
-static bool readBackMusicXML(const char* path)
-{
-    pugi::xml_document doc;
-    pugi::xml_parse_result result = doc.load_file(path);
-    if (!result) {
-        std::cerr << "Failed to parse " << path << ": " << result.description() << std::endl;
-        return false;
-    }
-
-    auto note = doc.child("score-partwise").child("part").child("measure").child("note");
-    auto pitch = note.child("pitch");
-    std::string step = pitch.child("step").text().as_string();
-    std::string octave = pitch.child("octave").text().as_string();
-    std::string type = note.child("type").text().as_string();
-
-    std::cout << "Read back first note: pitch=" << step << octave
-              << ", type=" << type << std::endl;
-
-    // MVP 断言：应为 C4 whole
-    return (step == "C" && octave == "4" && type == "whole");
+std::string pitchLabel(const pudu::Pitch& p) {
+    if (!p.hasValue) return "rest";
+    std::string s(1, p.step);
+    if (p.alter == 1)      s += "#";
+    else if (p.alter == -1) s += "b";
+    s += std::to_string(p.octave);
+    return s;
 }
 
-int main(int argc, char* argv[])
-{
-    std::cout << "=== 谱渡 Pudu · Stage 0 ===" << std::endl;
+// 内嵌样例（文件缺失时回退，保证 demo 始终可运行）
+const char* kEmbeddedSample = R"(<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <movement-title>小星星 (内嵌样例)</movement-title>
+  <part-list>
+    <score-part id="P1"><part-name>Voice</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>1</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note>
+    </measure>
+    <measure number="2">
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><type>half</type></note>
+    </measure>
+  </part>
+</score-partwise>)";
 
-    // ------------------------------------------------------------------
-    // 1. OpenCV 部分暂未启用（MVP 阶段先不编译 OpenCV，待网络稳定后用
-    //    opencv.org 预编译包接入；届时取消 main.cpp 与 CMakeLists.txt 的注释）
-    // ------------------------------------------------------------------
-    if (argc > 1) {
-        std::cout << "Image path argument ignored for now: " << argv[1] << std::endl;
-    }
+} // anonymous namespace
 
-    // ------------------------------------------------------------------
-    // 2. pugixml 读写 MusicXML 验证（写 -> 读回 -> 断言）
-    // ------------------------------------------------------------------
-    const char* xmlPath = "build/minimal.musicxml";
-    if (writeMinimalMusicXML(xmlPath)) {
-        std::cout << "Wrote minimal MusicXML to " << xmlPath << std::endl;
-        if (readBackMusicXML(xmlPath)) {
-            std::cout << "MusicXML round-trip OK (C4 whole note verified)." << std::endl;
-        } else {
-            std::cerr << "MusicXML round-trip assertion FAILED." << std::endl;
+int main(int argc, char* argv[]) {
+    std::cout << "=== 谱渡 Pudu · MusicXML 解析骨架 ===" << std::endl;
+
+    std::string path = (argc > 1) ? argv[1] : "data/sample_c_major.musicxml";
+
+    pudu::Score score;
+    pudu::MusicXMLParser parser;
+    std::string err;
+
+    // 优先从文件加载；失败则回退到内嵌样例
+    bool loaded = parser.loadFromFile(path, score, err);
+    if (!loaded) {
+        std::cerr << "[warn] 文件加载失败 (" << err << ")，改用内嵌样例。" << std::endl;
+        if (!parser.parseString(kEmbeddedSample, score, err)) {
+            std::cerr << "内嵌样例解析失败: " << err << std::endl;
             return 1;
         }
-    } else {
-        std::cerr << "Failed to write MusicXML to " << xmlPath << std::endl;
-        return 1;
     }
 
-    std::cout << "=== Stage 0 environment check passed ===" << std::endl;
+    std::cout << "标题: " << (score.title.empty() ? "(无)" : score.title) << std::endl;
+    std::cout << "声部数: " << score.parts.size() << std::endl;
+
+    for (const auto& part : score.parts) {
+        const auto& a = part.attributes;
+        std::cout << "声部[" << part.id << "] " << part.name << ": "
+                  << keyName(a.fifths, a.mode) << ", "
+                  << "拍号 " << a.beats << "/" << a.beatType << ", "
+                  << "divisions=" << a.divisions << ", "
+                  << "谱号 " << a.clefSign << a.clefLine << std::endl;
+        std::cout << "  小节数: " << part.measures.size() << std::endl;
+
+        for (const auto& m : part.measures) {
+            std::cout << "    小节 " << m.number << ":";
+            for (const auto& n : m.notes) {
+                if (n.isRest)
+                    std::cout << " 0";
+                else
+                    std::cout << " " << pitchLabel(n.pitch) << "/" << n.type;
+            }
+            std::cout << std::endl;
+        }
+    }
+
+    // MVP 断言：首音应为 C4 quarter
+    bool ok = false;
+    if (!score.parts.empty() && !score.parts[0].measures.empty()
+        && !score.parts[0].measures[0].notes.empty()) {
+        const auto& first = score.parts[0].measures[0].notes[0];
+        ok = (!first.isRest && first.pitch.step == 'C' && first.pitch.octave == 4
+              && first.type == "quarter");
+    }
+    if (ok)
+        std::cout << "=== 解析骨架验证通过 (首音 C4 quarter 断言 OK) ===" << std::endl;
+    else {
+        std::cerr << "=== 断言失败: 首音非预期的 C4 quarter ===" << std::endl;
+        return 1;
+    }
     return 0;
 }
