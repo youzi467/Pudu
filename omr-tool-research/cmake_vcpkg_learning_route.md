@@ -2,9 +2,16 @@
 
 > 适用对象：已学完 C++ STL、数据结构、离散数学，零 CMake/vcpkg 基础
 > 学习目标：在真实项目中**独立用 CMake 管理构建流程**、**用 vcpkg 管理第三方库依赖**
-> 配套项目：最终服务于 谱渡 Pudu（阶段 4 即接入 OpenCV + libmusicxml2）
+> 配套项目：最终服务于 谱渡 Pudu（阶段 4 即接入 pugixml，OpenCV 为选做）
 
 ---
+
+> [!NOTE]
+> **本路线学习进度（更新于 2026-07-13）**
+> - **已完成**：阶段 0（环境就绪，MSVC+CMake+vcpkg 已装并验证）/ 阶段 1（CMake 多文件构建，经 D:\cmaketest 与 Pudu 工程实践）/ 阶段 3（vcpkg 首个库：pugixml 经 vcpkg 接入并 `find_package`+`target_link` 跑通）。
+> - **进行中**：阶段 5（CMakePresets 已用，ctest 待补）。
+> - **未开始/待项目长大多模块**：阶段 2（多目标静态库拆分，当前 Pudu 为单目标）。
+> - **调整**：阶段 4 的 `libmusicxml2` 已改为 **pugixml**（vcpkg 无 libmusicxml2）；OpenCV 接入降级为选做（识别端由 Audiveris/oemer 黑盒承担），将来若做则用 opencv.org 预编译包而非 vcpkg 源码编译。
 
 ## 1. 基础概念
 
@@ -160,31 +167,32 @@ demo/
 
 ---
 
-### 阶段 4：组合实战——接入 OpenCV + libmusicxml2 雏形（约 1–1.5 周 · ★★★）
+### 阶段 4：组合实战——接入 OpenCV + pugixml 雏形（约 1–1.5 周 · ★★★）  `状态：pugixml 部分已完成，OpenCV 降级为选做`
+
+> **进度（2026-07-13）**：`pugixml` 已作为首个真实依赖接入 Pudu 工程并跑通（对应阶段 3 本领的实战应用）；`OpenCV` 接入降级为选做（见下方说明），故本阶段"组合实战"的核心（依赖可复现 + CMakePresets 固化）**已完成**。
 
 **学习目标**：把阶段 2–3 的本领用到 谱渡项目的真实依赖上，形成可复现的"空壳项目"。
 
 **核心知识点**
-- 在 `vcpkg.json` 增加 `opencv` 与 `libmusicxml2`（注意 opencv 体积大、首次编译慢，正常）。
-- OpenCV 是多组件库：链接时用 `OpenCV::opencv_core`、`OpenCV::imgcodecs` 等导入目标；`find_package(OpenCV REQUIRED)`。
-- `libmusicxml2` 用 `find_package(musicxml REQUIRED)`（具体目标名以 vcpkg 导出的为准，可用 `vcpkg install` 后查 `share/` 里的 `*-config.cmake`）。
+- 在 `vcpkg.json` 增加 `pugixml`（MusicXML 解析用；原定的 `libmusicxml2` 不在 vcpkg，已改 pugixml）。
+- 🔶 OpenCV（选做）：多组件库，链接用 `OpenCV::opencv_core`、`OpenCV::imgcodecs` 等导入目标；`find_package(OpenCV REQUIRED)`。**但本机不通过 vcpkg 源码编译**（网络下极慢且被拦），改用 **opencv.org 官方预编译包** + `set(OpenCV_DIR "D:/opencv/build")`；且手搓 CV 已降级为练兵（识别端由 Audiveris/oemer 黑盒承担）。
 - `CMakePresets.json` 固化 `CMAKE_TOOLCHAIN_FILE`，团队/换机一键还原。
 - 项目目录规范：`src/ include/ tests/`。
 
 **动手练习**：谱渡 阶段 0 雏形（对应调研报告阶段 0）
 ```
 omr_stage0/
-  vcpkg.json              // dependencies: opencv, libmusicxml2
+  vcpkg.json              // dependencies: pugixml  (opencv 为选做)
   CMakePresets.json       // cacheVariables.CMAKE_TOOLCHAIN_FILE = ../../vcpkg/.../vcpkg.cmake
   CMakeLists.txt
-  src/main.cpp            // 用 OpenCV 读一张图(cv::imread)并打印尺寸；用 libmusicxml2 读一个示例 .xml 并打印音符数
+  src/main.cpp            // 用 pugixml 写最小 score-partwise 并读回断言 C4 whole（OpenCV 读图为选做）
   include/...
 ```
 目标：从干净克隆（`git clone` 后）只需 `cmake --preset=default && cmake --build build` 即可构建运行。
 
 **验证方式**
-- OpenCV + libmusicxml2 程序构建并运行，且**整条链路可复现**（把 `vcpkg.json` + `CMakePresets.json` 提交后，换机器克隆即可还原）。
-- 能解释 opencv 各组件导入目标的区别。
+- pugixml 程序构建并运行，且**整条链路可复现**（把 `vcpkg.json` + `CMakePresets.json` 提交后，换机器克隆即可还原）。
+- （选做）OpenCV 程序：用 opencv.org 预编译包接入，能解释 opencv 各组件导入目标的区别。
 
 ---
 
@@ -238,13 +246,13 @@ omr_stage0/
 
 ## 总览时间线
 
-| 阶段 | 主题 | 估时 | 难度 | 关键产出 |
-|---|---|---|---|---|
-| 0 | 环境+心智模型 | 2–3 天 | ★ | 工具就绪，能手动编译 |
-| 1 | CMake 多文件 | 4–5 天 | ★★ | 迷你计算器 CMake 工程 |
-| 2 | 多目标+库 | 5–7 天 | ★★ | 静态库拆分+tests 目标 |
-| 3 | vcpkg 首个库 | 4–5 天 | ★★ | fmt/json 依赖可复现 |
-| 4 | 组合实战 | 1–1.5 周 | ★★★ | OpenCV+libmusicxml2 空壳 |
-| 5 | 工程化 | 1 周 | ★★★ | Presets+ctest 可维护工程 |
+| 阶段 | 主题 | 估时 | 难度 | 关键产出 | 状态（2026-07-13） |
+|---|---|---|---|---|---|
+| 0 | 环境+心智模型 | 2–3 天 | ★ | 工具就绪，能手动编译 | ✅ 完成 |
+| 1 | CMake 多文件 | 4–5 天 | ★★ | 迷你计算器 CMake 工程 | ✅ 完成（经 cmaketest + Pudu 实践） |
+| 2 | 多目标+库 | 5–7 天 | ★★ | 静态库拆分+tests 目标 | ⬜ 待项目长大多模块时练 |
+| 3 | vcpkg 首个库 | 4–5 天 | ★★ | fmt/json 依赖可复现 | ✅ 完成（pugixml 已接入跑通） |
+| 4 | 组合实战 | 1–1.5 周 | ★★★ | pugixml 空壳（OpenCV 选做） | 🔶 pugixml 部分完成 |
+| 5 | 工程化 | 1 周 | ★★★ | Presets+ctest 可维护工程 | 🔶 Presets 已用，ctest 待补 |
 
 合计约 **4–5 周课余时间**即可达到"在真实项目中独立使用 CMake + vcpkg"的目标，且阶段 4 直接对接你的谱渡项目。
