@@ -1,7 +1,10 @@
 // ----------------------------------------------------------------------
 // 谱渡 Pudu · MusicXML 解析器骨架实现（pugixml）
 // 覆盖 MVP 标签集：score-partwise / part / measure / attributes / note
-// 跳过项见 musicxml_mvp_tags.md §3（chord/voice/lyric/notations/...）
+// 额外处理（阶段 2 前置）：<chord>(和弦归并) / <grace>(装饰音) /
+//   <backup><forward>(时间游标) / <voice>(声部) —— 见 score_model.hpp Note 字段。
+// 仍未处理（详见 musicxml_mvp_tags.md §3）：lyric / notations / <staff> 分层 /
+//   多谱号共存 / 连音 tuplet 等。
 // ----------------------------------------------------------------------
 
 #include "musicxml_parser.hpp"
@@ -85,7 +88,28 @@ bool MusicXMLParser::parseDocument(const pugi::xml_document& doc, Score& out, st
     for (pugi::xml_node partNode : root.children("part")) {
         parsePart(partNode, out);
     }
+
+    // 阶段 2 前置：解析 <credit> 抬头行（标题/作者等），并优选主标题
+    parseCredits(root, out);
+    out.pickTitle();
+
     return true;
+}
+
+void MusicXMLParser::parseCredits(const pugi::xml_node& root, Score& out) {
+    for (pugi::xml_node creditNode : root.children("credit")) {
+        // 一个 <credit> 可能含多条 <credit-words>（如标题+副标题分行）
+        for (pugi::xml_node cw : creditNode.children("credit-words")) {
+            Credit c;
+            c.text = cw.text().as_string();
+            if (pugi::xml_node y = cw.child("default-y"))
+                c.defaultY = y.text().as_int(0);
+            if (pugi::xml_node j = cw.child("justify"))
+                c.justification = j.text().as_string();
+            // 仅保留有效行（非空），保持数据干净
+            if (c.isValid()) out.credits.push_back(c);
+        }
+    }
 }
 
 void MusicXMLParser::parsePart(const pugi::xml_node& partNode, Score& out) {
@@ -108,6 +132,8 @@ void MusicXMLParser::parsePart(const pugi::xml_node& partNode, Score& out) {
     // MVP：每部谱首次遇到 <attributes> 时读取一次
     //      （含 divisions / key / time / clef；多声部各自独立）
     attributesSeen_ = false;
+    // 阶段 2 前置：时间游标随每个声部重新计时
+    cursor_ = 0;
 
     for (pugi::xml_node measureNode : partNode.children("measure")) {
         parseMeasure(measureNode, part);
@@ -150,37 +176,79 @@ void MusicXMLParser::parseMeasure(const pugi::xml_node& measureNode, Part& part)
             attributesSeen_ = true;
 
         } else if (name == "note") {
-            parseNote(child, measure);
+            // 阶段 2 前置：传入当前游标，由 parseNote 填充 onset 并推进/回退游标
+            parseNote(child, measure, part.attributes.divisions);
+
+        } else if (name == "backup") {
+            // 时间回退到上一层（多声部时声部2 重新开始）。游标回退备份的时长。
+            if (pugi::xml_node dur = child.child("duration"))
+                cursor_ -= static_cast<int>(dur.text().as_llong(0));
+            if (cursor_ < 0) cursor_ = 0;
+
+        } else if (name == "forward") {
+            // 时间前进（占位，常用于小节开头对齐）。游标前进前进的时长。
+            if (pugi::xml_node dur = child.child("duration"))
+                cursor_ += static_cast<int>(dur.text().as_llong(0));
         }
-        // 其余子元素（backup/forward/direction 等）MVP 跳过
+        // 其余子元素（direction/sound 等）MVP 跳过
     }
 
     part.measures.push_back(measure);
 }
 
-void MusicXMLParser::parseNote(const pugi::xml_node& noteNode, Measure& measure) {
-    Note note;
+void MusicXMLParser::parseNote(const pugi::xml_node& noteNode, Measure& measure,
+                                int divisions) {
+    // 阶段 2 前置：是否为和弦后续音 / 装饰音
+    bool isChord = (bool)noteNode.child("chord");
+    bool isGrace = (bool)noteNode.child("grace");
 
-    // 休止符：有 <rest> 子元素
+    // 解析基础音高
+    Pitch p;
+    p.hasValue = false;
     if (noteNode.child("rest")) {
-        note.isRest = true;
+        // 休止符：交给下方 note.isRest 处理
     } else if (pugi::xml_node pitch = noteNode.child("pitch")) {
         if (pugi::xml_node step = pitch.child("step")) {
             std::string s = step.text().as_string();
             if (!s.empty()) {
-                note.pitch.step = s[0];
-                note.pitch.hasValue = true;
+                p.step = s[0];
+                p.hasValue = true;
             }
         }
         if (pugi::xml_node alt = pitch.child("alter"))
-            note.pitch.alter = alt.text().as_int(0);
+            p.alter = alt.text().as_int(0);
         if (pugi::xml_node oct = pitch.child("octave"))
-            note.pitch.octave = oct.text().as_int(4);
+            p.octave = oct.text().as_int(4);
     }
 
-    // 时值（pugixml 新版以 as_llong 取代 as_long）
-    if (pugi::xml_node dur = noteNode.child("duration"))
-        note.duration = static_cast<long>(dur.text().as_llong(0));
+    // 和弦后续音：并入上一音的 chordPitches，不单独成事件、不推进时间轴
+    if (isChord && !measure.notes.empty()) {
+        measure.notes.back().chordPitches.push_back(p);
+        return;
+    }
+
+    // 普通音符（含和弦首个音、休止符）
+    Note note;
+    note.isRest = (bool)noteNode.child("rest");
+    note.pitch = p;
+    note.isGrace = isGrace;
+
+    // 阶段 2 前置：起始位置 = 当前游标
+    note.onset = cursor_;
+
+    // 声部/层编号（来自 <voice>，默认 1）
+    if (pugi::xml_node v = noteNode.child("voice"))
+        note.voice = v.text().as_int(1);
+
+    // 时值（pugixml 新版以 as_llong 取代 as_long）；装饰音无 duration，按 0 处理
+    long dur = 0;
+    if (pugi::xml_node durNode = noteNode.child("duration"))
+        dur = static_cast<long>(durNode.text().as_llong(0));
+    note.duration = dur;
+
+    // 阶段 2 前置：仅非装饰音推进时间游标（装饰音不占时值）
+    if (!isGrace)
+        cursor_ += static_cast<int>(dur);
 
     // 时值图形名
     if (pugi::xml_node type = noteNode.child("type"))
