@@ -33,17 +33,26 @@ private:
     // 解析 document 树（供上面两者复用）
     bool parseDocument(const pugi::xml_document& doc, Score& out, std::string& err);
 
+    // 解析所有 <credit>/<credit-words> 抬头行，填充 out.credits
+    void parseCredits(const pugi::xml_node& root, Score& out);
+
     // 解析单个 <part> 节点（含其 <attributes> 与所有 <measure>）
     void parsePart(const pugi::xml_node& partNode, Score& out);
 
     // 解析 <measure>：填充首次出现的 <attributes> 与本小节 <note>
     void parseMeasure(const pugi::xml_node& measureNode, Part& part);
 
-    // 解析单个 <note>：填充 Note（音高 / 休止 / 时值 / 附点 / 延音）
-    void parseNote(const pugi::xml_node& noteNode, Measure& measure);
+    // 解析单个 <note>：填充 Note（音高 / 休止 / 时值 / 附点 / 延音 / onset / voice
+    //   / chordPitches / isGrace）。divisions 用于时间游标推进。
+    void parseNote(const pugi::xml_node& noteNode, Measure& measure, int divisions);
 
     // MVP：当前声部是否已读取过 <attributes>（每部谱独立，仅读取一次）
     bool attributesSeen_ = false;
+
+    // 阶段 2 前置：本声部内的时间游标（单位 = divisions），跨小节连续推进；
+    //   每遇非和弦 <note> 前进其 duration，遇 <backup> 回退、<forward> 前进。
+    //   每个 <note> 的 onset 即取当前游标值。每部谱开始时重置为 0。
+    int cursor_ = 0;
 };
 
 } // namespace pudu

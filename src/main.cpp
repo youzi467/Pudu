@@ -9,6 +9,7 @@
 // ----------------------------------------------------------------------
 
 #include <iostream>
+#include <windows.h>
 #include <string>
 
 #include "musicxml_parser.hpp"
@@ -71,9 +72,15 @@ const char* kEmbeddedSample = R"(<?xml version="1.0" encoding="UTF-8"?>
 } // anonymous namespace
 
 int main(int argc, char* argv[]) {
+    SetConsoleOutputCP(65001); // 设置控制台输出代码页为 UTF-8，消除中文乱码
     std::cout << "=== 谱渡 Pudu · MusicXML 解析骨架 ===" << std::endl;
 
     std::string path = (argc > 1) ? argv[1] : "data/sample_c_major.musicxml";
+
+    // 调试模式：打印每个音符的 onset/voice，用于验证时间轴与声部字段
+    bool debugMode = false;
+    if (argc > 2 && std::string(argv[argc - 1]) == "--debug")
+        debugMode = true;
 
     pudu::Score score;
     pudu::MusicXMLParser parser;
@@ -90,6 +97,7 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << "标题: " << (score.title.empty() ? "(无)" : score.title) << std::endl;
+    std::cout << "抬头行数(credit): " << score.credits.size() << std::endl;
     std::cout << "声部数: " << score.parts.size() << std::endl;
 
     for (const auto& part : score.parts) {
@@ -104,27 +112,58 @@ int main(int argc, char* argv[]) {
         for (const auto& m : part.measures) {
             std::cout << "    小节 " << m.number << ":";
             for (const auto& n : m.notes) {
-                if (n.isRest)
-                    std::cout << " 0";
-                else
-                    std::cout << " " << pitchLabel(n.pitch) << "/" << n.type;
+                if (debugMode) {
+                    // 调试模式：打印 onset(小节内起始) + voice(声部)，
+                    // 用于核对时间轴与多声部字段是否填充正确。
+                    std::cout << " [" << (n.isRest ? std::string("R")
+                                : pitchLabel(n.pitch))
+                              << "@o" << n.onset << "v" << n.voice << "]";
+                } else {
+                    if (n.isRest) {
+                        std::cout << " 0";
+                    } else {
+                        std::string label = pitchLabel(n.pitch) + "/" + n.type;
+                        if (!n.chordPitches.empty()) {
+                            // 和弦：主音 + 括号内其余音（⊕ 标记和弦主音）
+                            label = "⊕" + label;
+                            for (const auto& cp : n.chordPitches)
+                                label += "(" + pitchLabel(cp) + ")";
+                        }
+                        if (n.isGrace) label = "g" + label;  // g=装饰音
+                        std::cout << " " << label;
+                    }
+                }
             }
             std::cout << std::endl;
         }
     }
 
-    // MVP 断言：首音应为 C4 quarter
-    bool ok = false;
-    if (!score.parts.empty() && !score.parts[0].measures.empty()
-        && !score.parts[0].measures[0].notes.empty()) {
-        const auto& first = score.parts[0].measures[0].notes[0];
-        ok = (!first.isRest && first.pitch.step == 'C' && first.pitch.octave == 4
-              && first.type == "quarter");
+    // 通用健全性检查（不再写死为某个样例的首音）
+    // —— 解析器对任何合法 MusicXML 都应通过，而非只对 小星星 样例有效
+    bool ok = true;
+    std::string reason;
+    if (score.isEmpty()) {
+        ok = false; reason = "Score 为空（未解析到任何声部）";
+    } else {
+        bool hasAnyEvent = false;
+        for (const auto& part : score.parts)
+            for (const auto& m : part.measures)
+                if (!m.notes.empty()) { hasAnyEvent = true; break; }
+        if (!hasAnyEvent) { ok = false; reason = "未解析到任何音符/休止"; }
     }
-    if (ok)
-        std::cout << "=== 解析骨架验证通过 (首音 C4 quarter 断言 OK) ===" << std::endl;
-    else {
-        std::cerr << "=== 断言失败: 首音非预期的 C4 quarter ===" << std::endl;
+
+    if (ok) {
+        const auto& firstPart = score.parts[0];
+        const auto& firstNote = (!firstPart.measures.empty()
+            && !firstPart.measures[0].notes.empty())
+            ? firstPart.measures[0].notes[0] : pudu::Note{};
+        std::string firstLabel = firstNote.isRest ? "休止(全小节)"
+            : pitchLabel(firstNote.pitch);
+        std::cout << "=== 解析成功: 共 " << score.parts.size() << " 声部 / 首声部 "
+                  << firstPart.measures.size() << " 小节 / 首音符 "
+                  << firstLabel << " ===" << std::endl;
+    } else {
+        std::cerr << "=== 断言失败: " << reason << " ===" << std::endl;
         return 1;
     }
     return 0;
