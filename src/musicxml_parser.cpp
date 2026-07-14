@@ -7,12 +7,43 @@
 #include "musicxml_parser.hpp"
 
 #include <sstream>
+#include <fstream>
+#include <windows.h>
+
+namespace {
+
+// UTF-8 路径 -> 宽字符，供 pugixml 的 wchar_t* load_file 使用，
+// 从而支持含中文/特殊字符的路径（ANSI fopen 在中文 Windows 下会失败）
+std::wstring utf8ToWide(const std::string& s) {
+    if (s.empty()) return {};
+    int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
+    if (n <= 1) return {};
+    std::wstring w(n - 1, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &w[0], n);
+    return w;
+}
+
+// 是否为 ZIP 文件（.mxl 即 ZIP）：魔数 "PK"（0x50 0x4B）
+bool isZipFile(const std::string& path) {
+    std::ifstream f(path, std::ios::binary);
+    unsigned char sig[2] = {0, 0};
+    f.read(reinterpret_cast<char*>(sig), 2);
+    return f.gcount() == 2 && sig[0] == 'P' && sig[1] == 'K';
+}
+
+} // namespace
 
 namespace pudu {
 
 bool MusicXMLParser::loadFromFile(const std::string& path, Score& out, std::string& err) {
+    // 预检：.mxl 本质是 ZIP 压缩包，pugixml 只能解析纯 XML
+    if (isZipFile(path)) {
+        err = "不支持 .mxl 压缩格式(本质是 ZIP)。请用 MuseScore/OpenScore 将谱面另存为 .musicxml(纯 XML)后重试。";
+        return false;
+    }
+    // 用宽字符接口打开，支持含中文/特殊字符的 UTF-8 路径
     pugi::xml_document doc;
-    pugi::xml_parse_result res = doc.load_file(path.c_str());
+    pugi::xml_parse_result res = doc.load_file(utf8ToWide(path).c_str());
     if (!res) {
         std::ostringstream os;
         os << "解析失败: " << res.description() << " (offset " << res.offset << ")";
