@@ -17,7 +17,7 @@
 
 > 整体规划与 5 阶段路线见 `omr-tool-research/results/research_report.md`；阶段 3 具体行动计划见 `stage3_action_plan.md`。
 
-## 功能概览（阶段 2）
+## 功能概览（阶段 2 + 阶段 3）
 
 - **输入**：MusicXML 文件（`data/*.musicxml`，支持 `score-partwise` 与 `.mxl`）。
 - **转换** `staffToJianpu`：
@@ -28,8 +28,17 @@
   - **L1 纯文本**（`--to-jianpu`）：命令行核对用。
   - **L2 二维 HTML/Unicode**（`--to-jianpu-l2 [out.html]`）：自包含、可直接浏览器打开，含真实八度点、减时线横向连写、增时线、和弦列、连音弧。
   - **L3 结构化 JSON**（`--to-jianpu-json [out.json]`）：无损，供 `verify_jianpu_groundtruth.py` 逐音比对。
+- **变调重算（阶段 2 边界补全 / 阶段 3 前置）**：
+  - 在任一 `--to-jianpu*` 前追加 `--key <调名>`（移调）、`--rekey <调名>`（改写调号）、`--transpose <±半音>`（字面移调）。
+  - 单一事实源 = canonical Score：变调在 Score 上平移音高（或仅改调号）后复用既有转换器，保证 L0↔Score 自洽，满足阶段 3 往返（G3）音高守恒前提。
+  - `include/transpose.hpp` + `src/transpose.cpp`，纯函数 `parseKeyName` / `tonicNameToFifths` / `semitonesToFifths` / `transposeScore` 独立可单测。
+- **阶段 3 反向转换（简谱 → 五线谱）`jianpuToStaff` + `scoreToMusicXML`**：
+  - `jianpuToStaff(JianpuDoc) -> Score`：音级→绝对音高（逆 `midiToJianpu`，复用 `midiToPitch` 保证拼写口径一致）、八度点→octave、时值→`type`+`duration`（与 `typeToDuration` 严格互逆）、调号/拍号→`ScoreAttributes`、多声部按 `partIndex`/`voice` 还原、休止/和弦/装饰音/延音线映射回 `Note`。
+  - `scoreToMusicXML(Score) -> .musicxml`：pugixml 写出 `score-partwise`；多声部用 `<backup>/<forward>` 还原并行时序、和弦用 `<chord/>`；写出的文件可被本仓库解析器读回且语义等价（G2 自洽测试）。
+  - CLI `--to-musicxml [out.musicxml]`：演示「五线→简→五线」双向闭环，可叠加 `--key/--rekey/--transpose`。
+  - 已知限制：和弦逐音八度点在阶段 2 仅存音级，反向按「根音上方最近八度」还原（音级守恒，精确八度不保）；`tieStop` 反向不还原（仅 `tieStart`）。
 - **质量保障**：
-  - C++ 单元测试 **54/54 全绿**（header-only 自研框架，零外部依赖）。
+  - C++ 单元测试 **79/79 全绿**（header-only 自研框架，零外部依赖；含阶段 2 共 54、变调重算 16、阶段 3 新增 9 项 G1+G3；G2 序列化自洽 1 项随 MSVC 构建一并运行，合计 80）。
   - music21 跨语言 ground-truth 校验：8/8 样本、音符 **100.0%**（13492/13492）、字段 **100.0%**（79240/79240）、计入类差异 = 0。
 
 ## 前置依赖
@@ -68,6 +77,20 @@ build/Pudu.exe data/cello-suite-no-1.musicxml --to-jianpu-l2 jianpu_l2_cello.htm
 
 # 输出 L3 结构化 JSON（默认 jianpu.json，可指定路径）
 build/Pudu.exe data/cello-suite-no-1.musicxml --to-jianpu-json jianpu.json
+
+# 阶段 3 反向闭环：MusicXML -> 简谱 -> 五线谱，写出 .musicxml（演示双向互转）
+#   可叠加 --key/--rekey/--transpose 先变调再反向
+build/Pudu.exe data/cello-suite-no-1.musicxml --to-musicxml sample_back.musicxml
+build/Pudu.exe data/cello-suite-no-1.musicxml --key D --to-musicxml sample_back_D.musicxml
+
+# 变调重算（阶段 2 边界补全 / 阶段 3 前置）：在任一 --to-jianpu* 前追加
+#   --key <调名>    移调：实际音高平移，简谱数字不变（如歌手/乐器移调）
+#   --rekey <调名>  改写调号：音高不变，数字相对新主音重算
+#   --transpose <±半音>  字面移调（如 --transpose +2 整体升大二度）
+# 调名支持大小调、升降号(#/b/♯/♭)与 "m"/"minor"/"小调" 后缀，大小写/空白容错。
+build/Pudu.exe data/cello-suite-no-1.musicxml --key D --to-jianpu
+build/Pudu.exe data/cello-suite-no-1.musicxml --rekey G --to-jianpu-l2 jianpu_l2_G.html
+build/Pudu.exe data/cello-suite-no-1.musicxml --transpose -3 --to-jianpu-json jianpu.json
 ```
 
 > 不带路径参数时，`Pudu.exe` 回退到内嵌「小星星」样例。若提示找不到 `pugixml.dll`，将 vcpkg 的 bin 目录加入 `PATH`：
@@ -90,15 +113,20 @@ Pudu/  (工作区当前磁盘名为 omr/，规划重命名为 Pudu/)
 ├── vcpkg.json                  # 第三方依赖声明（pugixml）
 ├── README.md
 ├── src/
-│   ├── main.cpp                # 入口 + CLI（--to-jianpu / --to-jianpu-l2 / --to-jianpu-json）
+│   ├── main.cpp                # 入口 + CLI（--to-jianpu* / --to-musicxml / --key / --rekey / --transpose）
 │   ├── musicxml_parser.cpp     # MusicXML 解析（pugixml）
-│   └── jianpu_converter.cpp    # 阶段2 五线→简谱转换 + L1/L2/L3 渲染
+│   ├── jianpu_converter.cpp    # 阶段2 五线→简谱转换 + L1/L2/L3 渲染
+│   ├── transpose.cpp           # 变调重算（transposeScore / parseKeyName / midiToPitch / ...）
+│   ├── jianpu_to_staff.cpp     # 阶段3 G1：JianpuDoc -> Score
+│   └── musicxml_serializer.cpp # 阶段3 G2：Score -> MusicXML（scoreToMusicXML）
 ├── include/
 │   ├── score_model.hpp         # MusicXML 内存模型（Score/Note/.../Credit）
 │   ├── musicxml_parser.hpp     # 解析器接口
 │   ├── jianpu_model.hpp        # 阶段2 L0 简谱模型（JianpuDoc/...）
-│   └── jianpu_converter.hpp    # 转换器 API（staffToJianpu / jianpuToL1/L2/Json）
-├── test/                       # 阶段2 单元测试（header-only 框架 + 4 测试文件）
+│   ├── jianpu_converter.hpp    # 转换器 API（staffToJianpu / jianpuToL1/L2/Json）
+│   ├── transpose.hpp           # 变调重算 API（含 midiToPitch，阶段3 复用）
+│   └── jianpu_to_staff.hpp     # 阶段3 API（jianpuToStaff / scoreToMusicXML）
+├── test/                       # 单元测试（header-only 框架 + 6 测试文件）
 ├── data/                       # 测试 MusicXML 语料（8 份，.gitignore 已排除）
 └── omr-tool-research/          # 调研文档（技术选型/架构/规范/校验报告/计划）
     ├── results/research_report.md        # 总路线与 5 阶段规划

@@ -23,6 +23,10 @@ endif()
 # 谱渡 Pudu —— 五线谱 ⇄ 简谱互转工具（OMR）
 project(Pudu VERSION 0.1.0 LANGUAGES CXX)
 
+# 启用 CTest：必须在顶层 CMakeLists 调用，才会在构建目录生成
+# CTestTestfile.cmake，使 `ctest` 能发现并运行注册过的测试目标。
+enable_testing()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -45,6 +49,9 @@ add_executable(Pudu
     src/main.cpp
     src/musicxml_parser.cpp
     src/jianpu_converter.cpp
+    src/transpose.cpp
+    src/jianpu_to_staff.cpp       # 阶段 3 G1：JianpuDoc -> Score
+    src/musicxml_serializer.cpp   # 阶段 3 G2：Score -> MusicXML
 )
 
 # 头文件目录（score_model.hpp / musicxml_parser.hpp 位于 include/）
@@ -79,7 +86,14 @@ add_executable(PuduTests
     test/test_pitch_mapping.cpp
     test/test_duration.cpp
     test/test_staff_to_jianpu.cpp
+    test/test_transpose.cpp
+    test/test_jianpu_to_staff.cpp   # 阶段 3 G1+G2 单测
+    test/test_serializer.cpp        # 阶段 3 G2 序列化自洽（需 pugixml）
     src/jianpu_converter.cpp
+    src/transpose.cpp
+    src/jianpu_to_staff.cpp
+    src/musicxml_serializer.cpp
+    src/musicxml_parser.cpp       # 提供 MusicXMLParser::parseString：test_serializer.cpp 的往返自洽测试需把序列化结果解析回 Score
 )
 
 target_include_directories(PuduTests PRIVATE
@@ -90,6 +104,16 @@ target_include_directories(PuduTests PRIVATE
 if(MSVC)
     target_compile_options(PuduTests PRIVATE /utf-8)
 endif()
+
+# 关键：PuduTests 自身编译了 src/musicxml_serializer.cpp（直接 #include <pugixml.hpp>）
+# 以及 test/test_serializer.cpp（经 musicxml_parser.hpp 间接引入 pugixml.hpp），
+# 因此必须链接 pugixml 才能把其 include 目录（INTERFACE_INCLUDE_DIRECTORIES）
+# 传递进来，否则 MSVC 报 C1083: 无法打开包括文件 "pugixml.hpp"。
+target_link_libraries(PuduTests PRIVATE pugixml::pugixml)
+
+# 注册到 CTest：直接跑 PuduTests 可执行文件（其 main 自带 header-only
+# 测试框架，返回非 0 表示有失败）。这样 `ctest` 即可驱动全套单元测试。
+add_test(NAME PuduTests COMMAND PuduTests)
 
 # ----------------------------------------------------------------------
 # 4. Windows 下运行时 DLL 提示

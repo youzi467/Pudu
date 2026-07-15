@@ -12,10 +12,13 @@
 #include <windows.h>
 #include <string>
 #include <fstream>
+#include <climits>
 
 #include "musicxml_parser.hpp"
 #include "score_model.hpp"
 #include "jianpu_converter.hpp"   // 阶段 2：简谱转换（staffToJianpu / jianpuToL1）
+#include "transpose.hpp"          // 阶段 2 边界：变调重算
+#include "jianpu_to_staff.hpp"    // 阶段 3：简谱 -> 五线谱（jianpuToStaff / scoreToMusicXML）
 
 namespace {
 
@@ -84,6 +87,38 @@ int main(int argc, char* argv[]) {
     if (argc > 2 && std::string(argv[argc - 1]) == "--debug")
         debugMode = true;
 
+    // 变调重算请求（阶段 2 边界）：--key <名>(移调) / --rekey <名>(改写调号)
+    //   / --transpose <±半音>(字面移调)。三者互斥，重复以最后一次为准。
+    bool hasTranspose = false;
+    pudu::TransposeMode tMode = pudu::TransposeMode::Transpose;
+    pudu::TransposeTarget tTarget;
+    std::string tErr;
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        if ((a == "--key" || a == "--rekey") && i + 1 < argc) {
+            try {
+                auto [f, m] = pudu::parseKeyName(argv[i + 1], "major");
+                tTarget = {f, m, INT_MIN};
+                tMode = (a == "--rekey") ? pudu::TransposeMode::Rekey
+                                         : pudu::TransposeMode::Transpose;
+                hasTranspose = true;
+            } catch (const std::exception& e) { tErr = e.what(); }
+            ++i;
+        } else if (a == "--transpose" && i + 1 < argc) {
+            try {
+                int semis = std::stoi(argv[i + 1]);
+                tTarget = {pudu::semitonesToFifths(semis), "major", semis};
+                tMode = pudu::TransposeMode::Transpose;
+                hasTranspose = true;
+            } catch (const std::exception& e) { tErr = e.what(); }
+            ++i;
+        }
+    }
+    if (!tErr.empty()) {
+        std::cerr << "[错误] 变调参数：" << tErr << std::endl;
+        return 1;
+    }
+
     pudu::Score score;
     pudu::MusicXMLParser parser;
     std::string err;
@@ -98,12 +133,22 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // 统一构建简谱文档：若请求变调则先变调再投影（不就地修改 score）。
+    auto buildDoc = [&]() -> pudu::JianpuDoc {
+        if (hasTranspose)
+            return pudu::transposeStaffToJianpu(score, tTarget, tMode);
+        return pudu::staffToJianpu(score);
+    };
+
     // 阶段 2：简谱转换预览（L1 纯文本）。命中即输出简谱并退出，不打印五线谱明细。
     bool toJianpu = false;
     for (int i = 1; i < argc; ++i)
         if (std::string(argv[i]) == "--to-jianpu") { toJianpu = true; break; }
     if (toJianpu) {
-        pudu::JianpuDoc doc = pudu::staffToJianpu(score);
+        if (hasTranspose)
+            std::cout << "[变调] " << (tMode == pudu::TransposeMode::Rekey ? "改写调号" : "移调")
+                      << " -> 1=" << pudu::fifthsToTonicName(tTarget.fifths, tTarget.mode) << std::endl;
+        pudu::JianpuDoc doc = buildDoc();
         std::cout << "\n=== 简谱预览 (L1) ===" << std::endl;
         std::cout << pudu::jianpuToL1(doc) << std::endl;
         return 0;
@@ -122,7 +167,7 @@ int main(int argc, char* argv[]) {
         }
     }
     if (toJianpuL2) {
-        pudu::JianpuDoc doc = pudu::staffToJianpu(score);
+        pudu::JianpuDoc doc = buildDoc();
         std::string html = pudu::jianpuToL2(doc);
         std::ofstream f(l2OutPath, std::ios::binary);
         if (!f) {
@@ -147,7 +192,7 @@ int main(int argc, char* argv[]) {
         }
     }
     if (toJianpuJson) {
-        pudu::JianpuDoc doc = pudu::staffToJianpu(score);
+        pudu::JianpuDoc doc = buildDoc();
         std::string json = pudu::jianpuToJson(doc);
         std::ofstream f(jsonOutPath, std::ios::binary);
         if (!f) {
@@ -157,6 +202,37 @@ int main(int argc, char* argv[]) {
         f << json;
         std::cout << "\n=== 简谱 L3 (JSON) 已写出: " << jsonOutPath << " ===" << std::endl;
         std::cout << "供 ground-truth 校验器逐音比对。" << std::endl;
+        return 0;
+    }
+
+    // 阶段 3：简谱 -> 五线谱（反向闭环演示）。
+    //   读 MusicXML -> staffToJianpu -> jianpuToStaff -> 写出 .musicxml，
+    //   演示"五线 -> 简 -> 五线"双向互转；可叠加 --key/--rekey/--transpose。
+    bool toMusicXml = false;
+    std::string mxlOutPath = "sample_back.musicxml";
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--to-musicxml") {
+            toMusicXml = true;
+            if (i + 1 < argc && std::string(argv[i + 1]).find('-') != 0)
+                mxlOutPath = argv[i + 1];
+            break;
+        }
+    }
+    if (toMusicXml) {
+        pudu::JianpuDoc doc = buildDoc();
+        pudu::Score back = pudu::jianpuToStaff(doc);
+        std::string xml = pudu::scoreToMusicXML(back);
+        std::ofstream f(mxlOutPath, std::ios::binary);
+        if (!f) {
+            std::cerr << "[错误] 无法写入文件: " << mxlOutPath << std::endl;
+            return 1;
+        }
+        f << xml;
+        std::cout << "\n=== 阶段 3：简谱 -> 五线谱 MusicXML 已写出: " << mxlOutPath << " ===" << std::endl;
+        std::cout << "声部数: " << back.parts.size()
+                  << " / 调号 fifths=" << back.parts[0].attributes.fifths
+                  << " / 拍号 " << back.parts[0].attributes.beats << "/"
+                  << back.parts[0].attributes.beatType << std::endl;
         return 0;
     }
 

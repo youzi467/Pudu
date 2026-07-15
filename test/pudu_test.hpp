@@ -147,4 +147,16 @@ inline int runAll() {
         }                                                                  \
     } while (0)
 
+// 表达式应抛出（标准异常或未知异常均可；用于异常路径/非法输入断言）
+#define EXPECT_THROW(expr)                                                 \
+    do {                                                                   \
+        ++::pudu_test::g_checks();                                         \
+        bool _threw = false;                                              \
+        try { (void)(expr); }                                              \
+        catch (...) { _threw = true; }                                     \
+        if (!_threw)                                                       \
+            ::pudu_test::reportFailure(__FILE__, __LINE__, #expr,          \
+                "期望抛出异常，但未抛出");                                  \
+    } while (0)
+
 #endif // PUDU_TEST_HPP
