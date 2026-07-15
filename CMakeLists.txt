@@ -41,7 +41,16 @@ find_package(pugixml CONFIG REQUIRED)
 # ----------------------------------------------------------------------
 # 3. 构建目标
 # ----------------------------------------------------------------------
-add_executable(Pudu src/main.cpp)
+add_executable(Pudu
+    src/main.cpp
+    src/musicxml_parser.cpp
+    src/jianpu_converter.cpp
+)
+
+# 头文件目录（score_model.hpp / musicxml_parser.hpp 位于 include/）
+target_include_directories(Pudu PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
 
 # 强制 MSVC 以 UTF-8 读取源码（源码含中文注释，默认按代码页936/GBK解析会触发
 # C4819 并导致标识符被误判为"未声明"，进而连锁报错。加此选项后彻底消除）
@@ -57,6 +66,30 @@ target_link_libraries(Pudu PRIVATE
     # ${OpenCV_LIBS}
     pugixml::pugixml
 )
+
+# ----------------------------------------------------------------------
+# 5. 单元测试（阶段 2 简谱转换）
+#    极简 header-only 测试框架（test/pudu_test.hpp），不引入新依赖，
+#    与项目"最小依赖"哲学一致；如需 GoogleTest 可在此替换并链接。
+#    运行：build/PuduTests.exe
+# ----------------------------------------------------------------------
+add_executable(PuduTests
+    test/pudu_test_main.cpp
+    test/test_tonic.cpp
+    test/test_pitch_mapping.cpp
+    test/test_duration.cpp
+    test/test_staff_to_jianpu.cpp
+    src/jianpu_converter.cpp
+)
+
+target_include_directories(PuduTests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/test
+)
+
+if(MSVC)
+    target_compile_options(PuduTests PRIVATE /utf-8)
+endif()
 
 # ----------------------------------------------------------------------
 # 4. Windows 下运行时 DLL 提示

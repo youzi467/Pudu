@@ -5,6 +5,16 @@
 
 ---
 
+> [!NOTE]
+> **项目状态与关键决策（更新于 2026-07-13）**
+> - **项目定名：谱渡 / Pudu**（对外显示名"谱渡"，CMake 工程名/可执行名 `Pudu`，vcpkg 包名 `pudu`）。
+> - **已完成**：阶段 0 环境地基（S1 环境 / S2 工具链 pugixml 端到端 / S3 Git 入库，含 `.gitattributes` 与忽略 `.workbuddy/`）。
+> - **关键决策变更**：① `libmusicxml2` 不在 vcpkg registry → 改用 **pugixml**（MVP 只需读写 XML）；② 架构决定将"手搓 OpenCV"降级为**选做/练兵**，识别端由 **Audiveris/oemer 黑盒**承担（见 §1.3 与 §4）。
+> - **进行中**：MusicXML 规范通读 + 用 pugixml 解析示例并建立 Score 内存模型（原 S6–S7，正收尾）。
+> - **下一步**：进入阶段 1 预备——吃透 MusicXML + 建 Score 模型 + 下载 5–10 份测试谱；随后接 Audiveris/oemer 完成"PDF→Score→控制台音高"。
+> - **未开始**：阶段 2（五线→简谱核心）/ 3（简谱→五线）/ 4（AI·DL）/ 5（工程化）。
+> - 磁盘文件夹仍名为 `omr` / `omr-tool-research`（重命名为 `Pudu` / `Pudu-research` 待关闭工作区后执行）。
+
 ## 0. 执行摘要（先给结论）
 
 **Q1 选型结论**：MVP 阶段**不要从零手搓 OpenCV**，而是采用"成熟 OMR 引擎做识别黑盒 + 自写 MusicXML⇄简谱转换层"的混合架构。把 OpenCV 自研降格为"理解原理的练兵"，把真正的 AI 学习投入点放在**后期用预训练/微调的深度学习模型替换识别引擎**上。理由：
@@ -75,7 +85,7 @@
 |---|---|---|---|
 | ① 输入解析 | 区分矢量/扫描 PDF；栅格化或提矢量；图像预处理（灰度/二值化/去噪/纠斜） | MuPDF/Poppler 栅格化 + OpenCV 预处理 | 同左 |
 | ② 乐谱识别 | 图像→MusicXML | 调 Audiveris/oemer 子进程 | DL 模型推理(ONNX Runtime/LibTorch) |
-| ③ MusicXML I/O | 解析/生成 MusicXML，提供内存 Score 对象 | libmusicxml2(C++) | 同左（Python 端用 music21 做测试对照） |
+| ③ MusicXML I/O | 解析/生成 MusicXML，提供内存 Score 对象 | **pugixml**(C++)（注：原定 libmusicxml2 不在 vcpkg，已改 pugixml） | 同左（Python 端用 music21 做测试对照） |
 | ④ 格式转换 | 五线↔简谱双向映射（**核心产权**） | C++ 自写映射逻辑 | 同左 |
 | ⑤ 输出/渲染 | 输出首调简谱文本 + MusicXML | 文本/HTML + MusicXML 导出 | Qt GUI + 简谱字体渲染 |
 
@@ -119,7 +129,7 @@ struct JianpuDoc  { Key key; vector<JianpuNote> notes; };
 
 ### 2.5 技术栈边界（C++ vs Python）
 
-- **C++ 核心（你的代码，Windows/VS + CMake/vcpkg）**：MusicXML I/O（`libmusicxml2`）、④转换逻辑、⑤GUI（Qt/ImGui）。保持纯 C++ 体验，形成产权。
+- **C++ 核心（你的代码，Windows/VS + CMake/vcpkg）**：MusicXML I/O（**pugixml**，原定 libmusicxml2 不在 vcpkg）、④转换逻辑、⑤GUI（Qt/ImGui）。保持纯 C++ 体验，形成产权。
 - **Python 辅助（学习/AI）**：PyTorch 训练、music21 做 MusicXML 解析测试对照、调用 oemer/Audiveris。
 - **DL 推理在 C++**：Python 训练 → `torch.onnx.export` → C++ 用 **ONNX Runtime**（轻量、跨平台、最友好，推荐）或 **LibTorch** 部署。
 - **PDF 处理**：矢量 PDF 用 MuPDF `get_drawings()`/Poppler 提取；扫描件用 OpenCV 二值化+去噪。**MVP 建议先用矢量/印刷 PDF 或 Audiveris 输出，规避扫描件噪声难题。**
@@ -132,31 +142,49 @@ struct JianpuDoc  { Key key; vector<JianpuNote> notes; };
 
 > 总估时约 **16–23 周（4–6 个月，课余并行）**。难度 ★~★★★★★。每阶段"产出目标"即该阶段的可运行/可展示物。
 
-### 阶段 0：环境与 CV/音乐表示基础（1–2 周 · ★★）
-- **技术点**：Visual Studio + CMake + vcpkg；Git；OpenCV 基础（imread/threshold/contours/Hough）；通读 MusicXML 规范。
-- **资源**：[MusicXML Tutorial PDF](https://wpmedia.musicxml.com/wp-content/uploads/2017/12/musicxml-tutorial.pdf)｜[OpenCV 文档](https://docs.opencv.org/)
-- **产出**：环境就绪；C++ 小程序：载入图片→二值化→Hough 检测谱线并绘制；用 `libmusicxml2` 读一个示例 MusicXML。
+### 阶段 0：环境与 CV/音乐表示基础（1–2 周 · ★★）  `状态：环境地基完成，MusicXML 解析进行中，OpenCV 基础延后`
 
-### 阶段 1：OMR 黑盒集成 + MusicXML 吃透（2–3 周 · ★★）
+> **进度（2026-07-13）**：S1 环境 / S2 工具链（pugixml 端到端）/ S3 Git 入库 均已完成；OpenCV 基础（S4–S5）按架构决策降级为选做、延后（见 §4）；MusicXML 规范与解析（S6–S7，库改 pugixml）**进行中**。
+
+- **技术点**：Visual Studio + CMake + vcpkg；Git；OpenCV 基础（imread/threshold/contours/Hough，**选做/延后**）；通读 MusicXML 规范。
+- **资源**：[MusicXML Tutorial PDF](https://wpmedia.musicxml.com/wp-content/uploads/2017/12/musicxml-tutorial.pdf)｜[OpenCV 文档](https://docs.opencv.org/)
+- **产出**：环境就绪；C++ 小程序：用 **pugixml** 读一个示例 MusicXML 并打印音符序列（OpenCV 谱线检测小程序为选做，待网络稳定后用 opencv.org 预编译包实现）。
+
+### 阶段 1：OMR 黑盒集成 + MusicXML 吃透（2–3 周 · ★★）  `状态：未开始（前置 MusicXML/pugixml 正在阶段0收尾）`
+
+> **进度（2026-07-13）**：未开始。前置（MusicXML 规范 + pugixml 解析 + Score 内存模型）正在阶段 0 收尾，完成后即进入本阶段。
+
 - **技术点**：子进程调用 Audiveris/oemer 出 MusicXML；用 music21(Python) 探索解析已知谱（打印 pitch/key/measure），建立 Score 内存模型。
 - **资源**：[Audiveris GitHub](https://github.com/jostle/audiveris)｜[oemer](https://github.com/BreezeWhite/oemer)｜[music21 文档](https://web.mit.edu/music21/doc/index.html)
 - **产出**：流水线——给定 PDF → 解析为内存 `Score` → 控制台打印音高序列。
 
-### 阶段 2：五线谱→简谱核心（3–4 周 · ★★★）← MVP 第一可运行版
+### 阶段 2：五线谱→简谱核心（3–4 周 · ★★★）← MVP 第一可运行版  `状态：未开始`
+
+> **进度（2026-07-13）**：未开始。依赖阶段 1 产出的 Score 模型与黑盒识别链路。
+
 - **技术点**：实现 `staffToJianpu`：主音计算、pitch→音级、临时记号映射、八度点、时值→音符类型+附点；覆盖 ≤2 升降号、单声部、无装饰音/歌词。
 - **资源**：[Jianpu 首调映射参考(Flutter notemus)](https://zread.ai/alessonqueirozdev-hub/flutter_notemus/16-jianpu-numbered-notation)｜music21 做 ground-truth 对照
 - **产出**：**MVP v1**——输入 MVP 约束 PDF，输出首调简谱文本 + MusicXML。
 
-### 阶段 3：简谱→五线谱（2–3 周 · ★★★）
+### 阶段 3：简谱→五线谱（2–3 周 · ★★★）  `状态：未开始`
+
+> **进度（2026-07-13）**：未开始。依赖阶段 2 的 `staffToJianpu` 与 `JianpuDoc` 模型。
+
 - **技术点**：实现 `jianpuToStaff`：解析数字简谱→相对度数→按调号换算绝对音高→生成 MusicXML `pitch`；增时线/下划线→`type`+dot。
 - **产出**：双向转换闭环；自测往返一致性（五线→简→五线 音高守恒）。
 
-### 阶段 4：AI / 深度学习进阶（4–8 周 · ★★★★）← 转 AI 主战场
+### 阶段 4：AI / 深度学习进阶（4–8 周 · ★★★★）← 转 AI 主战场  `状态：未开始`
+
+> **进度（2026-07-13）**：未开始。前置：阶段 1–3 完成、测试谱集就绪、对 MusicXML 与 CV 原理有基础。
+
 - **技术点**：PyTorch 入门；用 DeepScores/DoReMi **合成数据微调小模型做单声部音符检测**（或适配 LEGATO/Clarity-OMR 预训练权重）；ONNX Runtime 在 C++ 部署；写**评测脚本**（MVP 测试集上 precision/recall）。
 - **资源**：[动手学深度学习 d2l.ai](https://d2l.ai/)｜[小土堆 PyTorch B站](https://www.bilibili.com/)｜[CS231n](http://cs231n.github.io/)｜[DeepScoresV2](https://zenodo.org/record/4012193)｜[LEGATO arXiv:2506.19065](https://arxiv.org/abs/2506.19065)｜[Clarity-OMR](https://github.com/)
 - **产出**：自训 OMR 组件 + 评测报告；用自训模型替换 Audiveris 作识别引擎，对比准确率。**可写进简历的高价值产出。**
 
-### 阶段 5：工程化与作品集（2–3 周 · ★★★）
+### 阶段 5：工程化与作品集（2–3 周 · ★★★）  `状态：未开始`
+
+> **进度（2026-07-13）**：未开始。前置：MVP 双向转换闭环（阶段 2–3）可用。
+
 - **技术点**：Qt/ImGui Windows GUI；PDF 输入、简谱渲染、纠错编辑器；文档与打包。
 - **产出**：可演示 Windows 应用 + GitHub 仓库 + 技术报告——服务考研 AI 方向作品集。
 
@@ -166,7 +194,7 @@ struct JianpuDoc  { Key key; vector<JianpuNote> notes; };
 
 - **扫描件噪声**是 OMR 最大误差源，MVP 先用矢量/印刷 PDF，扫描件留到阶段 4 用 DL 改善。
 - **简谱无标准 MusicXML 表达**，务必自定清晰的内部 `JianpuDoc` 模型，不要硬塞 `lyric`。
-- **下一步建议**：本周先搭环境（阶段 0），同时下载 5–10 份 MVP 约束内的公开印刷谱（OpenScore/IMSLP）作为测试集；阶段 1 即可跑通"PDF→MusicXML→控制台音高"。
+- **下一步建议（2026-07-13）**：环境地基已完成。当前聚焦**吃透 MusicXML（用 pugixml 解析）+ 建立 Score 内存模型**（阶段 0 收尾，对应原 S6–S7），并下载 5–10 份 MVP 约束内公开印刷谱（OpenScore/IMSLP：单声部、≤2 升降号、无装饰音）作测试集；完成后即进入阶段 1，接 Audiveris/oemer 黑盒跑通"PDF→MusicXML→Score→控制台音高"。OpenCV 谱线检测（原 S4–S5 产出①）降级为选做，待网络稳定后用 opencv.org 预编译包实现，不阻塞主线。
 
 ---
 
@@ -179,7 +207,7 @@ struct JianpuDoc  { Key key; vector<JianpuNote> notes; };
 - [LEGATO 大规模预训练 OMR (NeurIPS 2025)](https://arxiv.org/abs/2506.19065)
 - [Sheet Music Benchmark + OMR-NED (ISMIR 2025)](https://arxiv.org/abs/2506.10488)
 - [MusicXML 官方文档与 Tutorial](https://www.musicxml.com/?p=769) ｜ [MusicXML 4.0 note/pitch 参考(W3C)](https://www.w3.org/2021/06/musicxml40/musicxml-reference/elements/note)
-- [libmusicxml2 (C++ MusicXML 库, MPL-2.0)](https://github.com/grame-cncm/libmusicxml)
+- [pugixml (C++ XML 库, MIT，本项目用于读写 MusicXML)](https://github.com/zeux/pugixml)｜[libmusicxml2 (原候选，vcpkg 无端口，作参考)](https://github.com/grame-cncm/libmusicxml)
 - [music21 (Python 音乐分析库)](https://web.mit.edu/music21/doc/index.html)
 - [DeepScoresV2 数据集](https://zenodo.org/record/4012193) ｜ [MUSCIMA++](https://github.com/OMR-Research/muscima-pp)
 - [动手学深度学习 d2l.ai](https://d2l.ai/) ｜ [CS231n](http://cs231n.github.io/)

@@ -1,0 +1,624 @@
+{
+  "summary": {
+    "files_total": 8,
+    "files_ok": 8,
+    "notes_compared": 13492,
+    "notes_correct": 13492,
+    "note_pass_rate": 100.0,
+    "field_checked": 79240,
+    "field_failed": 0,
+    "field_pass_rate": 100.0,
+    "category_distribution": {
+      "rhythm_unresolvable": 46
+    },
+    "edge_case": {
+      "rests": 541,
+      "chords": 230,
+      "graces": 36,
+      "tuplets": 821,
+      "key_changes": 4
+    },
+    "fatal_files": []
+  },
+  "files": [
+    {
+      "file": "badinerie-for-flute-by-js-bach.musicxml",
+      "fatal": null,
+      "notes_compared": 232,
+      "notes_correct": 232,
+      "field_checked": 1393,
+      "field_failed": 0,
+      "category_counts": {},
+      "diffs": [],
+      "key_change_detected": false,
+      "edge": {
+        "rests": 0,
+        "chords": 0,
+        "graces": 2,
+        "tuplets": 0
+      }
+    },
+    {
+      "file": "canon-in-d-violin-solo.musicxml",
+      "fatal": null,
+      "notes_compared": 269,
+      "notes_correct": 269,
+      "field_checked": 1597,
+      "field_failed": 0,
+      "category_counts": {},
+      "diffs": [],
+      "key_change_detected": false,
+      "edge": {
+        "rests": 4,
+        "chords": 0,
+        "graces": 0,
+        "tuplets": 0
+      }
+    },
+    {
+      "file": "cello-suite-no-1.musicxml",
+      "fatal": null,
+      "notes_compared": 2290,
+      "notes_correct": 2290,
+      "field_checked": 13122,
+      "field_failed": 0,
+      "category_counts": {},
+      "diffs": [],
+      "key_change_detected": true,
+      "edge": {
+        "rests": 125,
+        "chords": 2,
+        "graces": 1,
+        "tuplets": 3
+      }
+    },
+    {
+      "file": "concerto-in-a-minor-a-vivaldi.musicxml",
+      "fatal": null,
+      "notes_compared": 1933,
+      "notes_correct": 1933,
+      "field_checked": 11322,
+      "field_failed": 0,
+      "category_counts": {},
+      "diffs": [],
+      "key_change_detected": true,
+      "edge": {
+        "rests": 57,
+        "chords": 0,
+        "graces": 0,
+        "tuplets": 6
+      }
+    },
+    {
+      "file": "j-s-bach-cello-suite-n-1-bwv-1007-1-prelude.musicxml",
+      "fatal": null,
+      "notes_compared": 704,
+      "notes_correct": 704,
+      "field_checked": 3983,
+      "field_failed": 0,
+      "category_counts": {},
+      "diffs": [],
+      "key_change_detected": false,
+      "edge": {
+        "rests": 49,
+        "chords": 1,
+        "graces": 0,
+        "tuplets": 0
+      }
+    },
+    {
+      "file": "solo-violin-caprice-no-24-in-a-minor-n-paganini-op-1-no-24.musicxml",
+      "fatal": null,
+      "notes_compared": 1116,
+      "notes_correct": 1116,
+      "field_checked": 6982,
+      "field_failed": 0,
+      "category_counts": {
+        "rhythm_unresolvable": 46
+      },
+      "diffs": [
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 138,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 138,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 138,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 138,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 138,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 138,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 138,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 140,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 140,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 140,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 140,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 140,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 140,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 140,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 153,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 153,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 153,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 153,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 153,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 153,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 153,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 153,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 153,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 153,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 153,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 153,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 153,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 153,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.14375,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 155,
+          "index": 0,
+          "field": "rhythm(tuplet)",
+          "expected": "unresolvable_ql",
+          "actual": 0.11041666666666666,
+          "category": "rhythm_unresolvable"
+        }
+      ],
+      "key_change_detected": true,
+      "edge": {
+        "rests": 27,
+        "chords": 195,
+        "graces": 33,
+        "tuplets": 302
+      }
+    },
+    {
+      "file": "solo-violin-partita-no-2-in-d-minor-j-s-bach-bwv-1004.musicxml",
+      "fatal": null,
+      "notes_compared": 5561,
+      "notes_correct": 5561,
+      "field_checked": 32654,
+      "field_failed": 0,
+      "category_counts": {},
+      "diffs": [],
+      "key_change_detected": true,
+      "edge": {
+        "rests": 251,
+        "chords": 30,
+        "graces": 0,
+        "tuplets": 510
+      }
+    },
+    {
+      "file": "summer-third-movement.musicxml",
+      "fatal": null,
+      "notes_compared": 1387,
+      "notes_correct": 1387,
+      "field_checked": 8187,
+      "field_failed": 0,
+      "category_counts": {},
+      "diffs": [],
+      "key_change_detected": false,
+      "edge": {
+        "rests": 28,
+        "chords": 2,
+        "graces": 0,
+        "tuplets": 0
+      }
+    }
+  ]
+}
