@@ -165,15 +165,19 @@ JianpuDoc staffToJianpu(const Score& score) {
                         jn.augmentDashes = ad;
                         jn.dots = dz;
                     } else {
+                        // M1.5-C：极端连音比(如 7:8/7:4/9:4)无法映射标准简谱时值，
+                        // 回退 <type> 记谱，并显式标记该音为未解析（机读、可聚合）。
                         typeToDuration(n.type, ul, ad);
                         jn.underlines = ul;
                         jn.augmentDashes = ad;
                         jn.dots = n.dots;
+                        jn.rhythmUnresolvable = true;
                     }
 
                     jn.onset = n.onset;   // 供校验器跨声部按时间轴归并
                     jn.isGrace = n.isGrace;
                     jn.tieToNext = n.tieStart;   // 延音弧画在本音(起点)上（规范 §2.5）
+                    jn.tieFromPrev = n.tieStop;  // M1.5-B：反向还原 tie 的 stop 端
 
                     // 连音组标注（选项 A）：actual-notes>0 表示属连音组，
                     //   tuplet 存实际音符数(3=三连音,5=五连音...)，供校验器核对分组。
@@ -181,9 +185,13 @@ JianpuDoc staffToJianpu(const Score& score) {
                     jn.tuplet = (n.tupletActual > 0) ? n.tupletActual : 0;
 
                     // 和弦：主音已在 degree，其余音各自换算音级（规范 §2.5）。
-                    // 注：当前仅存音级，逐音八度点(各自独立)为后续扩展点。
-                    for (const auto& cp : n.chordPitches)
-                        jn.chordDegrees.push_back(midiToDegree(cp, tonicPc));
+                    // M1.5-A：逐音八度点按"相对根音"的偏移成对存储，与 chordDegrees 等长。
+                    for (const auto& cp : n.chordPitches) {
+                        int md; Accidental ma; int mod;
+                        midiToJianpu(cp, tonicPc, md, ma, mod);
+                        jn.chordDegrees.push_back(md);
+                        jn.chordOctaveDots.push_back(mod - jn.octaveDots);
+                    }
 
                     jm.notes.push_back(jn);
                 }
@@ -212,17 +220,30 @@ std::string renderJianpuNote(const JianpuNote& jn) {
             case Accidental::DoubleFlat:  s += "bb"; break;
             default: break;
         }
-        if (!jn.chordDegrees.empty()) {            // 和弦: [主音 其余...]
+        if (!jn.chordDegrees.empty()) {            // 和弦: [主音 其余...]（M1.5-A：逐音八度点）
             s += "[" + std::to_string(jn.degree);
-            for (int d : jn.chordDegrees) s += " " + std::to_string(d);
+            // 根音的 octaveDots 紧贴根音数字（不套整组和弦括号后）
+            if (jn.octaveDots > 0)
+                for (int i = 0; i < jn.octaveDots; ++i) s += "'";
+            else if (jn.octaveDots < 0)
+                for (int i = 0; i < -jn.octaveDots; ++i) s += ",";
+            for (size_t k = 0; k < jn.chordDegrees.size(); ++k) {
+                s += " " + std::to_string(jn.chordDegrees[k]);
+                // 成员音八度点相对根音(chordOctaveDots[k])，紧贴该成员数字
+                int od = (k < jn.chordOctaveDots.size()) ? jn.chordOctaveDots[k] : 0;
+                if (od > 0)
+                    for (int i = 0; i < od; ++i) s += "'";
+                else if (od < 0)
+                    for (int i = 0; i < -od; ++i) s += ",";
+            }
             s += "]";
         } else {
             s += std::to_string(jn.degree);
+            if (jn.octaveDots > 0)                 // 升八度点 '
+                for (int i = 0; i < jn.octaveDots; ++i) s += "'";
+            else if (jn.octaveDots < 0)            // 降八度点 ,
+                for (int i = 0; i < -jn.octaveDots; ++i) s += ",";
         }
-        if (jn.octaveDots > 0)                     // 升八度点 '
-            for (int i = 0; i < jn.octaveDots; ++i) s += "'";
-        else if (jn.octaveDots < 0)                // 降八度点 ,
-            for (int i = 0; i < -jn.octaveDots; ++i) s += ",";
     }
     for (int i = 0; i < jn.augmentDashes; ++i) s += " -";  // 增时线
     for (int i = 0; i < jn.underlines; ++i) s += "_";      // 减时线
@@ -356,9 +377,13 @@ std::string l2NoteCell(const JianpuNote& jn) {
     if (jn.tieToNext) cell += l2Tie();
     if (!jn.chordDegrees.empty()) {
         cell += "<span class=\"chord\">";
-        cell += l2Digit(jn);
-        for (int d : jn.chordDegrees)
+        cell += l2Digit(jn);   // 根音点由上方 l2OctaveDots(jn.octaveDots) 负责
+        for (size_t k = 0; k < jn.chordDegrees.size(); ++k) {
+            int d = jn.chordDegrees[k];
+            int od = (k < jn.chordOctaveDots.size()) ? jn.chordOctaveDots[k] : 0;
             cell += "<span class=\"jp-num\">" + std::to_string(d) + "</span>";
+            cell += l2OctaveDots(od);   // M1.5-A：成员音八度点紧贴该成员数字
+        }
         cell += "</span>";
     } else {
         cell += l2Digit(jn);
@@ -527,11 +552,19 @@ std::string jsonNote(const JianpuNote& jn) {
     s += ",\"isRest\":" + std::string(jn.degree == 0 ? "true" : "false");
     s += ",\"isGrace\":" + std::string(jn.isGrace ? "true" : "false");
     s += ",\"tieToNext\":" + std::string(jn.tieToNext ? "true" : "false");
+    s += ",\"tieFromPrev\":" + std::string(jn.tieFromPrev ? "true" : "false");
     s += ",\"tuplet\":" + std::to_string(jn.tuplet);
+    s += ",\"rhythmUnresolvable\":" + std::string(jn.rhythmUnresolvable ? "true" : "false");
     s += ",\"chordDegrees\":[";
     for (size_t i = 0; i < jn.chordDegrees.size(); ++i) {
         if (i) s += ",";
         s += std::to_string(jn.chordDegrees[i]);
+    }
+    s += "]";
+    s += ",\"chordOctaveDots\":[";
+    for (size_t i = 0; i < jn.chordOctaveDots.size(); ++i) {
+        if (i) s += ",";
+        s += std::to_string(jn.chordOctaveDots[i]);
     }
     s += "]";
     s += "}";

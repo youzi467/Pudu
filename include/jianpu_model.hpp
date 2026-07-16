@@ -52,9 +52,12 @@ struct JianpuNote {
     double onset = 0.0;         // 起始位置(单位=四分音符/quarterLength)，与 music21 同量纲
 
     bool tieToNext = false;     // 连音线连向下一音
+    bool tieFromPrev = false;   // M1.5-B：本音是连音的 stop 端（与 tieToNext 对称）
     bool isGrace = false;       // 装饰音(小音符, 不占基本时值)
     int tuplet = 0;             // 连音组: 0=常规,3=三连音,5=五连音...（阶段 2 暂置 0）
-    std::vector<int> chordDegrees;  // 和弦其余音级(主音在 degree)；逐音八度点后续扩展
+    std::vector<int> chordDegrees;   // 和弦其余音级(主音在 degree)
+    std::vector<int> chordOctaveDots; // M1.5-A：与 chordDegrees 一一对应；成员相对【根音】的八度偏移(+1=高/-1=低/0=本位)
+    bool rhythmUnresolvable = false; // M1.5-C：本音时值未能映射标准简谱时值(已由 staffToJianpu 回退 <type>)
 };
 
 // 小节（按 onset 升序的音序列）

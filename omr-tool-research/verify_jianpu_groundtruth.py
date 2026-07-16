@@ -327,16 +327,32 @@ def compare_note(conv_note, gt_event, tonic_pc):
         if conv_note["chordDegrees"] != exp_chord:
             diffs.append(("chordDegrees", exp_chord, conv_note["chordDegrees"], "chord"))
 
+        # M1.5-A：逐音八度点（相对根音的偏移），与 chordDegrees 并列比对(ChordMember 维度)。
+        #   旧转换器输出无此键 -> 跳过，不引入新的 counted 缺陷。
+        if "chordOctaveDots" in conv_note:
+            exp_cod = []
+            for p in gt_event["pitches"][1:]:
+                _, _, moct = expected_pitch(p.pitchClass, p.alter or 0.0, p.midi, tonic_pc)
+                exp_cod.append(moct - exp_oct)
+            n_checked += 1
+            if conv_note["chordOctaveDots"] != exp_cod:
+                diffs.append(("chordOctaveDots", exp_cod, conv_note["chordOctaveDots"], "chord"))
+
     # ---- 装饰音 ----
     n_checked += 1
     if conv_note["isGrace"] != gt_event["isGrace"]:
         diffs.append(("isGrace", gt_event["isGrace"], conv_note["isGrace"], "grace"))
 
-    # ---- 延音线 ----
-    gt_tie = (gt_event["tie"] == "start")
+    # ---- 延音线（start + stop 双端，M1.5-B） ----
+    gt_tie = gt_event["tie"]
+    gt_start = gt_tie in ("start", "continue")      # continue 同时是下一音的起点
+    gt_stop = gt_tie in ("stop", "continue")        # continue 同时是上一音的止点
     n_checked += 1
-    if conv_note["tieToNext"] != gt_tie:
-        diffs.append(("tieToNext", gt_tie, conv_note["tieToNext"], "tie"))
+    if conv_note.get("tieToNext", False) != gt_start:
+        diffs.append(("tieToNext", gt_start, conv_note.get("tieToNext", False), "tie"))
+    n_checked += 1
+    if conv_note.get("tieFromPrev", False) != gt_stop:
+        diffs.append(("tieFromPrev", gt_stop, conv_note.get("tieFromPrev", False), "tie"))
 
     # ---- 节奏 ----
     if not gt_event["isGrace"]:

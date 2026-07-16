@@ -68,11 +68,13 @@ Pitch jianpuNoteToPitch(const JianpuNote& jn, int tonicPc, bool preferSharp) {
 // 和弦成员音高：阶段 2 仅存音级(1-7)，反向只能还原音级，无法还原成员的精确八度
 //   （已知限制，与阶段 2 边界项对齐）。这里取"相对根音上方最近"的八度，得到标准的
 //   和弦叠置（如 C 和弦的 3/5 度落在 E4/G4 而非 E4/G3），听感与记谱更自然。
-Pitch chordMemberPitch(int chordDegree, int rootDegree, int rootMidi, bool preferSharp) {
+Pitch chordMemberPitch(int chordDegree, int rootDegree, int rootMidi,
+                       bool preferSharp, int memberOctaveDots = 0) {
     int memberSemi = kDegreeSemi[chordDegree];
     int rootSemi = kDegreeSemi[rootDegree];
     int diff = (memberSemi - rootSemi + 12) % 12;   // 0..11，取到根音上方最近同音级
-    return midiToPitch(rootMidi + diff, preferSharp);
+    // M1.5-A：memberOctaveDots 为成员相对根音的八度偏移(+1=高八度/-1=低八度/0=本位)
+    return midiToPitch(rootMidi + diff + 12 * memberOctaveDots, preferSharp);
 }
 
 // 由简谱音构造 Note（含节奏/八度/记号/和弦），divisions 决定 duration 粒度。
@@ -81,8 +83,8 @@ Note buildNote(const JianpuNote& jn, int tonicPc, int divisions, bool preferShar
     n.voice = voice;
     n.onset = jn.onset;
     n.isGrace = jn.isGrace;
-    n.tieStart = jn.tieToNext;        // 阶段 2 仅存 tieStart(=tieToNext)；tieStop 为反向已知限制
-    n.tieStop = false;
+    n.tieStart = jn.tieToNext;        // 起点：连向相邻下一音
+    n.tieStop = jn.tieFromPrev;       // M1.5-B：反向还原 tie 的 stop 端（此前恒为 false，属已知限制）
 
     std::string type; double baseQl;
     reverseRhythm(jn.underlines, jn.augmentDashes, type, baseQl);
@@ -95,8 +97,10 @@ Note buildNote(const JianpuNote& jn, int tonicPc, int divisions, bool preferShar
         n.isRest = false;
         n.pitch = jianpuNoteToPitch(jn, tonicPc, preferSharp);
         int rootMidi = n.pitch.midiNumber();
-        for (int d : jn.chordDegrees)
-            n.chordPitches.push_back(chordMemberPitch(d, jn.degree, rootMidi, preferSharp));
+        for (size_t k = 0; k < jn.chordDegrees.size(); ++k)
+            n.chordPitches.push_back(chordMemberPitch(
+                jn.chordDegrees[k], jn.degree, rootMidi, preferSharp,
+                k < jn.chordOctaveDots.size() ? jn.chordOctaveDots[k] : 0));
     }
     n.type = type;
     n.dots = jn.dots;

@@ -86,6 +86,28 @@ bool parseDegree(const std::string& s, int& out, std::string& err) {
     }
 }
 
+// 解析「音级 + 紧随其后的八度点(' / ,)」串（M1.5-A：和弦内逐成员使用）。
+//   数字部分交给 parseDegree 校验(0-7)；其后 ' 升八度点 / , 降八度点 累计偏移。
+//   既支持单音(如 "3,")也支持和弦成员(如 [1' 3,] 中的 "3,")。
+bool parseDegreeWithOctave(const std::string& s, int& outDeg, int& outOd, std::string& err) {
+    if (s.empty()) { err = "空音级"; return false; }
+    size_t i = 0;
+    std::string num;
+    while (i < s.size() && std::isdigit(static_cast<unsigned char>(s[i]))) { num += s[i]; ++i; }
+    if (num.empty()) { err = "音级缺少数字: " + s; return false; }
+    int d = 0;
+    if (!parseDegree(num, d, err)) return false;
+    int od = 0;
+    for (; i < s.size(); ++i) {
+        if (s[i] == '\'')      od++;
+        else if (s[i] == ',')  od--;
+        else { err = std::string("音级含非法字符 '") + s[i] + "': " + s; return false; }
+    }
+    outDeg = d;
+    outOd = od;
+    return true;
+}
+
 // 单音 quarterLength（与 jianpu_to_staff.cpp 的 reverseRhythm + dotFactor 同口径）。
 //   augmentDashes/underlines 决定基准时值，dots 决定附点因子。
 double noteQuarterLength(const JianpuNote& jn) {
@@ -144,14 +166,20 @@ bool parseNoteToken(const std::string& tok, JianpuNote& jn, std::string& err) {
             return false;
         }
         std::vector<int> degs;
+        std::vector<int> ods;
         for (const auto& p : parts) {
-            int d = 0;
-            if (!parseDegree(p, d, err)) return false;
+            int d = 0, od = 0;
+            if (!parseDegreeWithOctave(p, d, od, err)) return false;
             degs.push_back(d);
+            ods.push_back(od);
         }
         jn.degree = degs[0];
-        for (size_t k = 1; k < degs.size(); ++k)
+        jn.octaveDots = ods[0];       // 根音八度点（绝对，与单音语义一致）
+        for (size_t k = 1; k < degs.size(); ++k) {
             jn.chordDegrees.push_back(degs[k]);
+            // M1.5-A：成员音八度点相对根音（文本中的 ' / , 即相对偏移，非绝对）
+            jn.chordOctaveDots.push_back(ods[k]);
+        }
         i = close + 1;
     } else {
         // 单音：读取连续数字作为音级
