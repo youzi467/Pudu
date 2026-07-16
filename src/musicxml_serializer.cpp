@@ -11,6 +11,7 @@
 #include <pugixml.hpp>
 
 #include <algorithm>  // std::sort（显式 include：MSVC 不隐式带入，g++ 靠传递性 include 通过）
+#include <cmath>       // std::fabs / std::llround（同上：避免依赖传递性 include）
 #include <sstream>
 #include <vector>     // std::vector（本文件直接使用，显式 include 保证跨编译器一致）
 

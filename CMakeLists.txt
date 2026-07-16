@@ -52,6 +52,7 @@ add_executable(Pudu
     src/transpose.cpp
     src/jianpu_to_staff.cpp       # 阶段 3 G1：JianpuDoc -> Score
     src/musicxml_serializer.cpp   # 阶段 3 G2：Score -> MusicXML
+    src/jianpu_text_parser.cpp    # G4：简谱文本输入解析（L1 文本 -> JianpuDoc）
 )
 
 # 头文件目录（score_model.hpp / musicxml_parser.hpp 位于 include/）
@@ -89,10 +90,12 @@ add_executable(PuduTests
     test/test_transpose.cpp
     test/test_jianpu_to_staff.cpp   # 阶段 3 G1+G2 单测
     test/test_serializer.cpp        # 阶段 3 G2 序列化自洽（需 pugixml）
+    test/test_jianpu_text_parser.cpp  # G4：简谱文本解析单测（含端到端闭环）
     src/jianpu_converter.cpp
     src/transpose.cpp
     src/jianpu_to_staff.cpp
     src/musicxml_serializer.cpp
+    src/jianpu_text_parser.cpp    # G4：与 Pudu 目标并列编入（避免链接遗漏）
     src/musicxml_parser.cpp       # 提供 MusicXMLParser::parseString：test_serializer.cpp 的往返自洽测试需把序列化结果解析回 Score
 )
 

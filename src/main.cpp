@@ -12,6 +12,7 @@
 #include <windows.h>
 #include <string>
 #include <fstream>
+#include <sstream>
 #include <climits>
 
 #include "musicxml_parser.hpp"
@@ -19,6 +20,7 @@
 #include "jianpu_converter.hpp"   // 阶段 2：简谱转换（staffToJianpu / jianpuToL1）
 #include "transpose.hpp"          // 阶段 2 边界：变调重算
 #include "jianpu_to_staff.hpp"    // 阶段 3：简谱 -> 五线谱（jianpuToStaff / scoreToMusicXML）
+#include "jianpu_text_parser.hpp" // G4：简谱文本输入解析（L1 文本 -> JianpuDoc）
 
 namespace {
 
@@ -117,6 +119,58 @@ int main(int argc, char* argv[]) {
     if (!tErr.empty()) {
         std::cerr << "[错误] 变调参数：" << tErr << std::endl;
         return 1;
+    }
+
+    // G4：简谱文本输入解析（--from-jianpu-text <path>）+ 自定义 divisions（--divisions N）
+    //   --from-jianpu-text：读取简谱文本文件，调 parseJianpuText 得到 JianpuDoc，
+    //     供 --to-musicxml 分支使用（与 MusicXML 输入互斥共用同一出口）。
+    //   --divisions N：反向生成的 divisions（1..16，默认 4），越界/非数字报错退出。
+    //   两项均为新增选项，不改动任何既有分支逻辑。
+    bool fromJianpuText = false;
+    std::string jianpuTextPath;
+    int userDivisions = 4;
+    bool hasDivisions = false;
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "--from-jianpu-text" && i + 1 < argc) {
+            fromJianpuText = true;
+            jianpuTextPath = argv[i + 1];
+            ++i;
+        } else if (a == "--divisions" && i + 1 < argc) {
+            try {
+                int v = std::stoi(argv[i + 1]);
+                if (v < 1 || v > 16) {
+                    std::cerr << "[错误] --divisions 取值须为 1..16，收到: "
+                              << v << std::endl;
+                    return 1;
+                }
+                userDivisions = v;
+                hasDivisions = true;
+            } catch (const std::exception& e) {
+                std::cerr << "[错误] --divisions 参数非法: " << e.what() << std::endl;
+                return 1;
+            }
+            ++i;
+        }
+    }
+
+    // 若指定了 --from-jianpu-text，则读取并解析文本文件（失败即报错退出）。
+    // 解析结果存入 jianpuTextDoc，供下方 --to-musicxml 分支使用。
+    pudu::JianpuDoc jianpuTextDoc;
+    if (fromJianpuText) {
+        std::ifstream f(jianpuTextPath, std::ios::binary);
+        if (!f) {
+            std::cerr << "[错误] 无法打开简谱文本文件: " << jianpuTextPath << std::endl;
+            return 1;
+        }
+        std::ostringstream ss;
+        ss << f.rdbuf();
+        std::string txt = ss.str();
+        std::string perr;
+        if (!pudu::parseJianpuText(txt, jianpuTextDoc, perr)) {
+            std::cerr << "[错误] 简谱文本解析失败: " << perr << std::endl;
+            return 1;
+        }
     }
 
     pudu::Score score;
@@ -219,8 +273,10 @@ int main(int argc, char* argv[]) {
         }
     }
     if (toMusicXml) {
-        pudu::JianpuDoc doc = buildDoc();
-        pudu::Score back = pudu::jianpuToStaff(doc);
+        // G4：若指定 --from-jianpu-text，则使用解析得到的简谱文档；
+        //     否则沿用既有 MusicXML 输入路径（buildDoc）。两者均受 --divisions 控制。
+        pudu::JianpuDoc doc = fromJianpuText ? jianpuTextDoc : buildDoc();
+        pudu::Score back = pudu::jianpuToStaff(doc, hasDivisions ? userDivisions : 4);
         std::string xml = pudu::scoreToMusicXML(back);
         std::ofstream f(mxlOutPath, std::ios::binary);
         if (!f) {

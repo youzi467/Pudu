@@ -17,6 +17,7 @@
 //     一一对应，转换不回改 Score。
 // ----------------------------------------------------------------------
 
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,20 @@ namespace pudu {
 
 // 临时记号（数字左侧）。DoubleSharp/DoubleFlat 为后续扩展预留。
 enum class Accidental { None, Sharp, Flat, Natural, DoubleSharp, DoubleFlat };
+
+// 流输出（供 EXPECT_EQ 等在失败时打印 enum class；纯诊断用，不影响任何逻辑）。
+// 必须在 pudu 命名空间内，EXPECT_EQ 失败时 ADL 才能找到它。
+inline std::ostream& operator<<(std::ostream& os, Accidental a) {
+    switch (a) {
+        case Accidental::None:        return os << "None";
+        case Accidental::Sharp:       return os << "Sharp";
+        case Accidental::Flat:        return os << "Flat";
+        case Accidental::Natural:     return os << "Natural";
+        case Accidental::DoubleSharp: return os << "DoubleSharp";
+        case Accidental::DoubleFlat:  return os << "DoubleFlat";
+    }
+    return os << "Accidental(" << static_cast<int>(a) << ")";
+}
 
 // 单个简谱音（或休止）
 struct JianpuNote {
