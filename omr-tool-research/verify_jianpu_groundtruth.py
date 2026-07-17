@@ -60,6 +60,18 @@ try:
 except Exception:
     pass
 
+# ---- 导入共享评测内核（与 omr_eval_groundtruth harness 共用，避免逻辑分叉） ----
+# omr_eval_lib 为纯 Python（无第三方依赖），与本文件同口径：
+#   MAJOR_SCALE / RHYTHM_BASE / COUNTED_CATEGORIES / UNVALIDATED_CATEGORIES
+#   fifths_to_tonic_pc / expected_pitch / expected_rhythm
+#   flatten_json_lines / _ACC_RANK / _note_key / _merge_align / _doc_check
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tools")))
+from omr_eval_lib import (  # noqa: F401
+    MAJOR_SCALE, RHYTHM_BASE, COUNTED_CATEGORIES, UNVALIDATED_CATEGORIES,
+    fifths_to_tonic_pc, expected_pitch, expected_rhythm,
+    flatten_json_lines, _ACC_RANK, _note_key, _merge_align, _doc_check,
+)
+
 from music21 import converter
 from music21 import note as m21note
 from music21 import chord as m21chord
@@ -73,37 +85,12 @@ OUT_DIR = os.path.join(ROOT, "omr-tool-research")
 REPORT_JSON = os.path.join(OUT_DIR, "jianpu_groundtruth_report.json")
 REPORT_MD = os.path.join(OUT_DIR, "jianpu_groundtruth_report.md")
 
-# 大调音阶模板：index = pitch class (C=0)，value = 首调音级 1-7，0=非音阶音
-MAJOR_SCALE = [1, 0, 2, 0, 3, 4, 0, 5, 0, 6, 0, 7]
+# 以下常量与纯函数（MAJOR_SCALE / RHYTHM_BASE / COUNTED_CATEGORIES /
+# UNVALIDATED_CATEGORIES / _ACC_RANK / _note_key / fifths_to_tonic_pc /
+# expected_pitch / expected_rhythm / flatten_json_lines / _merge_align /
+# _doc_check）已抽取至 omr_eval_lib 并由此 import，保证与 harness 同口径。
+# _event_key 依赖 music21 pitch 对象，保留在本文件（复用上述 import）。
 
-# 标准时值基准 -> (增时线, 减时线)，用于 quarterLength 反推
-RHYTHM_BASE = [
-    (4.0,   3, 0),   # whole
-    (2.0,   1, 0),   # half
-    (1.0,   0, 0),   # quarter
-    (0.5,   0, 1),   # eighth
-    (0.25,  0, 2),   # 16th
-    (0.125, 0, 3),   # 32nd
-    (0.0625, 0, 4),  # 64th
-]
-
-# 计入「通过率」的字段级错误类别（其余为单列/未校验类别）
-COUNTED_CATEGORIES = {
-    "pitch_degree", "pitch_accidental", "pitch_octave",
-    "rhythm", "rest", "chord", "grace", "tie",
-    "key", "mode", "time_signature",
-    "tuplet",          # 选项 A：连音分组标注(转换器 tuplet vs music21 actual-notes)
-    "tuplet_rhythm",   # 选项 A：连音内基准节奏(基准时值 = 实际×actual/normal)
-}
-# 未校验类别（不计入通过率分母，仅列明细）
-UNVALIDATED_CATEGORIES = {"rhythm_unresolvable", "event_count"}
-
-# 同桶(同 part/小节/起始)内多声部音符的配对排序键：休止排前，其余按 (八度点, 音级, 记号)
-_ACC_RANK = {"none": 0, "flat": 1, "sharp": 2, "natural": 3,
-             "doubleflat": 4, "doublesharp": 5}
-def _note_key(n):
-    return (1 if n.get("isRest") else 0, n.get("octaveDots", 0),
-            n.get("degree", 0), _ACC_RANK.get(n.get("accidental", "none"), 0))
 def _event_key(e, tonic_pc):
     """与 _note_key 同构的 4 元组排序键（isRest, octave, degree, acc_rank），
     使转换器侧与 music21 侧按「同一套首调音级表示」排序，消除同 onset 两音
@@ -130,44 +117,7 @@ def _event_key(e, tonic_pc):
 # 预期值推导（与转换器算法一致，但独立 Python 实现 -> 跨语言交叉验证）
 # ----------------------------------------------------------------------
 
-def fifths_to_tonic_pc(fifths):
-    pc = (fifths * 7) % 12
-    if pc < 0:
-        pc += 12
-    return pc
-
-
-def expected_pitch(pc, alter, midi, tonic_pc):
-    """返回 (degree, accidental_str, octave_dots)。"""
-    semi = (pc - tonic_pc) % 12
-    if MAJOR_SCALE[semi] != 0:
-        degree = MAJOR_SCALE[semi]
-        acc = "none"
-    else:
-        if alter < 0:
-            base = (semi + 1) % 12
-            acc = "flat"
-        elif alter > 0:
-            base = (semi - 1 + 12) % 12
-            acc = "sharp"
-        else:
-            base = (semi + 1) % 12
-            acc = "flat"
-        degree = MAJOR_SCALE[base]
-    octave = int(math.floor((midi - (tonic_pc + 60)) / 12.0))
-    return degree, acc, octave
-
-
-def expected_rhythm(ql):
-    """由 quarterLength 反推 (underlines, augmentDashes, dots)；无法解析返回 None。"""
-    for base, aug, ul in RHYTHM_BASE:
-        if abs(ql - base) < 1e-4:
-            return (ul, aug, 0)
-        if abs(ql - base * 1.5) < 1e-4:   # 单附点
-            return (ul, aug, 1)
-        if abs(ql - base * 1.75) < 1e-4:  # 双附点
-            return (ul, aug, 2)
-    return None
+# fifths_to_tonic_pc / expected_pitch / expected_rhythm 已迁移至 omr_eval_lib。
 
 
 # ----------------------------------------------------------------------
@@ -448,47 +398,7 @@ def run_converter_json(path):
             pass
 
 
-def flatten_json_lines(doc):
-    """{(part, onset): [(measure_number, note_dict), ...]}，按绝对时间轴归并多声部。
-
-    转换器按 voice 拆成多行；此处跨 voice 归并到同一 part 的绝对时间轴上，
-    onset 与 music21 侧同为 quarterLength，两侧以 (part, onset) 为桶比对。
-    """
-    out = {}
-    for line in doc.get("lines", []):
-        part = line.get("part", 0)
-        for m in line.get("measures", []):
-            mnum = m.get("number", 0)
-            for n in m.get("notes", []):
-                on = round(float(n.get("onset", 0.0)), 4)
-                out.setdefault((part, on), []).append((mnum, n))
-    return out
-
-
-def _merge_align(conv_b, gt_b, tol=0.03):
-    """将转换器与 music21 的两侧时间桶按「part + 起始容差」对齐合并。
-
-    背景：转换器(divisions 累积)与 music21(有理数)对同音的 quarterLength 起始
-    在连音(tuplet)段落会因取整产生系统性偏移（实测 caprice 偏移中位数 0.0125、
-    最大 0.025），使同一音被分到两侧相邻桶而误报 event_count。真实音符在连音段
-    内相邻间隔 ≥ 0.1667，故 tol=0.03 足以合并同音偏移而不误并真实音符（非连音段
-    两侧 onset 本就相等，合并无副作用）。
-    返回 {(part, anchor_onset): {"c":[...], "g":[...]}}。
-    """
-    entries = []
-    for (part, on), items in conv_b.items():
-        entries.append((part, on, "c", items))
-    for (part, on), items in gt_b.items():
-        entries.append((part, on, "g", items))
-    entries.sort(key=lambda e: (e[0], e[1]))
-    out = {}
-    cur = None  # (part, anchor_onset)
-    for part, on, side, items in entries:
-        if cur is None or part != cur[0] or (on - cur[1]) > tol:
-            cur = (part, on)
-            out[cur] = {"c": [], "g": []}
-        out[cur][side].extend(items)
-    return out
+# flatten_json_lines / _merge_align 已迁移至 omr_eval_lib（见上方 import）。
 
 
 def validate_file(fn):
@@ -598,19 +508,7 @@ def validate_file(fn):
     return rep
 
 
-def _doc_check(rep, field, exp, act, part=None, voice=None):
-    rep["field_checked"] += 1
-    if exp != act:
-        rep["field_failed"] += 1
-        rep["category_counts"][field] = rep["category_counts"].get(field, 0) + 1
-        rep["diffs"].append({
-            "part": part if part is not None else -1,
-            "voice": voice if voice is not None else -1,
-            "measure": -1, "index": -1, "field": field,
-            "expected": exp if not isinstance(exp, tuple) else list(exp),
-            "actual": act if not isinstance(act, tuple) else list(act),
-            "category": field,
-        })
+# _doc_check 已迁移至 omr_eval_lib（见上方 import）。
 
 
 def main():
