@@ -53,6 +53,7 @@ add_executable(Pudu
     src/jianpu_to_staff.cpp       # 阶段 3 G1：JianpuDoc -> Score
     src/musicxml_serializer.cpp   # 阶段 3 G2：Score -> MusicXML
     src/jianpu_text_parser.cpp    # G4：简谱文本输入解析（L1 文本 -> JianpuDoc）
+    src/omr_adapter.cpp           # 阶段1 OMR 黑盒集成适配层
 )
 
 # 头文件目录（score_model.hpp / musicxml_parser.hpp 位于 include/）
@@ -65,6 +66,11 @@ target_include_directories(Pudu PRIVATE
 if(MSVC)
     target_compile_options(Pudu PRIVATE /utf-8)
 endif()
+
+# 注入 tools/ 绝对路径（转正斜杠，避免 Windows 反斜杠在字符串字面量中成非法转义），
+# 供 omr_adapter 的子进程引擎（oemer/audiveris 预设）定位运行器脚本
+file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tools" PUDU_TOOLS_DIR_FWD)
+target_compile_definitions(Pudu PRIVATE "PUDU_TOOLS_DIR=\"${PUDU_TOOLS_DIR_FWD}\"")
 
 # target_include_directories(Pudu PRIVATE
 #     ${OpenCV_INCLUDE_DIRS}
@@ -91,12 +97,15 @@ add_executable(PuduTests
     test/test_jianpu_to_staff.cpp   # 阶段 3 G1+G2 单测
     test/test_serializer.cpp        # 阶段 3 G2 序列化自洽（需 pugixml）
     test/test_jianpu_text_parser.cpp  # G4：简谱文本解析单测（含端到端闭环）
+    test/test_m15_hardening.cpp        # M1.5 边界硬化单测（此前仅 g++ 手动验证，现纳入 ctest 全量回归）
     src/jianpu_converter.cpp
     src/transpose.cpp
     src/jianpu_to_staff.cpp
     src/musicxml_serializer.cpp
     src/jianpu_text_parser.cpp    # G4：与 Pudu 目标并列编入（避免链接遗漏）
     src/musicxml_parser.cpp       # 提供 MusicXMLParser::parseString：test_serializer.cpp 的往返自洽测试需把序列化结果解析回 Score
+    src/omr_adapter.cpp           # 阶段1 OMR 黑盒集成适配层（M2-3 ctest）
+    test/test_omr_adapter.cpp     # 阶段1 OMR 集成 ctest：OMR 产出 -> 解析 -> 简谱全链路
 )
 
 target_include_directories(PuduTests PRIVATE
@@ -107,6 +116,8 @@ target_include_directories(PuduTests PRIVATE
 if(MSVC)
     target_compile_options(PuduTests PRIVATE /utf-8)
 endif()
+
+target_compile_definitions(PuduTests PRIVATE "PUDU_TOOLS_DIR=\"${PUDU_TOOLS_DIR_FWD}\"")
 
 # 关键：PuduTests 自身编译了 src/musicxml_serializer.cpp（直接 #include <pugixml.hpp>）
 # 以及 test/test_serializer.cpp（经 musicxml_parser.hpp 间接引入 pugixml.hpp），

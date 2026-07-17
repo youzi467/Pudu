@@ -21,6 +21,7 @@
 #include "transpose.hpp"          // 阶段 2 边界：变调重算
 #include "jianpu_to_staff.hpp"    // 阶段 3：简谱 -> 五线谱（jianpuToStaff / scoreToMusicXML）
 #include "jianpu_text_parser.hpp" // G4：简谱文本输入解析（L1 文本 -> JianpuDoc）
+#include "omr_adapter.hpp"          // 阶段1 OMR 黑盒集成适配层
 
 namespace {
 
@@ -82,7 +83,61 @@ int main(int argc, char* argv[]) {
     SetConsoleOutputCP(65001); // 设置控制台输出代码页为 UTF-8，消除中文乱码
     std::cout << "=== 谱渡 Pudu · MusicXML 解析骨架 ===" << std::endl;
 
-    std::string path = (argc > 1) ? argv[1] : "data/sample_c_major.musicxml";
+    // 阶段1 OMR 黑盒集成：--from-omr <input> [--omr-engine oemer|audiveris|fixture]
+    //   经 omr_adapter 调子进程 OMR 引擎产出 MusicXML，再喂入既有解析器流水线。
+    //   fixture 引擎为 C++ 原生（确定性、零外部依赖），用于 ctest 与沙箱演示；
+    //   oemer 为默认真引擎目标（待用户环境具备 oemer 与乐谱图片时实跑）。
+    bool fromOmr = false;
+    std::string omrInput;
+    std::string omrEngine = "oemer";
+    std::string omrPythonPath;
+    bool omrPythonExplicit = false;
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "--from-omr" && i + 1 < argc) {
+            fromOmr = true;
+            omrInput = argv[i + 1];
+            ++i;
+        } else if (a == "--omr-engine" && i + 1 < argc) {
+            omrEngine = argv[i + 1];
+            ++i;
+        } else if (a == "--omr-python" && i + 1 < argc) {
+            omrPythonExplicit = true;
+            omrPythonPath = argv[i + 1];
+            ++i;
+        }
+    }
+
+    std::string path = "data/sample_c_major.musicxml";
+    if (fromOmr) {
+        pudu::OmrEngineConfig cfg;
+        cfg.engine = omrEngine;
+        cfg.python = "python";
+#ifdef PUDU_TOOLS_DIR
+        cfg.toolsDir = PUDU_TOOLS_DIR;
+#endif
+        if (omrPythonExplicit && !omrPythonPath.empty()) {
+            cfg.python = omrPythonPath;
+            cfg.pythonExplicit = true;
+        }
+        if (cfg.engine == "oemer")
+            cfg.python = pudu::resolveOmerPython(cfg);
+        std::string avail;
+        if (!pudu::isOmrEngineAvailable(cfg, avail)) {
+            std::cerr << "[错误] OMR 引擎不可用 (" << omrEngine << "): " << avail << std::endl;
+            return 1;
+        }
+        std::string omrOut = omrInput + ".pudu.musicxml";
+        std::string oerr;
+        if (!pudu::runOmr(omrInput, omrOut, cfg, oerr)) {
+            std::cerr << "[错误] OMR 识别失败: " << oerr << std::endl;
+            return 1;
+        }
+        std::cout << "[OMR] 引擎 " << omrEngine << " 产出 MusicXML: " << omrOut << std::endl;
+        path = omrOut;
+    } else if (argc > 1 && std::string(argv[1]).find('-') != 0) {
+        path = argv[1];
+    }
 
     // 调试模式：打印每个音符的 onset/voice，用于验证时间轴与声部字段
     bool debugMode = false;
