@@ -1,19 +1,24 @@
 {
   "summary": {
-    "files_total": 8,
-    "files_ok": 8,
-    "notes_compared": 13492,
-    "notes_correct": 13492,
-    "note_pass_rate": 100.0,
-    "field_checked": 92421,
-    "field_failed": 0,
-    "field_pass_rate": 100.0,
+    "files_total": 9,
+    "files_ok": 9,
+    "notes_compared": 13560,
+    "notes_correct": 13500,
+    "note_pass_rate": 99.5575221238938,
+    "field_checked": 93083,
+    "field_failed": 577,
+    "field_pass_rate": 99.3801231159288,
     "category_distribution": {
-      "rhythm_unresolvable": 46
+      "event_count": 461,
+      "pitch_degree": 49,
+      "rhythm_unresolvable": 46,
+      "rhythm": 40,
+      "pitch_octave": 24,
+      "rest": 3
     },
     "edge_case": {
-      "rests": 541,
-      "chords": 230,
+      "rests": 549,
+      "chords": 231,
       "graces": 36,
       "tuplets": 821,
       "key_changes": 4
@@ -104,6 +109,6121 @@
         "chords": 1,
         "graces": 0,
         "tuplets": 0
+      }
+    },
+    {
+      "file": "river_1.jpg.pudu.musicxml",
+      "fatal": null,
+      "notes_compared": 68,
+      "notes_correct": 8,
+      "field_checked": 662,
+      "field_failed": 577,
+      "category_counts": {
+        "rhythm": 40,
+        "event_count": 461,
+        "pitch_degree": 49,
+        "pitch_octave": 24,
+        "rest": 3
+      },
+      "diffs": [
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 1,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            3,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 2,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            3,
+            0
+          ],
+          "actual": [
+            1,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 3,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 3,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 3,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 3,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 3,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 4,
+          "index": 0,
+          "field": "degree",
+          "expected": 1,
+          "actual": 3,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 4,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            1
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 3,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 4,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 4,
+          "index": 0,
+          "field": "degree",
+          "expected": 3,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 4,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            1
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 4,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 4,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 4,
+          "index": 0,
+          "field": "degree",
+          "expected": 3,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 4,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 4,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 4,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 4,
+          "index": 0,
+          "field": "degree",
+          "expected": 6,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 4,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": -1,
+          "actual": 0,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 4,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 4,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 5,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 4,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 5,
+          "index": 0,
+          "field": "degree",
+          "expected": 1,
+          "actual": 5,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 5,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": 0,
+          "actual": -1,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 5,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            0,
+            0
+          ],
+          "actual": [
+            1,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 6,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 5,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 6,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 6,
+          "index": 0,
+          "field": "degree",
+          "expected": 5,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 6,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": -1,
+          "actual": 0,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 6,
+          "index": 0,
+          "field": "degree",
+          "expected": 1,
+          "actual": 2,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 6,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            0,
+            0
+          ],
+          "actual": [
+            1,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 6,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 6,
+          "index": 0,
+          "field": "degree",
+          "expected": 1,
+          "actual": 5,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 6,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            0,
+            0
+          ],
+          "actual": [
+            1,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 7,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 6,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 6,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 6,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 7,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 7,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 7,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 7,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 8,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 7,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 8,
+          "index": 0,
+          "field": "degree",
+          "expected": 3,
+          "actual": 6,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 8,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": 0,
+          "actual": -1,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 8,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 7,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 8,
+          "index": 0,
+          "field": "degree",
+          "expected": 1,
+          "actual": 5,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 8,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": 0,
+          "actual": -1,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 8,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            0,
+            1
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 8,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 8,
+          "index": 0,
+          "field": "degree",
+          "expected": 6,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 8,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": -1,
+          "actual": 0,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 8,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            0,
+            0
+          ],
+          "actual": [
+            1,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 9,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 8,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 9,
+          "index": 0,
+          "field": "degree",
+          "expected": 6,
+          "actual": 0,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 9,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": -1,
+          "actual": 0,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 9,
+          "index": 0,
+          "field": "degree",
+          "expected": 1,
+          "actual": 5,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 9,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": 0,
+          "actual": -1,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 12,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            0,
+            1
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 12,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 12,
+          "index": 0,
+          "field": "rest(degree=0)",
+          "expected": "rest",
+          "actual": "degree=1 isRest=False",
+          "category": "rest"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 12,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            3,
+            0
+          ],
+          "actual": [
+            1,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 12,
+          "index": 0,
+          "field": "degree",
+          "expected": 5,
+          "actual": 2,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 12,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": -1,
+          "actual": 0,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 12,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 12,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 12,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 13,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 10,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 13,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 13,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 13,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 13,
+          "index": 0,
+          "field": "rest(degree=0)",
+          "expected": "rest",
+          "actual": "degree=6 isRest=False",
+          "category": "rest"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 13,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            3,
+            0
+          ],
+          "actual": [
+            1,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 13,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 13,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 13,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 12,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 12,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "degree",
+          "expected": 1,
+          "actual": 0,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "degree",
+          "expected": 2,
+          "actual": 5,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": 0,
+          "actual": -1,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            0,
+            0
+          ],
+          "actual": [
+            1,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 12,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "degree",
+          "expected": 5,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "degree",
+          "expected": 3,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            1,
+            1
+          ],
+          "actual": [
+            1,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 15,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 13,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 13,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 13,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 15,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 15,
+          "index": 0,
+          "field": "degree",
+          "expected": 6,
+          "actual": 3,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 15,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": -1,
+          "actual": 0,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 15,
+          "index": 0,
+          "field": "degree",
+          "expected": 1,
+          "actual": 2,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 16,
+          "index": 0,
+          "field": "degree",
+          "expected": 6,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 16,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": -1,
+          "actual": 0,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 16,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            1
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 13,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 16,
+          "index": 0,
+          "field": "degree",
+          "expected": 5,
+          "actual": 6,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 16,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            1,
+            1
+          ],
+          "actual": [
+            1,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 16,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 16,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 16,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 17,
+          "index": 0,
+          "field": "rest(degree=0)",
+          "expected": "rest",
+          "actual": "degree=1 isRest=False",
+          "category": "rest"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 17,
+          "index": 0,
+          "field": "degree",
+          "expected": 3,
+          "actual": 5,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 17,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            1
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 14,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 15,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 17,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 17,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 15,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 17,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 17,
+          "index": 0,
+          "field": "degree",
+          "expected": 3,
+          "actual": 2,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 18,
+          "index": 0,
+          "field": "degree",
+          "expected": 2,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 18,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 16,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 18,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 18,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 18,
+          "index": 0,
+          "field": "degree",
+          "expected": 6,
+          "actual": 5,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 18,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": -1,
+          "actual": 0,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 18,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 16,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 19,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 16,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 19,
+          "index": 0,
+          "field": "degree",
+          "expected": 2,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 19,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": 0,
+          "actual": 1,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 19,
+          "index": 0,
+          "field": "degree",
+          "expected": 1,
+          "actual": 6,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 19,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            3,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 19,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 19,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=2",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 19,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 19,
+          "index": 1,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 19,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 20,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 20,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            0,
+            1
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 20,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 17,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 20,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 17,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 21,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 21,
+          "index": 0,
+          "field": "degree",
+          "expected": 2,
+          "actual": 5,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 21,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 18,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 21,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 21,
+          "index": 0,
+          "field": "degree",
+          "expected": 2,
+          "actual": 6,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 21,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 18,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 21,
+          "index": 0,
+          "field": "degree",
+          "expected": 5,
+          "actual": 6,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 21,
+          "index": 0,
+          "field": "degree",
+          "expected": 6,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 21,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": 0,
+          "actual": 1,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 21,
+          "index": 0,
+          "field": "degree",
+          "expected": 1,
+          "actual": 5,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 21,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": 1,
+          "actual": 0,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 22,
+          "index": 0,
+          "field": "degree",
+          "expected": 6,
+          "actual": 2,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 22,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            1
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 19,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 22,
+          "index": 0,
+          "field": "degree",
+          "expected": 3,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=2",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 19,
+          "index": 1,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 22,
+          "index": 0,
+          "field": "degree",
+          "expected": 1,
+          "actual": 3,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 22,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 20,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 20,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "degree",
+          "expected": 2,
+          "actual": 3,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "degree",
+          "expected": 2,
+          "actual": 5,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            0,
+            0
+          ],
+          "actual": [
+            1,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": 0,
+          "actual": 1,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 21,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "degree",
+          "expected": 5,
+          "actual": 3,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": 0,
+          "actual": 1,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "degree",
+          "expected": 6,
+          "actual": 3,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            0,
+            0
+          ],
+          "actual": [
+            1,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            0,
+            0
+          ],
+          "actual": [
+            1,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 21,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 21,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 24,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 22,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 24,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 24,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 24,
+          "index": 0,
+          "field": "degree",
+          "expected": 1,
+          "actual": 2,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 24,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 22,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 24,
+          "index": 0,
+          "field": "degree",
+          "expected": 3,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 24,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 22,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 25,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 26,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 26,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 26,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 26,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 27,
+          "index": 0,
+          "field": "degree",
+          "expected": 1,
+          "actual": 5,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 27,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": 1,
+          "actual": 0,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 27,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 27,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 27,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 27,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": 0,
+          "actual": 1,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 27,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 23,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 28,
+          "index": 0,
+          "field": "degree",
+          "expected": 6,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 29,
+          "index": 0,
+          "field": "degree",
+          "expected": 5,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 29,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": 0,
+          "actual": 1,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 29,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            1,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "degree",
+          "expected": 6,
+          "actual": 2,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": 0,
+          "actual": 1,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "degree",
+          "expected": 5,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": 0,
+          "actual": 1,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            1,
+            0,
+            0
+          ],
+          "actual": [
+            0,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 24,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "degree",
+          "expected": 2,
+          "actual": 1,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "octaveDots",
+          "expected": 0,
+          "actual": 1,
+          "category": "pitch_octave"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "degree",
+          "expected": 1,
+          "actual": 0,
+          "category": "pitch_degree"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "rhythm",
+          "expected": [
+            0,
+            0,
+            0
+          ],
+          "actual": [
+            1,
+            0,
+            0
+          ],
+          "category": "rhythm"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 25,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 26,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=2",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 1,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 26,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 26,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 26,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 27,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 27,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 27,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 27,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 28,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 29,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=2",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 1,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 31,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 31,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 30,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 31,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 31,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 31,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 31,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 31,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 31,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 31,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 32,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 33,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 33,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 33,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 34,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 35,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 36,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 36,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 36,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 36,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 36,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 37,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 37,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 37,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 37,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 37,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 31,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 38,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 31,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 38,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 31,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 38,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 31,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 38,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 38,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 31,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 32,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 39,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 39,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 33,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 39,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 39,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 33,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 39,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 33,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 40,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 34,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 40,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 40,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 40,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=0",
+          "actual": "conv=1",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 40,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in conv",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 35,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 36,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 36,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 36,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 36,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 36,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 37,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 37,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 37,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 37,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 37,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 38,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 38,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 38,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 38,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 38,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 39,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 39,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 39,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 39,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 39,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 40,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 40,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 40,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 40,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": -1,
+          "index": -1,
+          "field": "event_count",
+          "expected": "gt=1",
+          "actual": "conv=0",
+          "category": "event_count"
+        },
+        {
+          "part": 0,
+          "voice": -1,
+          "measure": 40,
+          "index": 0,
+          "field": "event_count",
+          "expected": "paired event",
+          "actual": "only in gt",
+          "category": "event_count"
+        }
+      ],
+      "key_change_detected": false,
+      "edge": {
+        "rests": 8,
+        "chords": 1,
+        "graces": 0,
+        "tuplets": 0,
+        "_buckets_mismatched": 229
       }
     },
     {
