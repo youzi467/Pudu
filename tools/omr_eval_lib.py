@@ -22,11 +22,12 @@
 导出
 ----
 * 常量：``MAJOR_SCALE`` / ``RHYTHM_BASE`` / ``COUNTED_CATEGORIES`` /
-  ``UNVALIDATED_CATEGORIES`` / ``POSTCORRECT_RELEVANT``
+  ``UNVALIDATED_CATEGORIES`` / ``POSTCORRECT_RELEVANT`` / ``PER_NOTE_CATEGORIES``
 * 推导：``fifths_to_tonic_pc`` / ``expected_pitch`` / ``expected_rhythm``
 * 结构原语：``flatten_json_lines`` / ``_note_key`` / ``_merge_align`` / ``_doc_check``
 * 比对内核：``compare_jianpu_note``（两简谱 JSON 音符逐音比对）
          ``compare_doc_meta``（文档级 key/mode/time_signature 比对）
+         ``is_octave_jump``（H2(B) 八度跳变评分类别判定）
          ``aggregate_category_distribution`` / ``compute_rates``
 """
 
@@ -66,6 +67,18 @@ UNVALIDATED_CATEGORIES = {"rhythm_unresolvable", "event_count"}
 # 覆盖：节拍对账(rhythm/tuplet/tuplet_rhythm)、八度跳变(pitch_octave)、调内一致性(key/mode)。
 POSTCORRECT_RELEVANT = {
     "rhythm", "tuplet", "tuplet_rhythm", "pitch_octave", "key", "mode",
+}
+
+# 逐音符评分类别（参与「每维度独立通过率」category_pass 计算）。
+# 区别于文档级/桶级类别 key / mode / time_signature / event_count —— 后者不按
+# 音符计数，仅列明细（见 UNVALIDATED_CATEGORIES / _doc_check），不参与 category_pass。
+# ``octave_jump`` 由 H2(B) 提升为逐音符评分类别：pred 与 gt 的简谱八度点
+# (octaveDots) 之差绝对值 >= 2。它不计入 COUNTED_CATEGORIES，因此不改变联立
+# note_pass（向后兼容），仅作为独立维度进入 category_counts 与 category_pass。
+PER_NOTE_CATEGORIES = {
+    "pitch_degree", "pitch_accidental", "pitch_octave",
+    "rhythm", "tuplet_rhythm", "rest", "chord", "grace", "tie",
+    "octave_jump",
 }
 
 # 同桶(同 part/onset)内多声部音符的配对排序键：休止排前，其余按 (八度点, 音级, 记号)
@@ -309,6 +322,38 @@ def compare_jianpu_note(pred_note, gt_note):
     diffs.extend(rdiffs)
 
     return diffs, n_checked
+
+
+def is_octave_jump(pred_note, gt_note, threshold=2):
+    """判定某音符是否构成「八度跳变」评分类别（H2(B) 交付物）。
+
+    定义（清晰、可复现）
+    -------------------
+    简谱记谱中 ``octaveDots`` 表示八度点层数（+1=高八度一个点，-1=低八度一个点，
+    依此类推；正负分别对应上/下加线）。当某音符 predicted 与 gt 的
+    ``octaveDots`` 之差的绝对值 **>= threshold（默认 2）** 时，视为一次
+    ``octave_jump``。
+
+    此定义**直接复用**原 harness 在 ``edge_case.octave_jumps`` 中的跳变检测逻辑
+    （``abs(p_octaveDots - g_octaveDots) >= 2``），但将其从「仅边界统计」提升为
+    「逐音符可评分类别 octave_jump」：写入 ``category_counts`` 与 ``category_pass``，
+    以便量化 F3/H1 对八度错的修复收益。
+
+    注意：octave_jump 是 pitch_octave（任意八度点差）的**严格子集**（大八度错）。
+    为保持联立 note_pass 向后兼容，octave_jump **不** 加入 COUNTED_CATEGORIES，
+    即它不改变 note_pass / notes_correct，仅作为独立维度进入评分类别报告。
+
+    Args:
+        pred_note: 预测简谱音符 dict（含 ``octaveDots``）。
+        gt_note: ground-truth 简谱音符 dict（含 ``octaveDots``）。
+        threshold: 八度点差阈值，默认 2。
+
+    Returns:
+        bool: 是否构成 octave_jump。
+    """
+    p = _default_note(pred_note)
+    g = _default_note(gt_note)
+    return abs(p["octaveDots"] - g["octaveDots"]) >= threshold
 
 
 def compare_doc_meta(pred_meta, gt_meta):

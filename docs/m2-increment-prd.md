@@ -4,6 +4,8 @@
 > 日期：2026-07-16
 > 关联：阶段0/2/3/G4/M1.5 已完成；本 PRD 仅描述在既有内核之上**增量扩展适配层**，不改动任何数据模型。
 
+> **实施状态（2026-07-17）**：M2-1/2/3 已全部完成——`omr_adapter` 黑盒集成 + oemer/fixture 引擎 + CLI `--from-omr` 已落地，ctest 117/117 全绿；**真实 oemer 已在本机端到端跑通**（权重手动放置 + CUDA/cuDNN PATH 注入启用 GPU）。后续已追加评测 harness（P0-1）、Plan A 调号后处理、H2 分维指标；下一优化方向为 F3 几何校正器。见 `docs/m2-real-run-guide.md` 与 `data/omr_eval/README.md`。
+
 ## 1. 产品目标
 黑盒接入 OMR（光学乐谱识别）：用户丢一个 PDF / 图片乐谱进 `--from-omr`，工具经子进程调用 OMR 引擎识别出 MusicXML，再喂入既有 `MusicXMLParser → staffToJianpu` 流水线，端到端产出简谱。OMR 引擎对 Pudu 是**黑盒**——Pudu 只消费其产出的 MusicXML。
 
@@ -70,7 +72,7 @@ bool isOmrEngineAvailable(const OmrEngineConfig& cfg, std::string& detail);
 - **M2-3 全链路 ctest**：`runOmr(fixture)` 成功 → `MusicXMLParser::loadFromFile` 成功 → `staffToJianpu` 产出非空 `JianpuDoc` 且首音为 `1`(C 大调 do)、音符数==7。确定性、不依赖外部进程。
 
 ## 8. 风险与待确认（R1..R4）
-- **R1（环境）**：本沙箱无法实跑真 OMR（无 JRE / GitHub 权重不可达 / 无图片）。已用 fixture 引擎兜底面，适配器 + 契约 + 全链路已验证；真引擎路径待用户环境。
+- **R1（环境）**：本沙箱无法实跑真 OMR（无 JRE / GitHub 权重不可达 / 无图片）。已用 fixture 引擎兜底面，适配器 + 契约 + 全链路已验证；**真引擎路径已在用户本机实跑通过**（权重手动放置 + CUDA/cuDNN PATH 注入启用 GPU）。
 - **R2（质量）**：oemer 输出 MusicXML 质量参差，可能触发既有解析器边界——属后续 P2 硬化，不在本阶段。
 - **R3（零模型改动）**：本阶段只新增 `omr_adapter` 模块与 CLI 分支，**不修改** `Score`/`JianpuDoc`/`MusicXMLParser` 等既有模型，硬约束。
 - **R4（默认引擎）**：CLI 默认 `oemer`（真目标）；沙箱演示/ctest 用 `--omr-engine fixture`。若希望开箱即用默认 fixture，可改默认——待用户拍板（本 PRD 维持默认 oemer，符合"真集成"意图）。

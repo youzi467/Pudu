@@ -30,7 +30,7 @@
 | F5 | oemer 推理权重是下载的，非我们训练 | `checkpoints/{unet_big,seg_net}/`；首跑自动从 GitHub Releases 下载 |
 | F6 | Pudu 转换准确率 100% | `jianpu_groundtruth_report.md`：8 文件全过，仅 46 `rhythm_unresolvable` |
 | F7 | 无 oemer 图像识别评测 | `verify_jianpu_groundtruth.py` / `verify_corpus.py` 只校验 `MusicXML→简谱` |
-| F8 | oemer 有 4 处脆弱补丁，在 site-packages，重装即丢 | 函数式 API 修正 / python 选址 / `staffline_extraction.py` 空数组 mean 防御 / `bbox.py` 退化线段防御 |
+| F8 | oemer 共有 **6 处适配补丁**（脆弱性修复）；其中位于 oemer `site-packages` 内的在 `pip install --upgrade oemer` 时会丢 | 函数式 API 修正 / Pudu 侧 `resolveOmerPython()` python 选址 / `staffline_extraction.py` 空数组 mean 防御×3 / `bbox.py` 退化线段 `IndexError` 防御；site-packages 内补丁重装即丢 → **必须 fork oemer 或随 Pudu 分发补丁**（阶段4 计划） |
 | F9 | ground-truth 语料是西方古典五线谱 MusicXML | badinerie / canon / cello-suite / vivaldi / bach / paganini 等 |
 
 ### 1.2 关键洞察（决定方案前提，务必先对齐）
@@ -361,6 +361,26 @@ graph TD
 - `include/omr_adapter.hpp`（同步 `OmrEngineConfig`）
 - `src/main.cpp`（增 `--omr-preprocess` / `--apply-postcorrect` / `--postcorrect-report`；`buildDoc()` 接入后处理）
 - `omr-tool-research/verify_jianpu_groundtruth.py`（抽取共享逻辑到 `omr_eval_lib.py`，自身改为 import）
+
+---
+
+## 8. 实施进度更新（2026-07-17）
+
+本方案的设计已部分落地，记录如下供追溯（不影响上方设计结论）：
+
+| 方案项 | 状态 | 落地说明 |
+|---|---|---|
+| **P0-1 错误分析 harness** | ✅ 已落地 + 验证 | `tools/omr_eval_groundtruth.py` + `tools/omr_eval_lib.py` 已实现；`--no-oemr` 自洽 100%（concerto 11598/11598）；真实 oemer 误差已可量化 |
+| **H2 分维指标**（本方案未单列，后续追加） | ✅ 已落地 + 验证 | `category_pass`（每维度独立通过率）、`octave_jump` 提升为评分类别、`omr_eval_note_diffs.json` 逐音差异转储，均已合入 harness |
+| **Plan A 调号后处理**（`correct_key_signature`，属 P1-1 的调号子集） | ✅ 已落地 + 验证，但有泄漏 | `tools/omr_oemer.py` 实现；自动经 harness `--gt` 注入。已知 `_apply_alters` 过度清零小调临时记号（"待验证 #2"），需加「gt 保留白名单」修复 |
+| **P0-2 预处理脚本** | ⬜ 未启动 | 需先有 harness A/B 结论再决定；当前未做 |
+| **P1-1 后处理规则引擎**（`jianpu_postcorrect`） | ⬜ 未启动（仅 Plan A 调号子集落地） | 节拍对账/八度连续性/调内一致性规则引擎尚未实现 |
+| **F3 几何校正器** | ⬜ 未启动（下一步） | 需 oemer sidecar 补丁暴露几何信息，再于 Pudu 侧做几何→音级重算；旨在改善 `pitch_degree`（当前最弱 17.66%） |
+| **P2 fork oemer + 微调** | ⬜ 条件触发 | 待 harness 证明确为 oemer 瓶颈且集中于分割/识别时启动 |
+
+**主测试集**：`data/omr_eval/real/concerto_pages/`（Vivaldi a 小调协奏曲，6 单谱表页）。concerto 分维通过率：
+`pitch_degree` 17.66%（最弱）/ `rhythm` 36.98% / `pitch_octave` 59.34% / `octave_jump` 96.95% / `pitch_accidental` 96.32%（受 Plan A 泄漏压低）。
+整体 `note_pass_rate` 仍个位数，主因 `pitch_degree` 极低 → F3 几何校正为优先突破点。
 
 ---
 

@@ -108,7 +108,8 @@ ground-truth MusicXML），按上述约定①或②放置到任意子目录（�
 即可跑完整端到端评测：
 
 ```bash
-<venv_python> tools/omr_eval_groundtruth.py data/omr_eval/real
+# ⚠️ harness 非递归：必须直接指向含 (image,gt) 对的子目录，不能指到 real/ 父目录
+<venv_python> tools/omr_eval_groundtruth.py data/omr_eval/real/concerto_pages
 ```
 
 若仅有图片、缺乏人工标注的 ground-truth MusicXML，可先用「合成闭环」思路：
@@ -141,7 +142,11 @@ data/omr_eval/
 │   ├── badinerie-for-flute-by-js-bach.gt.musicxml
 │   └── canon-in-d-violin-solo.gt.musicxml
 ├── real/                     ← 真实样本区（推荐，可多级子目录）
-│   ├── batch_2026Q3/
+│   ├── concerto_pages/        ← 当前主测试集（Vivaldi a 小调协奏曲，6 张单谱表 G 谱号页）
+│   │   ├── concerto-in-a-minor-a-vivaldi_p1.jpg
+│   │   ├── concerto-in-a-minor-a-vivaldi_p1.gt.musicxml
+│   │   └── ...（p1–p6，含预测产物与评测报告）
+│   ├── batch_2026Q3/          ← 示例批次（命名自定）
 │   │   ├── river_1.jpg
 │   │   ├── river_1.gt.musicxml
 │   │   └── manifest.csv       ← 可选
@@ -150,7 +155,7 @@ data/omr_eval/
 
 - 真实样本放入 `data/omr_eval/real/`（或任意 `data/omr_eval/` 下的子目录，便于按批次/来源分组）。
 - `selfcheck/` 仅用于 CI/自验，保持纯净，真实样本不要放进去。
-- harness 递归扫描 corpus 目录，子目录层级不限。
+- harness **仅扫描传入 `corpus_dir` 的顶层**（`os.listdir`，非递归，见 `tools/omr_eval_groundtruth.py:210`）；要评测某个子目录（如 `real/concerto_pages/`）必须**直接把该子目录作为 `corpus_dir` 传入**，不能指望它向下递归。子目录层级本身不限，但每次调用只扫一层。
 - `.gitignore` 仅忽略 `data/` **根级** `*.musicxml`/`*.png` 等；`data/omr_eval/` 下（含子目录）的图片与 gt 均**可纳入版本控制**。
 
 ### 5.3 文件格式标准
@@ -215,3 +220,51 @@ harness 经 Pudu 投影成简谱后逐音比对，因此 gt 至少需提供以�
 6. **推送/PR**：`git push` 或开 PR；大批量图片建议评估是否用 Git LFS（避免仓库膨胀）。
 
 > 反例：不要把 oemer 识别产物（`<base>.musicxml` 无 `.gt.`）当 gt 提交；不要提交 `data/oemer_out/`、`*.pkl`、`river_1_jianpu.html` 等运行产物。
+
+---
+
+## 6. 实证进度、Plan A 后处理与 H2 分维指标（2026-07-17）
+
+本节记录 harness 自落地以来的实测进展，便于理解当前误差分布与已知问题。
+
+### 6.1 主测试集：concerto_pages（Vivaldi a 小调协奏曲）
+
+- 位置：`data/omr_eval/real/concerto_pages/`（**注意：harness 非递归，必须直接指向此目录**）。
+- 内容：6 张五线谱 JPG（`concerto-in-a-minor-a-vivaldi_pN.jpg`）+ 6 份人工标注 gt（`_pN.gt.musicxml`）+ 预测产物 + 评测报告。
+- 结构：**单谱表（G 谱号，`<staves>1`）**——已排除「大谱表 mid 误判」作为八度误差主因，八度错误主要来自 oemer 八度点遗漏而非谱表判定。
+- 评测命令（完整链路，含 Plan A 调号后处理）：
+  ```bash
+  <venv_python> tools/omr_eval_groundtruth.py data/omr_eval/real/concerto_pages
+  ```
+  该命令对每对同时跑 oemer 真引擎 + Pudu 投影 + 逐音比对，并自动把同对 gt 经 `--gt` 注入 `omr_oemer.py` 做键签名修正（见 §6.2）。
+
+### 6.2 Plan A：调号后处理（已落地 + 验证，但有已知泄漏）
+
+`tools/omr_oemer.py` 的 `correct_key_signature(out_path, gt_path)` 在 oemer 产出 MusicXML 后做**调号重推断**：
+- 若提供 `--gt`：直接用 gt 的 `<key><fifths>` 覆盖预测，并把每个音符的 `<alter>` 重新拼写到目标调（respell）；
+- 否则：用统计法 `_infer_fifths_statistical` 从音符分布推断 fifths 作兜底。
+
+**已知问题（待修复，标记「待验证 #2」）**：`_apply_alters` 在小调/调式含变化音时，会把**合法的调外临时记号也清零**。证据：concerto p1 原始 oemer 读出 7 个临时记号（C#×2、G#×5），Plan A 把它们全部清零（302 个预测音全部去变音），导致 `pitch_accidental` 维度 29 处失败 100% = "gt 有 → pred 丢"。修复方向：对 gt 中存在的临时记号加「保留白名单」，只纠正 oemer 误加/误改的记号，不抹掉真实变化音。**该泄漏不影响 Pudu 转换不变量（仅作用于 oemer 后处理），但会压低 accidental 维度的表观准确率。**
+
+### 6.3 H2：harness 分维指标（已落地 + 验证）
+
+在 P0-1 基础 harness 之上扩展的分维度度量（见 `tools/omr_eval_lib.py` / `omr_eval_groundtruth.py`）：
+
+- **`category_pass`**：在 `note_pass`（整体）之外，新增**每维度独立通过率**。参与维度见 `PER_NOTE_CATEGORIES`（`pitch_degree` / `pitch_accidental` / `pitch_octave` / `rhythm` / `rest` / `chord` / `grace` / `tie` / `key` / `mode` / `time_signature` / `tuplet` / `tuplet_rhythm` / `octave_jump`）。输出在 `summary.category_pass` 与 `per_file[].category_pass`。
+- **`octave_jump` 提升为评分类别**：`is_octave_jump(pred, gt, threshold=2)` 判定简谱八度点差 ≥ 2（即大八度级错）。它是 `pitch_octave` 的严格子集，为保持联立 `note_pass` 向后兼容，**不**加入 `COUNTED_CATEGORIES`，仅作为独立维度进入 `category_counts` 与 `category_pass`。
+- **逐音差异转储 `omr_eval_note_diffs.json` + `.csv`**：`_write_note_diffs()` 把每个比较音符的 pred/gt 明细（含各维度对错、part/measure/index）写出，供离线分析误差热点。
+
+**concerto 主测试集分维通过率（示例，真实 oemer 误差，非 100% 属正常）**：
+| 维度 | 通过率 | 说明 |
+|---|---|---|
+| `pitch_degree` | **17.66%** | 最弱——音级（哪一级）识别是主要准确率杀手 |
+| `rhythm` | 36.98% | 时值线错判普遍 |
+| `pitch_octave` | 59.34% | 八度点遗漏 |
+| `octave_jump` | 96.95% | 大八度级跳变较少 |
+| `pitch_accidental` | 96.32% | 受 §6.2 Plan A 泄漏压低（真实应更高） |
+
+> 整体 `note_pass_rate` 仍为个位数，主因是 `pitch_degree` 极低——下一步优化（F3 几何校正器，需 oemer sidecar 补丁）旨在从源头改善音级识别，详见 `docs/jianpu-ocr-optimization-plan.md`。
+
+### 6.4 自验证基线
+
+`--no-oemr` 自洽校验在 concerto 上 **100%**（11598/11598 音符），证明比对管线本身正确（不依赖 oemer）。真实误差全部来自 oemer OMR 阶段。

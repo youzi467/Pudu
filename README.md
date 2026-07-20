@@ -2,16 +2,16 @@
 
 五线谱与简谱互转工具（MVP 阶段）。
 
-> 当前状态（2026-07-15）：已实现 **MusicXML → 简谱** 的核心转换（阶段 2，MVP v1），支持纯文本(L1)、二维 HTML(L2)、结构化 JSON(L3) 三种简谱呈现，并通过 music21 跨语言 100% 校验。反向转换（简谱→五线谱，阶段 3）与 OMR 识别（阶段 1）尚未开始。
+> 当前状态（2026-07-17）：已实现 **MusicXML ⇄ 简谱** 双向转换（阶段 2 + 阶段 3，MVP 达成），支持纯文本(L1)、二维 HTML(L2)、结构化 JSON(L3)，并通过 music21 跨语言 100% 校验。OMR 识别（阶段 1）已完成黑盒集成（oemer 接入 + 评测 harness + Plan A 调号后处理 + H2 分维指标），真引擎已在本机端到端跑通。
 
 ## 阶段与里程碑
 
 | 阶段 | 目标 | 状态 |
 |---|---|---|
 | 阶段 0 | 环境与 MusicXML 解析基础 | ✅ 完成 |
-| 阶段 1 | OMR 黑盒集成（PDF/JPG → MusicXML） | ⬜ 未开始 |
+| 阶段 1 | OMR 黑盒集成（PDF/JPG → MusicXML） | ✅ 完成（M2：oemer 黑盒接入 + 评测 harness + Plan A 调号后处理 + H2 分维指标） |
 | 阶段 2 | 五线谱 → 简谱核心（MVP v1） | ✅ 完成（已打标签 `phase-2`） |
-| 阶段 3 | 简谱 → 五线谱（反向） | ⬜ 未开始 |
+| 阶段 3 | 简谱 → 五线谱（反向） | ✅ 完成（phase-3 / 3.1 / 3.2，双脑转换闭环） |
 | 阶段 4 | AI / 深度学习进阶 | ⬜ 未开始 |
 | 阶段 5 | 工程化与 GUI | ⬜ 未开始 |
 
@@ -37,6 +37,9 @@
   - `scoreToMusicXML(Score) -> .musicxml`：pugixml 写出 `score-partwise`；多声部用 `<backup>/<forward>` 还原并行时序、和弦用 `<chord/>`；写出的文件可被本仓库解析器读回且语义等价（G2 自洽测试）。
   - CLI `--to-musicxml [out.musicxml]`：演示「五线→简→五线」双向闭环，可叠加 `--key/--rekey/--transpose`。
   - 已知限制：和弦逐音八度点在阶段 2 仅存音级，反向按「根音上方最近八度」还原（音级守恒，精确八度不保）；`tieStop` 反向不还原（仅 `tieStart`）。
+- **阶段 1 OMR 黑盒集成（`--from-omr`，M2）**：
+  - `omr_adapter` 子进程分派 oemer（默认）/ fixture（确定性，ctest 用）/ audiveris（未装）；产出 MusicXML 喂入既有 `MusicXMLParser → staffToJianpu` 流水线，端到端出简谱。
+  - 评测 harness `tools/omr_eval_groundtruth.py` 量化 oemer→简谱 误差分布（Plan A 调号后处理 + H2 分维指标）；真实 oemer 路径已在本机端到端跑通。
 - **质量保障**：
   - C++ 单元测试 **79/79 全绿**（header-only 自研框架，零外部依赖；含阶段 2 共 54、变调重算 16、阶段 3 新增 9 项 G1+G3；G2 序列化自洽 1 项随 MSVC 构建一并运行，合计 80）。
   - music21 跨语言 ground-truth 校验：8/8 样本、音符 **100.0%**（13492/13492）、字段 **100.0%**（79240/79240）、计入类差异 = 0。
@@ -138,7 +141,7 @@ Pudu/  (工作区当前磁盘名为 omr/，规划重命名为 Pudu/)
 
 ## 已知限制（阶段 2）
 
-- 输入为 MusicXML 文本；PDF/JPG 输入链路（阶段 1 OMR）未接入。
+- 输入为 MusicXML 文本；PDF/JPG 输入链路（阶段 1 OMR）**已接入**：oemer 黑盒集成 + 评测 harness，详见 `docs/m2-real-run-guide.md` 与 `data/omr_eval/README.md`。
 - 小调「6=X」标法开关未实现（当前小调走首调相对法）。
 - 和弦成员仅存音级，逐音独立八度点未实现。
 - L2 连音弧为单音上方 SVG 弧近似；减时线连写按“连续同值”启发式（非真实 beat 分组）。
@@ -146,8 +149,9 @@ Pudu/  (工作区当前磁盘名为 omr/，规划重命名为 Pudu/)
 
 ## 下一步
 
-- **阶段 3**：简谱 → 五线谱反向转换（`jianpuToStaff` + `Score→MusicXML` 序列化 + round-trip 自测）。详见 `stage3_action_plan.md`。
-- **阶段 1**：接入 Audiveris/oemer 黑盒，打通 PDF/JPG 输入。
+- **阶段 3**：已完成（`jianpuToStaff` + `Score→MusicXML` 序列化 + round-trip 自测）。详见 `stage3_action_plan.md`。
+- **阶段 1 OMR**：已完成黑盒集成（oemer + fixture 引擎 + CLI `--from-omr`），并落地评测 harness（Plan A 调号后处理、H2 分维指标）。下一步优化方向：F3 几何校正器（需 oemer sidecar 补丁）以改善音级识别，详见 `docs/jianpu-ocr-optimization-plan.md` 与 `docs/m2-real-run-guide.md`。
+- **阶段 4/5**：AI/深度学习进阶、工程化与 GUI（待启动）。
 
 ## 常见问题
 

@@ -62,6 +62,9 @@ checkpoints/seg_net/weights.h5
   `tools/omr_oemer.py <图> <输出.musicxml>` 把权重缓存下来。
 - ⚠️ **沙箱限速提示**：本开发沙箱到 GitHub Releases 实测带宽极低（~25 KB/s），
   4 个权重 ~150MB 需 1.5h+。在你本机（GitHub 正常速度）通常几十秒到几分钟。
+- 💡 **本机实操（推荐）**：本机已采用「手动放置权重」方式——把 4 个权重直接放到
+  venv 的 `Lib/site-packages/oemer/checkpoints/{unet_big,seg_net}/`，首次运行即跳过下载，
+  规避 GitHub 限速。权重可从其他可达源预下载后拷贝。
 
 ---
 
@@ -82,20 +85,30 @@ PY
 
 ## 3. 执行真实 OMR 命令
 
-**关键**：`omr_adapter` 默认用 `python` 这个命令字拉起 `omr_oemer.py`
-（见 `include/omr_adapter.hpp` 的 `cfg.python = "python"`）。所以运行 Pudu 时，
-**PATH 最前面必须是装了 oemer 的 venv 的 `Scripts` 目录**，否则会调到系统裸 python 而失败。
+**Python 解释器选址（已修复）**：早期 `omr_adapter` 写死用 `python` 命令字，需手动把
+venv 的 `Scripts` 放到 PATH 最前。现已改为 `resolveOmerPython()` 自动选址——按
+`--omr-python` → 环境变量 `PUDU_OMR_PYTHON` → PATH `python` →
+`%USERPROFILE%\.workbuddy\binaries\python\envs\default\Scripts\python.exe`
+的顺序，命中第一个能 `import oemer` 的解释器。因此**通常无需手调 PATH**；若想强制某解释器，
+用 `Pudu.exe --from-omr <图> --to-jianpu --omr-python <path>`。
 
-```bat
-:: 进入构建目录（Pudu.exe 在此）
-cd C:\Users\13157\WorkBuddy\omr\build
+**GPU 加速（关键）**：oemer 推理默认首选 CUDA（`oemer/inference.py` 已写
+`CUDAExecutionProvider`）。要让 GPU 生效，**必须在本会话注入 CUDA/cuDNN 的 PATH**（Windows 下
+CUDA 13 把运行时 dll 放在 `bin/x64`，cuDNN 9 放在 `bin\<cuda版本>\x64`，且 PATH 不递归子目录）：
 
-:: 让 venv 的 python 优先
-set PATH=C:\Users\13157\.workbuddy\binaries\python\envs\default\Scripts;%PATH%
-
-:: 真实 OMR 路径（默认引擎即 oemer）
-Pudu.exe --from-omr ..\data\score.png --to-jianpu
+```bash
+# Git Bash（推荐，本机实测用此）
+export PATH="/c/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/bin/x64:/c/Program Files/NVIDIA/CUDNN/v9.24/bin/13.3/x64:$PATH"
+# 进入构建目录（Pudu.exe 在此）
+cd /c/Users/13157/WorkBuddy/omr/build
+# 真实 OMR 路径（默认引擎即 oemer）
+./Pudu.exe --from-omr ../data/score.png --to-jianpu
 ```
+
+> ⚠️ **改完系统 PATH 后必须关闭并重新打开终端**——Windows 环境变量只对新建进程生效，
+> 运行中进程仍用旧 PATH，会出现 `cublasLt64_13.dll missing` / `cudnn64_9.dll missing` 回退 CPU。
+> 注入正确层级后，可用 `nvidia-smi -l 1` 观察 python 进程是否占用 GPU。CPU 回退下整图推理
+> 约 4 分钟，6 页评测会超时；GPU 下秒级。
 
 ### 预期输出
 - 首次运行：先打印 oemer 权重下载进度（若未缓存），随后 oemer 识别日志，
@@ -137,7 +150,9 @@ Pudu.exe --from-omr ..\data\score.png --to-jianpu
 |---|---|---|
 | `ModuleNotFoundError: No module named 'augly'` | oemer 未声明该依赖 | `pip install augly` |
 | `from oemer import OMR` 失败 / `OMR` 不存在 | oemer 0.1.x 是**函数式 API**，无 `OMR` 类 | 用 `oemer.ete.main()`（本项目 `tools/omr_oemer.py` 已修正） |
-| `python` 不是 oemer 所在解释器 | `omr_adapter` 用 `python` 命令字 | 运行 Pudu 前 `set PATH=<venv>\Scripts;%PATH%` |
+| `python` 不是 oemer 所在解释器 / `ModuleNotFoundError: No module named 'oemer'` | 旧版写死 `python` 命令字 | 现已自动选址（见 §3）；若仍报，用 `--omr-python <venv>/Scripts/python.exe` 强制指定 |
+| `cublasLt64_13.dll missing` / `cudnn64_9.dll missing`，回退 CPU 且极慢 | CUDA/cuDNN PATH 没指到 `bin/x64` / `bin\<cuda版本>\x64`，或改 PATH 后未重开终端 | 注入 CUDA v13.3 `bin/x64` 与 cuDNN `bin\13.3\x64` 到 PATH，关闭终端重开后再跑（见 §3） |
+| 6 页评测超时 / 单图推理 ~4 分钟 | CPU 回退（GPU 未生效） | 按 §3 注入 CUDA/cuDNN PATH 启用 GPU；或临时调大 `omr_adapter.hpp` 的 `timeoutMs` 并重编 |
 | 首次运行报 `引擎超时(120000ms)` | 权重下载 > 120s 子进程超时 | **预下载权重**：先单独跑一次 `omr_oemer.py`；或调大 `omr_adapter.hpp` 的 `timeoutMs` 并重编 |
 | 权重下载极慢 / 卡住 | 到 GitHub Releases 带宽受限 | 换到你本机（GitHub 正常）跑；或手动把 4 个权重放到 `oemer/checkpoints/{unet_big,seg_net}/` |
 | 输出简谱为空/乱 | 输入图非单页乐谱、质量差 | 用清晰单页乐谱图；oemer 对照片类输入更敏感 |
@@ -154,3 +169,17 @@ Pudu.exe --from-omr ..\data\score.png --to-jianpu
 
 > 设计取舍：M2-3 的 ctest 用 fixture 引擎保证 CI 确定性；真实 oemer 路径通过本文档
 > 在本机手动实跑验证，二者共用同一 `omr_adapter` 子进程契约，真引擎按配置无缝接入。
+
+---
+
+## 7. 评测 harness 与 Plan A（进阶，批量量化 oemer 误差）
+
+本指南聚焦「单图 `Pudu --from-omr` 实跑」。要**批量量化 oemer→简谱 的误差分布**（而非单张核对），用评测 harness：
+
+- **harness**：`tools/omr_eval_groundtruth.py <corpus_dir>`（见 `data/omr_eval/README.md`）。
+  对每对 `(image, gt.musicxml)` 跑 oemer→Pudu→逐音比对，输出 `note_pass_rate` / `field_pass_rate` /
+  `category_pass`（H2 分维通过率）/ `omr_eval_note_diffs.json`（逐音差异）。
+  ⚠️ harness **非递归**，必须直接指向含样本的叶子目录（如 `data/omr_eval/real/concerto_pages`）。
+- **Plan A 调号后处理**：harness 会自动把同对 gt 经 `--gt` 注入 `tools/omr_oemer.py` 的
+  `correct_key_signature`，做调号重推断（已知会过度清零小调临时记号，见 `data/omr_eval/README.md` §6.2）。
+- **GPU 同样适用**：跑 harness 前按 §3 注入 CUDA/cuDNN PATH，否则 6 页评测在 CPU 下会超时。

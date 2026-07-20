@@ -63,12 +63,14 @@ if TOOLS_DIR not in sys.path:
 from omr_eval_lib import (  # noqa: E402
     COUNTED_CATEGORIES,
     POSTCORRECT_RELEVANT,
+    PER_NOTE_CATEGORIES,
     flatten_json_lines,
     _note_key,
     _merge_align,
     _doc_check,
     compare_jianpu_note,
     compare_doc_meta,
+    is_octave_jump,
     aggregate_category_distribution,
     compute_rates,
 )
@@ -88,21 +90,27 @@ GT_SUFFIX = ".gt.musicxml"
 # 步骤 1：oemer 识别（可跳过）
 # ----------------------------------------------------------------------
 
-def run_oemer(image_path, out_musicxml, venv_python=VENV_PYTHON):
+def run_oemer(image_path, out_musicxml, gt_path=None, venv_python=VENV_PYTHON):
     """调用 ``tools/omr_oemer.py`` 把五线谱图片识别为 MusicXML。
 
-    命令：``venv_python tools/omr_oemer.py <image> <out_musicxml>``
-    （omr_oemer.py 为位置参数契约，详见模块 docstring）。
+    命令：``venv_python tools/omr_oemer.py <image> <out_musicxml> [--gt <gt>]``
+    （omr_oemer.py 为位置参数契约，--gt 注入 ground-truth 做方案A调号
+    后处理重推断，详见 omr_oemer.py 模块 docstring）。
 
     Args:
         image_path: 输入五线谱图片路径。
         out_musicxml: 期望产出的 MusicXML 路径。
+        gt_path: ground-truth MusicXML 路径；提供则注入 ``--gt`` 由
+            omr_oemer.py 做调号校正（同名约定：与 image 同 base 的
+            ``.gt.musicxml``）。None 时不注入（统计法 fallback）。
         venv_python: 含 oemer/music21/opencv 的 venv 解释器。
 
     Returns:
         bool: 成功产出有效 MusicXML 为 True，否则 False（并打印原因）。
     """
     cmd = [venv_python, OMER_RUNNER, image_path, out_musicxml]
+    if gt_path:
+        cmd += ["--gt", gt_path]
     try:
         proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, timeout=600)
     except Exception as e:  # noqa: BLE001
@@ -232,22 +240,63 @@ def _new_rep(base, image_path, gt_path):
         "notes_compared": 0, "notes_correct": 0,
         "field_checked": 0, "field_failed": 0,
         "category_counts": {}, "diffs": [],
+        "category_note_fail": {},   # {类别: 失败该类的音符数}（A 交付物，供 category_pass）
+        "category_pass": {},       # {类别: 独立通过率}（A 交付物）
         "edge": {"rests": 0, "chords": 0, "graces": 0,
                  "tuplets": 0, "octave_jumps": 0},
     }
 
 
+def _compute_category_pass(notes_compared, cat_note_fail):
+    """计算「每维度独立通过率」category_pass（A 交付物）。
+
+    对每个逐音符评分类别（见 PER_NOTE_CATEGORIES），独立通过率定义为：
+
+        pass_rate(cat) = (notes_compared - 失败该类的音符数) / notes_compared * 100
+
+    其中「失败该类的音符数」来自 ``cat_note_fail``（每个音符对每类最多计 1 次，
+    与 category_counts 的逐音符类别计数一致）。
+
+    与联立 ``note_pass`` 互补：``note_pass`` 是「所有维度同时正确」的联立通过率；
+    ``category_pass`` 给出各维度各自的健康度（例如可独立看出
+    pitch_degree 96% / pitch_octave 92% / rhythm 90% 分别的短板）。
+
+    仅纳入逐音符类别；文档级/桶级类别（key / mode / time_signature /
+    event_count）不按音符计数，不参与此处。``notes_compared == 0`` 时返回空
+    dict（无音符可评）。
+
+    Args:
+        notes_compared: 已比对音符总数。
+        cat_note_fail: {category: 失败该类的音符数}。
+
+    Returns:
+        dict: {category: 独立通过率(0~100, 两位小数)}。
+    """
+    if notes_compared == 0:
+        return {}
+    out = {}
+    for cat in sorted(PER_NOTE_CATEGORIES):
+        fails = cat_note_fail.get(cat, 0)
+        rate = (notes_compared - fails) / notes_compared * 100.0
+        out[cat] = round(rate, 2)
+    return out
+
+
 def _eval_one(corpus_dir, image_path, gt_path, base, use_oemer):
     """评测单个 ``(image, gt)`` 对，返回 per-file 报告 dict。"""
     rep = _new_rep(base, image_path, gt_path)
+    note_index = 0        # (C) 全局对齐序号，跨文件递增
+    note_ledger = []      # (C) 逐音符 diff 账本，评测后写出 omr_eval_note_diffs.json
 
     # —— 步骤 1：oemer 识别（或 --no-oemr 自验取 gt 自身） ——
     if use_oemer:
         pred_musicxml = os.path.join(corpus_dir, base + ".pred.musicxml")
-        if not run_oemer(image_path, pred_musicxml):
+        # 注入 gt 路径（同名约定：与 image 同 base 的 .gt.musicxml），
+        # 由 omr_oemer.py 做方案A调号后处理重推断，自动受益。
+        if not run_oemer(image_path, pred_musicxml, gt_path=gt_path):
             rep["fatal"] = "oemer 识别失败"
             rep["pred_musicxml"] = image_path
-            return rep
+            return rep, []
     else:
         pred_musicxml = gt_path  # 自验：pred 与 gt 同源 -> 零差异
     rep["pred_musicxml"] = pred_musicxml
@@ -257,12 +306,12 @@ def _eval_one(corpus_dir, image_path, gt_path, base, use_oemer):
         pred_doc = pudu_jianpu_json(pred_musicxml)
     except Exception as e:  # noqa: BLE001
         rep["fatal"] = f"Pudu 处理 pred 失败: {e}"
-        return rep
+        return rep, []
     try:
         gt_doc = pudu_jianpu_json(gt_path)
     except Exception as e:  # noqa: BLE001
         rep["fatal"] = f"Pudu 处理 gt 失败: {e}"
-        return rep
+        return rep, []
 
     # —— 文档级校验：key / mode / time_signature（各 1 字段） ——
     _doc_check(rep, "key", gt_doc.get("fifths"), pred_doc.get("fifths"))
@@ -306,8 +355,10 @@ def _eval_one(corpus_dir, image_path, gt_path, base, use_oemer):
             rep["field_checked"] += n_checked
             failed = 0
             has_counted = False
+            failed_cats = set()
             for field, exp, act, cat in diffs:
                 rep["category_counts"][cat] = rep["category_counts"].get(cat, 0) + 1
+                failed_cats.add(cat)
                 if cat in COUNTED_CATEGORIES:
                     failed += 1
                     has_counted = True
@@ -319,13 +370,42 @@ def _eval_one(corpus_dir, image_path, gt_path, base, use_oemer):
                     "category": cat,
                 })
             rep["field_failed"] += failed
+            # —— (B) 八度跳变提升为逐音符评分类别 octave_jump ——
+            # 定义（与 omr_eval_lib.is_octave_jump 同口径）：pred 与 gt 的简谱
+            # 八度点(octaveDots)之差的绝对值 >= 2 即视为 octave_jump。该定义直接
+            # 复用原 edge_case.octave_jumps 的跳变检测阈值，但把它从「仅边界统计」
+            # 提升为「可评分类别」写入 category_counts 与 category_pass；为保持联立
+            # note_pass 向后兼容，octave_jump 不计入 COUNTED_CATEGORIES（不额外
+            # 改变联立通过率），仅作为独立维度曝光，便于量化 F3/H1 八度修复收益。
+            if is_octave_jump(cnote, gnote):
+                rep["edge"]["octave_jumps"] += 1
+                rep["category_counts"]["octave_jump"] = \
+                    rep["category_counts"].get("octave_jump", 0) + 1
+                failed_cats.add("octave_jump")
+            # 逐音符失败类别累加（用于 category_pass；仅统计逐音符类别）
+            for cat in failed_cats:
+                if cat in PER_NOTE_CATEGORIES:
+                    rep["category_note_fail"][cat] = \
+                        rep["category_note_fail"].get(cat, 0) + 1
             if not has_counted:
                 rep["notes_correct"] += 1
-            # 异常八度跳变（后处理可关注）：pred 与 gt 八度点差 >= 2
-            po = cnote.get("octaveDots", 0)
-            go = gnote.get("octaveDots", 0)
-            if abs(po - go) >= 2:
-                rep["edge"]["octave_jumps"] += 1
+            # —— (C) 逐音符 diff 账本条目（用于「待验证 #2」核对） ——
+            note_index += 1
+            note_ledger.append({
+                "file": base,
+                "index": note_index,
+                "expected": {
+                    "step": gnote.get("degree", 0),
+                    "octave": gnote.get("octaveDots", 0),
+                    "alter": gnote.get("accidental", "none"),
+                },
+                "actual": {
+                    "step": cnote.get("degree", 0),
+                    "octave": cnote.get("octaveDots", 0),
+                    "alter": cnote.get("accidental", "none"),
+                },
+                "failed_categories": sorted(failed_cats),
+            })
         # 多余事件（仅一边有）
         for i in range(n, max(len(cn), len(gn))):
             rep["field_failed"] += 1
@@ -338,7 +418,10 @@ def _eval_one(corpus_dir, image_path, gt_path, base, use_oemer):
                 "expected": "paired event", "actual": f"only in {side}",
                 "category": "event_count",
             })
-    return rep
+    # —— (A) 每维度独立通过率（category_pass） ——
+    rep["category_pass"] = _compute_category_pass(
+        rep["notes_compared"], rep.get("category_note_fail", {}))
+    return rep, note_ledger
 
 
 # ----------------------------------------------------------------------
@@ -366,13 +449,15 @@ def eval_corpus(corpus_dir, use_oemer=True):
 
     file_reps = []
     flagged = []
+    note_ledger_all = []   # (C) 跨文件逐音符 diff 账本，评测后写出
     for image_path, gt_path, base in pairs:
         if image_path is None:
             print(f"[info] {base}: --no-oemr 自验，pred 取 gt 自身")
         else:
             print(f"[info] {base}: image={os.path.basename(image_path)}")
-        rep = _eval_one(corpus_dir, image_path, gt_path, base, use_oemer)
+        rep, ledger = _eval_one(corpus_dir, image_path, gt_path, base, use_oemer)
         file_reps.append(rep)
+        note_ledger_all.extend(ledger)
         if rep.get("fatal"):
             print(f"  [致命] {base}: {rep['fatal']}")
             continue
@@ -404,6 +489,13 @@ def eval_corpus(corpus_dir, use_oemer=True):
         for k in edge:
             edge[k] += r["edge"].get(k, 0)
 
+    # —— (A) 聚合每维度独立通过率 ——
+    cat_note_fail_total = {}
+    for r in file_reps:
+        for cat, c in r.get("category_note_fail", {}).items():
+            cat_note_fail_total[cat] = cat_note_fail_total.get(cat, 0) + c
+    category_pass = _compute_category_pass(notes_compared, cat_note_fail_total)
+
     summary = {
         "mode": "oemer" if use_oemer else "no_oemer_selfcheck",
         "files_total": len(file_reps),
@@ -415,13 +507,17 @@ def eval_corpus(corpus_dir, use_oemer=True):
         "field_failed": field_failed,
         "field_pass_rate": field_pass,
         "category_distribution": aggregate_category_distribution(file_reps),
+        "category_pass": category_pass,
         "edge_case": edge,
         "fatal_files": [r["file"] for r in file_reps if r.get("fatal")],
     }
+    # —— (C) 写出逐音符 diff 账本（omr_eval_note_diffs.json / .csv） ——
+    note_diffs_path = _write_note_diffs(corpus_dir, note_ledger_all, use_oemer)
     return {
         "summary": summary,
         "per_file": file_reps,
         "flagged_for_postcorrect": flagged,
+        "note_diffs_path": note_diffs_path,
     }
 
 
@@ -435,6 +531,59 @@ def _write_report(corpus_dir, result):
     with open(out, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
     return out
+
+
+def _write_note_diffs(corpus_dir, note_ledger, use_oemer):
+    """写出逐音符 diff 账本 ``omr_eval_note_diffs.json``（+ 同内容 ``.csv``）。
+
+    每条记录仅含比对所需最小字段，不泄露无关大字段：
+      * ``index``：全局对齐序号（跨文件递增，对应评测比对顺序）。
+      * ``expected`` / ``actual``：``{step, octave, alter}``，分别来自 gt / pred
+        主音符（step=简谱音级 degree，octave=八度点 octaveDots，alter=变音记号）。
+      * ``failed_categories``：该音符失败的评分类别列表（空列表=完全正确）。
+
+    用途：人工/脚本核对**待验证 #2**——concerto 残留的 ``pitch_accidental``
+    究竟是 oemer 多加了变音记号（actual.alter 非 none 而 expected.alter=none），
+    还是方案A（``tools/omr_oemer.py`` 的 ``_apply_alters``）把 gt 合法的调外
+    变化音（如 a 小调常见的 G#/F#）误清零成了 0（expected.alter=sharp/flat
+    而 actual.alter=none）。diff 账本导出后即可按 ``failed_categories`` 含
+    ``pitch_accidental`` 过滤，对照 expected/actual.alter 直接判定来源。
+
+    Args:
+        corpus_dir: 语料目录（文件写出至此）。
+        note_ledger: 跨文件的逐音符 diff 列表（由 ``_eval_one`` 累积）。
+        use_oemer: 是否运行了 oemer（仅用于 meta 标注）。
+
+    Returns:
+        str: 写出的 JSON 路径。
+    """
+    out_json = os.path.join(corpus_dir, "omr_eval_note_diffs.json")
+    payload = {
+        "meta": {
+            "tool": "omr_eval_groundtruth",
+            "mode": "oemer" if use_oemer else "no_oemer_selfcheck",
+            "corpus_dir": os.path.abspath(corpus_dir),
+            "notes_total": len(note_ledger),
+        },
+        "notes": note_ledger,
+    }
+    with open(out_json, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    # CSV 便于快速过滤（如按 failed_categories 含 pitch_accidental 筛选）
+    out_csv = os.path.join(corpus_dir, "omr_eval_note_diffs.csv")
+    with open(out_csv, "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["file", "index",
+                    "exp_step", "exp_octave", "exp_alter",
+                    "act_step", "act_octave", "act_alter",
+                    "failed_categories"])
+        for e in note_ledger:
+            ex, ac = e["expected"], e["actual"]
+            w.writerow([e["file"], e["index"],
+                        ex["step"], ex["octave"], ex["alter"],
+                        ac["step"], ac["octave"], ac["alter"],
+                        "|".join(e["failed_categories"])])
+    return out_json
 
 
 def _print_summary(result):
@@ -471,6 +620,13 @@ def _print_summary(result):
             print(f"    {cat}: {c}{flag}")
     else:
         print("    （无差异）")
+    # —— (A) 每维度独立通过率 ——
+    print("每维度独立通过率（category_pass，与联立 note_pass 互补）：")
+    if s.get("category_pass"):
+        for cat, rate in s["category_pass"].items():
+            print(f"    {cat}: {rate:.2f}%")
+    else:
+        print("    （无音符比对 / 无差异）")
     e = s["edge_case"]
     print(f"边界覆盖：休止 {e['rests']} / 和弦 {e['chords']} / "
           f"装饰音 {e['graces']} / 连音组 {e['tuplets']} / 异常八度跳变 {e['octave_jumps']} 个")
@@ -501,6 +657,9 @@ def main(argv=None):
     _print_summary(result)
     report_path = _write_report(os.path.abspath(args.corpus_dir), result)
     print(f"报告已写出：\n  {report_path}")
+    nd = result.get("note_diffs_path")
+    if nd:
+        print(f"逐音符 diff 账本：\n  {nd}")
     return 0
 
 
