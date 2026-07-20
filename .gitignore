@@ -32,3 +32,24 @@ cfg.log
 __pycache__/
 *.pyc
 omr-tool-research/__pycache__/
+
+# ===== OMR 运行产物（本地保留，不纳入版本控制）=====
+# Oemer 推理 / 批量识别输出
+data/oemer_out/
+data/_omr_batch_out/
+# 评测中间产物（pred/gt 投影、报告、A/B 测试）
+data/omr_eval/real/
+data/omr_eval/_abtest/
+data/omr_eval/selfcheck/
+# 调试/追踪脚本与异常栈
+data/_oemer_trace.py
+data/oemer_traceback.txt
+# 序列化中间产物
+data/*.pkl
+# 会话/评测摘要
+SESSION_SUMMARY_*.md
+# 评测 fixture 输出
+test_omr_fixture_out.musicxml
+test_omr_pipeline.musicxml
+# 生成的简谱 HTML
+river_1_jianpu.html
