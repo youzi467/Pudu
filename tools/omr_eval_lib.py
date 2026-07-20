@@ -32,6 +32,7 @@
 """
 
 import math
+from collections import defaultdict
 
 # ----------------------------------------------------------------------
 # 常量（与 verify_jianpu_groundtruth.py 同口径）
@@ -166,27 +167,113 @@ def flatten_json_lines(doc):
     return out
 
 
-def _merge_align(conv_b, gt_b, tol=0.03):
-    """将两侧时间桶按「part + 起始容差」对齐合并。
+def _measure_of(item):
+    """从 ``flatten_json_lines`` 产出的 ``(mnum, note)`` 元组提取小节号。
 
-    背景：转换器(divisions 累积)与 ground-truth(可能不同 divisions)对同一音的
-    onset 在连音(tuplet)段落会因取整产生系统性偏移。tol=0.03 足以合并同音偏移
-    而不误并真实音符（连音段内相邻间隔远大于此）。
-    返回 {(part, anchor_onset): {"c":[...], "g":[...]}}。
+    小节号缺失或非元组时归一为 -1，保证分组键始终可哈希、可分组。
     """
+    try:
+        mnum = item[0] if isinstance(item, (list, tuple)) else None
+    except (TypeError, IndexError):
+        mnum = None
+    return mnum if mnum is not None else -1
+
+
+def _merge_align(conv_b, gt_b, tol=0.03):
+    """将两侧时间桶按「part + 起始容差」对齐，并提供「同小节内音序对齐」fallback。
+
+    阶段 1（主路径，保持原行为）
+    ---------------------------
+    按 (part, onset) 容差合并，处理同 onset 多声部、连音段系统性偏移。返回的桶若
+    c 与 g 双边都存在则视为「已配对」，原样输出，由消费端按 ``_note_key`` 配对。
+
+    阶段 2（fallback：绕过 oemer 时值漂移）
+    ---------------------------------------
+    oemer 的时值识别会漂移，使 pred 音符的 onset 相对 gt 偏移超过 ``tol``（极端时
+    整页 onset 爬到 ~2298 而非 ~96）。同源音符于是落入不同 onset 桶、被计为
+    ``event_count``「未配对」，从不真正比较 —— 这正是评测中 ``note_pass`` 畸低、
+    ``event_count`` 未配对畸高的根因。
+
+    为绕过该漂移，把所有「孤独音符」（仅单边非空的 onset 桶中的音符）按相同
+    ``(part, measure)`` 内的**序列顺序**（按 onset 在组内排序）配对：位置 *i* 的
+    孤独 c 与位置 *i* 的孤独 g 合并为 1:1 fallback 桶；剩余项作为单边孤独桶输出，
+    由消费端正确标为 "only in pred" / "only in gt" 的 ``event_count`` 差异。
+
+    该 fallback 是启发式，严格优于现状（现状下漂移音符从不比较）；oemer 真实的
+    漏检/误检仍会以 ``event_count`` 暴露。
+
+    返回值契约
+    ----------
+    ``{(part, anchor): {"c":[(mnum, note)...], "g":[(mnum, note)...]}}``。
+    ``anchor`` 可为 onset（阶段1）或预留数值键（阶段2），均满足「可哈希、可排序、
+    且 ``key[0] == part``」的消费端契约（消费端仅用 ``part`` 并迭代桶）。
+    """
+    # ===== 阶段 1：onset 容差合并（原逻辑，主路径） =====
     entries = []
     for (part, on), items in conv_b.items():
         entries.append((part, on, "c", items))
     for (part, on), items in gt_b.items():
         entries.append((part, on, "g", items))
     entries.sort(key=lambda e: (e[0], e[1]))
-    out = {}
+
+    onset_buckets = {}
     cur = None  # (part, anchor_onset)
     for part, on, side, items in entries:
         if cur is None or part != cur[0] or (on - cur[1]) > tol:
             cur = (part, on)
-            out[cur] = {"c": [], "g": []}
-        out[cur][side].extend(items)
+            onset_buckets[cur] = {"c": [], "g": []}
+        onset_buckets[cur][side].extend(items)
+
+    # ===== 阶段 2：同小节内音序对齐 fallback =====
+    out = {}
+
+    # 2a. 已配对桶（c 与 g 均非空）原样输出；单边桶收集「孤独音符」。
+    #     孤独音符记录其原始 onset（= 所在 onset 桶的 anchor），用于组内序列排序。
+    lonely = []  # [(part, mnum, side, onset, (mnum, note))]
+    for key, bucket in onset_buckets.items():
+        part, anchor = key
+        c_items = bucket["c"]
+        g_items = bucket["g"]
+        if len(c_items) > 0 and len(g_items) > 0:
+            out[key] = bucket  # 已配对，原样保留（消费端按 _note_key 配对）
+            continue
+        if len(c_items) > 0:
+            for item in c_items:
+                lonely.append((part, _measure_of(item), "c", anchor, item))
+        else:  # g_items 非空、c_items 空
+            for item in g_items:
+                lonely.append((part, _measure_of(item), "g", anchor, item))
+
+    # 2b. 按 (part, measure) 分组（measure 缺失时归一为 -1，保证可哈希/可分组）。
+    groups = defaultdict(lambda: {"c": [], "g": []})
+    for (part, mnum, side, onset, item) in lonely:
+        groups[(part, mnum)][side].append((onset, item))
+
+    # 2c. 组内各自按 onset 排序，按位置配对。
+    #     fallback 键用预留数值区间（>= 1e9），与真实 onset（远小于此）严格隔离，
+    #     保证与阶段1 的 (part, onset) 浮点键在同一字典「可排序、不冲突」。
+    fb_counter = 0
+    FB_BASE = 1e9
+    for (_part, _mnum), grp in groups.items():
+        c_sorted = sorted(grp["c"], key=lambda x: x[0])  # [(onset, (mnum, note)), ...]
+        g_sorted = sorted(grp["g"], key=lambda x: x[0])
+        n_c = len(c_sorted)
+        n_g = len(g_sorted)
+        n_pair = min(n_c, n_g)
+        for i in range(n_pair):
+            fb_key = (_part, FB_BASE + fb_counter)
+            fb_counter += 1
+            out[fb_key] = {"c": [c_sorted[i][1]], "g": [g_sorted[i][1]]}
+        # 余量：仅单边存在 -> 单边孤独桶（消费端标为 only in pred / only in gt）。
+        for i in range(n_pair, n_c):
+            fb_key = (_part, FB_BASE + fb_counter)
+            fb_counter += 1
+            out[fb_key] = {"c": [c_sorted[i][1]], "g": []}
+        for i in range(n_pair, n_g):
+            fb_key = (_part, FB_BASE + fb_counter)
+            fb_counter += 1
+            out[fb_key] = {"c": [], "g": [g_sorted[i][1]]}
+
     return out
 
 
