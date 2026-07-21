@@ -59,6 +59,8 @@ import traceback
 import xml.etree.ElementTree as ET
 from typing import Optional, Tuple
 
+import numpy as np
+
 # F3：几何重算模块（纯 stdlib，无 oemer 依赖）
 from geometric_pitch import (  # noqa: E402
     SidecarDoc, StaffGeometry, LineGeom, ClefGeometry, NoteGeometry,
@@ -466,11 +468,18 @@ def _sfn_to_str(sfn) -> Optional[str]:
 
 
 def _bbox_center(bbox) -> Tuple[float, float]:
-    """bbox [x1,y1,x2,y2] -> (cx, cy)。"""
-    if not bbox:
+    """bbox [x1,y1,x2,y2] -> (cx, cy)。
+
+    对 oemer 0.1.8 的 numpy ndarray / list / tuple / None 均安全：
+    绝不使用 ``if not bbox`` 这类真值判断（ndarray 会抛
+    "truth value of an array is ambiguous"）。
+    """
+    if bbox is None:
         return (0.0, 0.0)
-    return ((float(bbox[0]) + float(bbox[2])) / 2.0,
-            (float(bbox[1]) + float(bbox[3])) / 2.0)
+    arr = np.asarray(bbox, dtype=float)
+    if arr.size == 0:
+        return (0.0, 0.0)
+    return ((arr[0] + arr[2]) / 2.0, (arr[1] + arr[3]) / 2.0)
 
 
 def _ink_centroid(notehead) -> Tuple[float, float]:
@@ -479,11 +488,18 @@ def _ink_centroid(notehead) -> Tuple[float, float]:
     若无 points（极少数退化符头），退化为 bbox 中心。
     """
     pts = getattr(notehead, "points", None)
-    if pts:
-        ys = [float(p[0]) for p in pts]
-        xs = [float(p[1]) for p in pts]
-        if xs and ys:
-            return (sum(xs) / len(xs), sum(ys) / len(ys))
+    if pts is None or np.asarray(pts).size == 0:
+        bbox = getattr(notehead, "bbox", None)
+        return _bbox_center(bbox)
+    arr = np.asarray(pts, dtype=float).reshape(-1, 2)
+    if arr.size == 0:
+        bbox = getattr(notehead, "bbox", None)
+        return _bbox_center(bbox)
+    # oemer points 存为 (y, x)，取各维度均值
+    ys = arr[:, 0]
+    xs = arr[:, 1]
+    if xs.size and ys.size:
+        return (float(xs.mean()), float(ys.mean()))
     bbox = getattr(notehead, "bbox", None)
     return _bbox_center(bbox)
 
@@ -495,9 +511,24 @@ def _safe_track(notehead) -> int:
 
 def _safe_x(notehead) -> float:
     bbox = getattr(notehead, "bbox", None)
-    if bbox:
-        return (float(bbox[0]) + float(bbox[2])) / 2.0
+    if bbox is not None and np.asarray(bbox).size > 0:
+        arr = np.asarray(bbox, dtype=float)
+        return (arr[0] + arr[2]) / 2.0
     return 0.0
+
+
+def _flatten_layer(raw):
+    """把 oemer 的 get_layer 结果规整为 1D 对象列表。
+
+    oemer 0.1.8 实测：
+      * get_layer('staffs') 返回 **2D object ndarray**（shape [n_columns][n_substaffs]，
+        来自 align_staffs → np.array(List[List[Staff]])），须展平；
+      * get_layer('notes'|'clefs') 在 0.1.8 为 1D，但为健壮性同样套用展平，
+        对 1D 直接 list() 即可，无副作用。
+    """
+    if hasattr(raw, "ndim") and raw.ndim == 2:
+        return [s for col in raw for s in col]
+    return list(raw)
 
 
 def _patch_oemer_for_sidecar() -> None:
@@ -552,15 +583,21 @@ def _dump_geometry_sidecar(mxl_path: str) -> str:
     """
     from oemer import layers
 
-    notes_arr = layers.get_layer('notes')    # np.array[NoteHead]，id==index
-    staffs_arr = layers.get_layer('staffs')  # np.array[Staff]
-    clefs_arr = layers.get_layer('clefs')    # np.array[Clef]
+    # 关键：oemer 0.1.8 的 get_layer('staffs') 返回 2D object ndarray，
+    # 必须展平后再迭代；notes/clefs 同样套用，保证 1D/2D 形态都健壮。
+    notes_arr = _flatten_layer(layers.get_layer('notes'))    # NoteHead 序列
+    staffs_arr = _flatten_layer(layers.get_layer('staffs'))  # Staff 序列
+    clefs_arr = _flatten_layer(layers.get_layer('clefs'))    # Clef 序列
 
     by_id = {int(nh.id): nh for nh in notes_arr}
 
     # —— 谱表几何 ——
     staff_geoms: list = []
     for si, st in enumerate(staffs_arr):
+        # 跳过展平后混入的非 Staff 元素（如 ndarray 列残留），避免
+        # 'numpy.ndarray' object has no attribute 'track'。
+        if not hasattr(st, "lines") or not hasattr(st, "track"):
+            continue
         lines = [
             LineGeom(
                 y_center=float(getattr(L, "y_center", 0.0)),
