@@ -90,12 +90,14 @@ GT_SUFFIX = ".gt.musicxml"
 # 步骤 1：oemer 识别（可跳过）
 # ----------------------------------------------------------------------
 
-def run_oemer(image_path, out_musicxml, gt_path=None, venv_python=VENV_PYTHON):
+def run_oemer(image_path, out_musicxml, gt_path=None, venv_python=VENV_PYTHON,
+              f3_geometric=False):
     """调用 ``tools/omr_oemer.py`` 把五线谱图片识别为 MusicXML。
 
-    命令：``venv_python tools/omr_oemer.py <image> <out_musicxml> [--gt <gt>]``
-    （omr_oemer.py 为位置参数契约，--gt 注入 ground-truth 做方案A调号
-    后处理重推断，详见 omr_oemer.py 模块 docstring）。
+    命令：``venv_python tools/omr_oemer.py <image> <out_musicxml> [--gt <gt>]
+    [--f3-geometric]``（omr_oemer.py 为位置参数契约，--gt 注入 ground-truth
+    做方案A调号后处理重推断，--f3-geometric 开启 F3 几何音高校正，详见
+    omr_oemer.py 模块 docstring）。
 
     Args:
         image_path: 输入五线谱图片路径。
@@ -104,13 +106,18 @@ def run_oemer(image_path, out_musicxml, gt_path=None, venv_python=VENV_PYTHON):
             omr_oemer.py 做调号校正（同名约定：与 image 同 base 的
             ``.gt.musicxml``）。None 时不注入（统计法 fallback）。
         venv_python: 含 oemer/music21/opencv 的 venv 解释器。
+        f3_geometric: 是否透传 ``--f3-geometric`` 给 oemer 运行器（开启 F3
+            几何音高校正）。也可经环境变量 ``PUDU_F3_GEOMETRIC=1`` 启用。
 
     Returns:
         bool: 成功产出有效 MusicXML 为 True，否则 False（并打印原因）。
     """
+    f3_geometric = f3_geometric or (os.environ.get("PUDU_F3_GEOMETRIC") == "1")
     cmd = [venv_python, OMER_RUNNER, image_path, out_musicxml]
     if gt_path:
         cmd += ["--gt", gt_path]
+    if f3_geometric:
+        cmd += ["--f3-geometric"]
     try:
         proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, timeout=600)
     except Exception as e:  # noqa: BLE001
@@ -282,7 +289,7 @@ def _compute_category_pass(notes_compared, cat_note_fail):
     return out
 
 
-def _eval_one(corpus_dir, image_path, gt_path, base, use_oemer):
+def _eval_one(corpus_dir, image_path, gt_path, base, use_oemer, f3_geometric=False):
     """评测单个 ``(image, gt)`` 对，返回 per-file 报告 dict。"""
     rep = _new_rep(base, image_path, gt_path)
     note_index = 0        # (C) 全局对齐序号，跨文件递增
@@ -293,7 +300,10 @@ def _eval_one(corpus_dir, image_path, gt_path, base, use_oemer):
         pred_musicxml = os.path.join(corpus_dir, base + ".pred.musicxml")
         # 注入 gt 路径（同名约定：与 image 同 base 的 .gt.musicxml），
         # 由 omr_oemer.py 做方案A调号后处理重推断，自动受益。
-        if not run_oemer(image_path, pred_musicxml, gt_path=gt_path):
+        # f3_geometric 透传（开启 F3 几何音高校正，仅影响 oemer 识别路径，
+        # 不改比对内核 compare_jianpu_note / _merge_align）。
+        if not run_oemer(image_path, pred_musicxml, gt_path=gt_path,
+                         f3_geometric=f3_geometric):
             rep["fatal"] = "oemer 识别失败"
             rep["pred_musicxml"] = image_path
             return rep, []
@@ -428,8 +438,14 @@ def _eval_one(corpus_dir, image_path, gt_path, base, use_oemer):
 # 语料评测（主入口）
 # ----------------------------------------------------------------------
 
-def eval_corpus(corpus_dir, use_oemer=True):
+def eval_corpus(corpus_dir, use_oemer=True, f3_geometric=False):
     """遍历 corpus_dir 下 ``(image, gt_musicxml)`` 对，量化 oemer→简谱 误差分布。
+
+    Args:
+        corpus_dir: 语料目录。
+        use_oemer: 是否运行 oemer（False 为 --no-oemr 自验）。
+        f3_geometric: 是否透传 ``--f3-geometric`` 给 oemer（开启 F3 几何校正）。
+            仅影响 oemer 识别路径；--no-oemr 自验时该参数无效。
 
     Returns:
         dict: ``{summary:{note_pass_rate, field_pass_rate, category_distribution,
@@ -455,7 +471,8 @@ def eval_corpus(corpus_dir, use_oemer=True):
             print(f"[info] {base}: --no-oemr 自验，pred 取 gt 自身")
         else:
             print(f"[info] {base}: image={os.path.basename(image_path)}")
-        rep, ledger = _eval_one(corpus_dir, image_path, gt_path, base, use_oemer)
+        rep, ledger = _eval_one(corpus_dir, image_path, gt_path, base,
+                                use_oemer, f3_geometric=f3_geometric)
         file_reps.append(rep)
         note_ledger_all.extend(ledger)
         if rep.get("fatal"):
@@ -645,11 +662,16 @@ def main(argv=None):
                      help="运行 oemer 把图片识别为 pred.musicxml（默认）")
     grp.add_argument("--no-oemr", dest="use_oemer", action="store_false",
                      help="自验：直接用 gt.musicxml 当 pred，跳过 oemer")
-    parser.set_defaults(use_oemer=True)
+    parser.add_argument("--f3-geometric", dest="f3_geometric", action="store_true",
+                        help="透传 --f3-geometric 给 oemer 运行器（开启 F3 几何"
+                             "音高校正）；也可经环境变量 PUDU_F3_GEOMETRIC=1 启用。"
+                             "仅影响 oemer 识别路径，不改比对内核。")
+    parser.set_defaults(use_oemer=True, f3_geometric=False)
     args = parser.parse_args(argv)
 
     try:
-        result = eval_corpus(args.corpus_dir, args.use_oemer)
+        result = eval_corpus(args.corpus_dir, args.use_oemer,
+                             f3_geometric=args.f3_geometric)
     except (FileNotFoundError, RuntimeError) as e:
         print(f"[错误] {e}", file=sys.stderr)
         return 2

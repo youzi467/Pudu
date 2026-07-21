@@ -4,10 +4,21 @@
 #
 # 适配器以子进程方式调用本脚本：
 #   python omr_oemer.py <input_image_or_pdf> <output_musicxml> [--gt <gt_musicxml>]
+#                        [--f3-geometric] [--no-f3-sidecar]
 #
 # 职责：用 oemer（基于深度学习的 OMR）把乐谱图片/PDF 识别为 MusicXML，
-# 随后做【方案A：调号后处理重推断】（见 correct_key_signature）修正系统性
-# 调号偏移。这是"黑盒"边界——Pudu 只消费产出的 MusicXML，不关心 oemer 内部。
+# 随后做：
+#   * 方案A（correct_key_signature）：调号后处理重推断（fifths + alter）。
+#   * F3（recompute_pitch_from_geometry）：几何感知音高校正，
+#     仅重写 <step>/<octave>（默认关，需 --f3-geometric 或 PUDU_F3_GEOMETRIC=1）。
+#
+# 这是"黑盒"边界——Pudu 只消费产出的 MusicXML，不关心 oemer 内部。
+#
+# F3 sidecar 提取（零改 site-packages，仅运行时 monkeypatch）：
+#   在调用 oemer.ete.main() 之前，对 oemer.ete.extract 与
+#   oemer.build_system.AddNote.perform 做内存 monkeypatch，从 oemer 的
+#   layers 缓存读取 notes/staffs/clefs，写出 <basename>.geometry.json。
+#   sidecar 默认随 oemer 产出（无害额外文件）；可用 --no-f3-sidecar 抑制。
 #
 # 依赖：oemer 0.1.x（pip install oemer，含 onnxruntime / opencv / scipy /
 #       sklearn / augly）+ oemer 预训练权重（首次运行由 oemer.ete.main()
@@ -20,7 +31,7 @@
 #     (3) 额外写一张 teaser png。
 #   输出文件名取自输入图 basename；-o 指向目录时写 <dir>/<basename>.musicxml。
 #   本脚本通过构造 oemer.ete.main() 期望的 argv 再调用它，最后把产出
-#   重命名为适配器要求的 out_path，再做调号校正后写回。
+#   重命名为适配器要求的 out_path，再做调号校正 / F3 后写回。
 #
 # 方案A（调号后处理）：
 #   oemer 在域外谱（如小提琴单声部 D 大调）上常把调号误推断（如读成 C 大调），
@@ -38,13 +49,21 @@
 #       （如 D 大调：F/C->1，其余->0）。依据：实测 Pudu 同时依据 key 签名与
 #       显式 <alter> 推导音高，仅改 key 会让 F/C 呈现 accidental=flat 而非 gt 的
 #       none（pitch_accidental 计入 note_pass），故必须同步重拼写 note 的
-#       accidental。
+#        accidental。
 # ----------------------------------------------------------------------
 import sys
 import os
 import copy
+import json
 import traceback
 import xml.etree.ElementTree as ET
+from typing import Optional, Tuple
+
+# F3：几何重算模块（纯 stdlib，无 oemer 依赖）
+from geometric_pitch import (  # noqa: E402
+    SidecarDoc, StaffGeometry, LineGeom, ClefGeometry, NoteGeometry,
+    recompute_pitch_from_geometry,
+)
 
 
 # ===================== 方案A：调号后处理重推断 =====================
@@ -409,19 +428,237 @@ def correct_key_signature(out_path, gt_path=None):
     return target
 
 
-# ===================== oemer 调用 + 调号校正主流程 =====================
+# ===================== F3-A：oemer sidecar 运行时导出 =====================
+# 说明：以下 monkeypatch 仅修改内存中的 oemer 函数引用，**零改 site-packages**，
+# 不影响 oemer 既有行为。导出 <basename>.geometry.json 供 F3 重算使用。
+
+_EMISSION_ORDER: list = []          # 被 AddNote.perform patch 填充（发射序 note id）
+_F3_SUPPRESS_SIDECAR: bool = False  # --no-f3-sidecar 时抑制 sidecar 产出
+_orig_extract = None                # 保存 oemer.ete.extract 原引用
+
+
+def _clef_type_to_str(clef) -> str:
+    """把 oemer Clef.label（ClefType 枚举）映射为 sidecar 的 "G"/"F"。"""
+    lab = getattr(clef, "label", None)
+    if lab is None:
+        return "G"
+    name = getattr(lab, "name", None)
+    if name is None:
+        name = str(lab)
+    # oemer ClefType: G_CLEF=1 / F_CLEF=2（无 C 谱号）
+    if name == "G_CLEF":
+        return "G"
+    if name == "F_CLEF":
+        return "F"
+    # 其它（理论不存在）：去掉 _CLEF 后缀
+    return name.replace("_CLEF", "") if "CLEF" in name else name
+
+
+def _sfn_to_str(sfn) -> Optional[str]:
+    """把 oemer NoteHead.sfn（SfnType 枚举/None）映射为 "sharp"/"flat"/"natural"/None。"""
+    if sfn is None:
+        return None
+    name = getattr(sfn, "name", None)
+    if name is None:
+        name = str(sfn)
+    mapping = {"SHARP": "sharp", "FLAT": "flat", "NATURAL": "natural"}
+    return mapping.get(name, name.lower() if isinstance(name, str) else None)
+
+
+def _bbox_center(bbox) -> Tuple[float, float]:
+    """bbox [x1,y1,x2,y2] -> (cx, cy)。"""
+    if not bbox:
+        return (0.0, 0.0)
+    return ((float(bbox[0]) + float(bbox[2])) / 2.0,
+            (float(bbox[1]) + float(bbox[3])) / 2.0)
+
+
+def _ink_centroid(notehead) -> Tuple[float, float]:
+    """由 notehead.points（oemer 存为 (y, x) 元组）求墨迹质心 (cx, cy)。
+
+    若无 points（极少数退化符头），退化为 bbox 中心。
+    """
+    pts = getattr(notehead, "points", None)
+    if pts:
+        ys = [float(p[0]) for p in pts]
+        xs = [float(p[1]) for p in pts]
+        if xs and ys:
+            return (sum(xs) / len(xs), sum(ys) / len(ys))
+    bbox = getattr(notehead, "bbox", None)
+    return _bbox_center(bbox)
+
+
+def _safe_track(notehead) -> int:
+    t = getattr(notehead, "track", None)
+    return int(t) if t is not None else 0
+
+
+def _safe_x(notehead) -> float:
+    bbox = getattr(notehead, "bbox", None)
+    if bbox:
+        return (float(bbox[0]) + float(bbox[2])) / 2.0
+    return 0.0
+
+
+def _patch_oemer_for_sidecar() -> None:
+    """在调用 oemer.ete.main() 前安装 monkeypatch（仅内存，不改 site-packages）。
+
+    包裹 oemer.ete.extract（导出 geometry.json）与 oemer.build_system.AddNote.perform
+    （捕获发射序 note id）。注意：当前 omr_oemer.py 无既有补丁需保留，此处为
+    纯新增；oemer site-packages 内既有的 6 处补丁不在本文件范围、保持不动。
+    """
+    import oemer.ete as ete_mod
+    import oemer.build_system as bs_mod
+    global _orig_extract
+    _orig_extract = ete_mod.extract
+
+    def _patched_extract(args):
+        mxl = _orig_extract(args)
+        if not _F3_SUPPRESS_SIDECAR:
+            try:
+                _dump_geometry_sidecar(mxl)
+            except Exception as e:  # noqa: BLE001
+                sys.stderr.write(f"[警告] sidecar 导出失败（非致命）: {e}\n")
+        return mxl
+
+    ete_mod.extract = _patched_extract
+
+    _OrigPerform = bs_mod.AddNote.perform
+
+    def _patched_addnote_perform(self, parent_elem=None):
+        elem = _OrigPerform(self, parent_elem)
+        # 仅记录实际落 XML 的音（decode_note 返回 None 的越界/无效音不计入）
+        if elem is not None:
+            _EMISSION_ORDER.append(int(self.note.id))
+        return elem
+
+    bs_mod.AddNote.perform = _patched_addnote_perform
+
+
+def _dump_geometry_sidecar(mxl_path: str) -> str:
+    """从 oemer.layers 读 notes/staffs/clefs，写出 <mxl>.geometry.json。
+
+    返回 sidecar 路径。notes[] 按发射序（_EMISSION_ORDER）排列，与 MusicXML
+    <note>（非休止）文档序 1:1 对齐；若发射序捕获失败，退化为按 (track, x) 排序。
+
+    oemer 内部 API 复核结论（已逐条核对 site-packages 源码）：
+      * oemer.layers.get_layer('notes'|'staffs'|'clefs') 返回 np.array 对象。
+      * NoteHead 有 points[(y,x)…]/bbox/staff_line_pos/sfn/track/group/id/invalid。
+      * Staff 有 lines（5×Line）/track/group/unit_size（线间距）/y_center；
+        Line 有 y_center（属性）与 y_upper/y_lower（推导厚度用）。
+      * Clef 有 track/label（ClefType G_CLEF/F_CLEF）/bbox/x_center；
+        **无** line/sign/y_center —— 故 sidecar 的 type 由 label 推导，
+        line/y_center 留 None（F3 几何不依赖它们）。
+    """
+    from oemer import layers
+
+    notes_arr = layers.get_layer('notes')    # np.array[NoteHead]，id==index
+    staffs_arr = layers.get_layer('staffs')  # np.array[Staff]
+    clefs_arr = layers.get_layer('clefs')    # np.array[Clef]
+
+    by_id = {int(nh.id): nh for nh in notes_arr}
+
+    # —— 谱表几何 ——
+    staff_geoms: list = []
+    for si, st in enumerate(staffs_arr):
+        lines = [
+            LineGeom(
+                y_center=float(getattr(L, "y_center", 0.0)),
+                thickness=float(max(0.0, (getattr(L, "y_lower", 0.0) or 0.0)
+                                    - (getattr(L, "y_upper", 0.0) or 0.0))),
+            )
+            for L in getattr(st, "lines", [])
+        ]
+        staff_geoms.append(StaffGeometry(
+            staff_id=int(si),
+            track=int(st.track) if st.track is not None else si,
+            group=int(st.group) if st.group is not None else None,
+            unit_size=float(getattr(st, "unit_size", 0.0) or 0.0),
+            y_center=float(getattr(st, "y_center", 0.0) or 0.0),
+            lines=lines,
+        ))
+
+    # —— 谱号几何（只读 type 作为映射输入） ——
+    clef_geoms: list = []
+    for cf in clefs_arr:
+        ctype = _clef_type_to_str(cf)
+        bbox = getattr(cf, "bbox", None)
+        y_center = None
+        if bbox is not None:
+            y_center = (float(bbox[1]) + float(bbox[3])) / 2.0
+        clef_geoms.append(ClefGeometry(
+            track=int(cf.track) if cf.track is not None else 0,
+            type=ctype,
+            line=None,                       # oemer 不暴露谱号所在线号
+            x_center=float(cf.x_center) if bbox is not None else None,
+            y_center=y_center,
+            sign=ctype,
+        ))
+
+    # —— 音符几何（发射序 1:1；缺失时退化为 (track, x) 排序） ——
+    if _EMISSION_ORDER:
+        order_ids = [int(i) for i in _EMISSION_ORDER]
+    else:
+        order_ids = sorted((int(nh.id) for nh in notes_arr),
+                           key=lambda i: (_safe_track(by_id.get(i)), _safe_x(by_id.get(i))))
+
+    note_geoms: list = []
+    for nid in order_ids:
+        nh = by_id.get(int(nid))
+        if nh is None or getattr(nh, "invalid", False):
+            continue
+        bbox = getattr(nh, "bbox", None)
+        bbox_t = tuple(float(v) for v in bbox) if bbox is not None \
+            else (0.0, 0.0, 0.0, 0.0)
+        cx, cy = _bbox_center(bbox)
+        ink = _ink_centroid(nh)
+        slp = getattr(nh, "staff_line_pos", None)
+        note_geoms.append(NoteGeometry(
+            id=int(nh.id),
+            track=int(nh.track) if nh.track is not None else 0,
+            group=int(nh.group) if nh.group is not None else None,
+            bbox=bbox_t,
+            center=(cx, cy),
+            ink_centroid=ink,
+            staff_line_pos=int(slp) if slp is not None else 0,
+            sfn=_sfn_to_str(getattr(nh, "sfn", None)),
+        ))
+
+    doc = SidecarDoc(
+        schema_version=1,
+        source_image=os.path.basename(mxl_path),
+        musicxml=os.path.basename(mxl_path),
+        coordinate_space="pixel_model",
+        note_order="oemer_emission",
+        staves=staff_geoms,
+        clefs=clef_geoms,
+        notes=note_geoms,
+        unit_size_px=float(staff_geoms[0].unit_size) if staff_geoms else None,
+        image_width_px=None,
+        image_height_px=None,
+    )
+
+    sidecar = mxl_path.replace('.musicxml', '.geometry.json')
+    with open(sidecar, 'w', encoding='utf-8') as f:
+        json.dump(doc.to_dict(), f, ensure_ascii=False, indent=2)
+    return sidecar
+
+
+# ===================== oemer 调用 + 调号校正 + F3 主流程 =====================
 
 def _parse_args(argv):
-    """从 sys.argv[1:] 解析位置参数与可选的 --gt。
+    """从 sys.argv[1:] 解析位置参数与可选的 --gt / --f3-geometric / --no-f3-sidecar。
 
-    必须在覆盖 sys.argv 给 oemer 之前调用，否则 --gt 会被 oemer 的 argv
+    必须在覆盖 sys.argv 给 oemer 之前调用，否则这些 flag 会被 oemer 的 argv
     构造吞掉丢失。
 
     Returns:
-        (positional, gt_path): positional 应为 [input, output]，gt_path 可能 None。
+        (positional, gt_path, f3_geometric, f3_suppress)
     """
     positional = []
     gt_path = None
+    f3_geometric = False
+    f3_suppress = False
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -433,23 +670,30 @@ def _parse_args(argv):
         elif a.startswith("--gt="):
             gt_path = a.split("=", 1)[1]
             i += 1
+        elif a == "--f3-geometric":
+            f3_geometric = True
+            i += 1
+        elif a == "--no-f3-sidecar":
+            f3_suppress = True
+            i += 1
         else:
             positional.append(a)
             i += 1
-    return positional, gt_path
+    return positional, gt_path, f3_geometric, f3_suppress
 
 
 def main():
-    # ---- 解析 --gt（必须在覆盖 sys.argv 给 oemer 之前） ----
+    # ---- 解析 flag（必须在覆盖 sys.argv 给 oemer 之前） ----
     try:
-        positional, gt_path = _parse_args(sys.argv[1:])
+        positional, gt_path, f3_geometric, f3_suppress = _parse_args(sys.argv[1:])
     except ValueError as e:
         sys.stderr.write(f"[错误] {e}\n")
         return 2
 
     if len(positional) != 2:
         sys.stderr.write(
-            "用法: python omr_oemer.py <input> <output.musicxml> [--gt <gt_path>]\n")
+            "用法: python omr_oemer.py <input> <output.musicxml> "
+            "[--gt <gt_path>] [--f3-geometric] [--no-f3-sidecar]\n")
         return 2
 
     in_path, out_path = positional[0], positional[1]
@@ -457,11 +701,24 @@ def main():
         sys.stderr.write(f"[错误] 输入不存在: {in_path}\n")
         return 1
 
+    # F3 总开关：--f3-geometric 或环境变量 PUDU_F3_GEOMETRIC=1（默认关）
+    f3_enabled = f3_geometric or (os.environ.get("PUDU_F3_GEOMETRIC") == "1")
+
     try:
         import oemer.ete
     except Exception as e:  # noqa: BLE001
         sys.stderr.write(f"[错误] 无法导入 oemer（是否已 pip install oemer？）: {e}\n")
         return 1
+
+    # ---- 安装 F3 sidecar monkeypatch（仅内存，零改 site-packages） ----
+    global _F3_SUPPRESS_SIDECAR, _EMISSION_ORDER
+    _F3_SUPPRESS_SIDECAR = f3_suppress
+    _EMISSION_ORDER = []
+    try:
+        _patch_oemer_for_sidecar()
+    except Exception as e:  # noqa: BLE001
+        # 补丁失败不致命：oemer 仍正常产出，仅无 sidecar / F3 不可用
+        sys.stderr.write(f"[警告] F3 sidecar 补丁安装失败（不影响 oemer）: {e}\n")
 
     out_dir = os.path.dirname(os.path.abspath(out_path))
     os.makedirs(out_dir, exist_ok=True)
@@ -487,6 +744,23 @@ def main():
         sys.stderr.write(f"[错误] oemer 未产出有效 MusicXML: {produced}\n")
         return 1
 
+    # sidecar 默认随 oemer 产出（与 produced 同名 .geometry.json）；
+    # 若最终文件名不同，则把 sidecar 一并重命名到 out_path 旁边，供 F3 读取。
+    produced_sidecar = produced.replace('.musicxml', '.geometry.json')
+    final_sidecar = out_path.replace('.musicxml', '.geometry.json')
+    if f3_suppress:
+        if os.path.exists(produced_sidecar):
+            try:
+                os.remove(produced_sidecar)
+            except OSError:
+                pass
+    elif os.path.abspath(produced_sidecar) != os.path.abspath(final_sidecar):
+        if os.path.exists(produced_sidecar):
+            try:
+                os.replace(produced_sidecar, final_sidecar)
+            except OSError as e:  # noqa: BLE001
+                sys.stderr.write(f"[警告] sidecar 重命名失败（F3 可能找不到）: {e}\n")
+
     if os.path.abspath(produced) != os.path.abspath(out_path):
         os.replace(produced, out_path)
 
@@ -500,6 +774,21 @@ def main():
         # 调号校正异常不致命：保留 oemer 原产出，不阻断主流程
         traceback.print_exc()
         sys.stderr.write(f"[警告] 调号校正异常（保留原产出）: {e}\n")
+
+    # ---- F3：几何感知音高校正（仅改 step/octave，在 Plan A 之后） ----
+    if f3_enabled:
+        sidecar_path = out_path.replace('.musicxml', '.geometry.json')
+        if f3_suppress:
+            sys.stderr.write(
+                "[警告] --f3-geometric 已开启但 --no-f3-sidecar 抑制了 sidecar，"
+                "F3 无几何数据可用（将跳过）\n")
+        try:
+            n = recompute_pitch_from_geometry(out_path, sidecar_path)
+            sys.stdout.write(f"[f3] 几何重算覆盖 {n} 个音符的 step/octave\n")
+        except Exception as e:  # noqa: BLE001
+            # F3 异常不致命：保留 Plan A 输出
+            traceback.print_exc()
+            sys.stderr.write(f"[警告] F3 几何重算异常（保留 Plan A 输出）: {e}\n")
 
     sys.stdout.write(f"[ok] oemer 产出 MusicXML: {out_path}\n")
     return 0
