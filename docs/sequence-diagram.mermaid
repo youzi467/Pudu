@@ -1,0 +1,36 @@
+sequenceDiagram
+    autonumber
+    participant U as Pudu 适配器 / CLI
+    participant O as tools/omr_oemer.py
+    participant E as oemer.ete.main()
+    participant L as oemer.layers 缓存
+    participant P as tools/geometric_pitch.py (F3)
+    participant X as MusicXML 文件
+    participant S as geometry.json (sidecar)
+    participant G as Pudu.exe --to-jianpu
+
+    U->>O: python omr_oemer.py img out.musicxml [--gt] [--f3-geometric]
+    O->>O: _patch_oemer_for_sidecar()  (monkeypatch extract/AddNote)
+    O->>E: oemer.ete.main()  (sys.argv=[oemer, img, -o, dir])
+    E->>L: staff_extract/note_extract/symbol_extract → 注册 notes/staffs/clefs
+    E->>E: MusicXMLBuilder.build() + to_musicxml()
+    Note over E: AddNote.perform 被 patch 捕获发射序 id 列表
+    E->>X: 写 out.musicxml
+    E-->>O: 返回 mxl_path
+    O->>L: _dump_geometry_sidecar 读 notes/staffs/clefs + EMISSION_ORDER
+    O->>S: 写 <basename>.geometry.json
+    O->>O: correct_key_signature(out_path, gt_path)  %% Plan A: fifths + alter
+    O->>X: 写回（key/alter 修正）
+    alt --f3-geometric 开启
+        O->>P: recompute_pitch_from_geometry(out, sidecar)
+        P->>X: 读 MusicXML（文档序遍历非休止音）
+        P->>S: 读 sidecar（发射序 1:1 + 每 staff 谱线 y / unit_size / clef）
+        loop 每个音符 i
+            P->>P: _geometric_pos(staff, clef, cy_ink) → pos
+            P->>P: _pos_to_step_octave(pos, clef) → (step, octave)
+            P->>X: 覆盖 <step>/<octave>（不改 alter/休止/时值）
+        end
+    end
+    O-->>U: 退出码 0（产出 musicxml + 可选 geometry.json）
+    U->>G: build/Pudu.exe out.musicxml --to-jianpu(-json)
+    G-->>U: 简谱（F3 已修正音高）

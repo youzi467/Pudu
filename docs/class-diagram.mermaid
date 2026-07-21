@@ -1,0 +1,69 @@
+classDiagram
+    class SidecarDoc {
+        +int schema_version
+        +str source_image
+        +str musicxml
+        +str coordinate_space
+        +str note_order
+        +float unit_size_px
+        +list~StaffGeometry~ staves
+        +list~ClefGeometry~ clefs
+        +list~NoteGeometry~ notes
+        +dict clefs_by_track()
+    }
+    class StaffGeometry {
+        +int staff_id
+        +int track
+        +int group
+        +float unit_size
+        +float y_center
+        +list~LineGeom~ lines
+        +float bottom_line_y()
+        +list~float~ sorted_line_ys_top2bottom()
+    }
+    class LineGeom {
+        +float y_center
+        +float thickness
+    }
+    class ClefGeometry {
+        +int track
+        +str type  // "G" | "F" | "C"
+        +int line
+        +float x_center
+        +float y_center
+    }
+    class NoteGeometry {
+        +int id
+        +int track
+        +int group
+        +tuple bbox  // (x1,y1,x2,y2)
+        +tuple center
+        +tuple ink_centroid
+        +int staff_line_pos
+        +str sfn
+    }
+    class OemerSidecarWriter {
+        +_patch_oemer_for_sidecar()
+        +_patched_extract(args) str
+        +_patched_addnote_perform(self, parent) Element
+        +_dump_geometry_sidecar(mxl_path) str
+    }
+    class GeometricPitchRecomputer {
+        +STAFF_ANCHOR dict
+        +G_CLEF_POS_TO_PITCH list
+        +F_CLEF_POS_TO_PITCH list
+        +recompute_pitch_from_geometry(musicxml, sidecar, use_ink_centroid, rounding) int
+        -_geometric_pos(staff, clef_type, cy) int
+        -_pos_to_step_octave(pos, clef_type) tuple
+        -_round_half_up(x) int
+    }
+    class PlanA {
+        +correct_key_signature(out_path, gt_path) int
+    }
+    SidecarDoc "1" *-- "1..*" StaffGeometry
+    SidecarDoc "1" *-- "0..*" ClefGeometry
+    SidecarDoc "1" *-- "0..*" NoteGeometry
+    StaffGeometry "1" *-- "5" LineGeom
+    OemerSidecarWriter ..> SidecarDoc : 构建
+    GeometricPitchRecomputer ..> SidecarDoc : 读取
+    GeometricPitchRecomputer ..> PlanA : 顺序在 PlanA 之后
