@@ -22,6 +22,7 @@ QA（Edward）在真实协奏曲 A/B 中发现 2 个生产崩溃，根因是既�
 import os
 import sys
 import json
+import types
 import unittest
 import tempfile
 
@@ -202,15 +203,30 @@ class TestDumpSidecarRealShapes(unittest.TestCase):
         # 保证 _EMISSION_ORDER 干净（无 monkeypatch 注入）
         omr_oemer._EMISSION_ORDER = []
 
+        # 关键修复：_dump_geometry_sidecar 内部用 ``from oemer import layers``
+        # 每次调用动态解析模块，直接打补丁 ``oemer.layers.get_layer`` 属性不生效
+        # （真实 oemer.layers.get_layer 仍会被调到 → KeyError）。必须对
+        # sys.modules["oemer"] / sys.modules["oemer.layers"] 注入 fake，
+        # 这样 ``from oemer import layers`` 解析到的就是 fake 模块。
+        self._oemer_mod = types.ModuleType("oemer")
+        self._layers_mod = types.ModuleType("oemer.layers")
+        self._oemer_mod.layers = self._layers_mod
+        sys.modules["oemer"] = self._oemer_mod
+        sys.modules["oemer.layers"] = self._layers_mod
+
+    def tearDown(self):
+        sys.modules.pop("oemer", None)
+        sys.modules.pop("oemer.layers", None)
+
     def _stub_layers(self, staffs_2d, notes, clefs):
         fake = {
             "staffs": staffs_2d,
             "notes": np.array(notes, dtype=object),
             "clefs": np.array(clefs, dtype=object),
         }
-        orig = _oemer_layers_mod.get_layer
-        _oemer_layers_mod.get_layer = lambda name: fake[name]
-        return orig
+        # 挂到注入的 fake layers 模块上（_dump_geometry_sidecar 的
+        # ``from oemer import layers`` 会解析到它）
+        self._layers_mod.get_layer = lambda name: fake[name]
 
     def test_2d_staffs_and_ndarray_bbox(self):
         staffs_2d = _make_staffs_2d()  # 2 列 × 2 子谱表
@@ -221,11 +237,8 @@ class TestDumpSidecarRealShapes(unittest.TestCase):
                          points=[(1156.0, 50.0)], slp=0),
         ]
         clefs = [FakeClef(0, "G_CLEF"), FakeClef(1, "F_CLEF")]
-        orig = self._stub_layers(staffs_2d, notes, clefs)
-        try:
-            sidecar = omr_oemer._dump_geometry_sidecar(self.mxl)
-        finally:
-            _oemer_layers_mod.get_layer = orig
+        self._stub_layers(staffs_2d, notes, clefs)
+        sidecar = omr_oemer._dump_geometry_sidecar(self.mxl)
 
         self.assertTrue(os.path.exists(sidecar), "sidecar 应被写出")
         with open(sidecar, "r", encoding="utf-8") as f:
@@ -248,11 +261,8 @@ class TestDumpSidecarRealShapes(unittest.TestCase):
         grid[1, 1] = 0  # 非 Staff 填充 -> 应被跳过
         notes = [FakeNoteHead(0, 0, 0, [10.0, 1250.0, 30.0, 1270.0], slp=1)]
         clefs = [FakeClef(0, "G_CLEF")]
-        orig = self._stub_layers(grid, notes, clefs)
-        try:
-            sidecar = omr_oemer._dump_geometry_sidecar(self.mxl)
-        finally:
-            _oemer_layers_mod.get_layer = orig
+        self._stub_layers(grid, notes, clefs)
+        sidecar = omr_oemer._dump_geometry_sidecar(self.mxl)
         with open(sidecar, "r", encoding="utf-8") as f:
             doc = json.load(f)
         # 4 格中 3 个是 Staff，0 填充被跳过
