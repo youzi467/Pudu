@@ -20,7 +20,7 @@
 
 - **总估时**：约 **16–23 周**（课余并行，每天 2–3 小时）。
 - **依赖关系（DAG）**：`L0 → L1`、`L0 → L2`、`L2 → L3`、`L1 → L4`、`L2/L3 → L4`、`L2/L3 → L5`、`L4 → L5`。
-- **关键策略**：先垂直打通 `L0→L2` 最快拿到 MVP 正反馈；`L1/L3/L4/L5` 是在核心上加厚度。本项目当前 **L0 ✅、L2 ✅（已打标签 `phase-2`）、L1/L3/L4/L5 ⬜**，新人可从 L1 或 L3 切入练手。
+- **关键策略**：先垂直打通 `L0→L2` 最快拿到 MVP 正反馈；`L1/L3/L4/L5` 是在核心上加厚度。本项目当前 **L0 ✅、L1 ✅（OMR 黑盒集成 M2）、L2 ✅（已打标签 `phase-2`）、L3 ✅（反向闭环 phase-3/3.1/3.2）、L4/L5 ⬜**，新人可从 L1 或 L3 切入练手（均为已完成模块的精读+复刻）。
 
 ---
 
@@ -43,7 +43,7 @@
 
 ---
 
-## 2. L1 — OMR 黑盒集成（项目当前未做）
+## 2. L1 — OMR 黑盒集成（项目已完成，作为精读+复刻练习）
 
 **核心模块（要掌握）**
 - 子进程调用 **Audiveris / oemer** 出 MusicXML（架构见 `research_report.md` §2.3；识别端作为黑盒，不手搓 CV）。
@@ -58,7 +58,7 @@
 - [ ] 本地装 Audiveris 或 oemer，对一个 PDF 跑出 `.musicxml`。
 - [ ] 写 Python 脚本用 music21 读该 MusicXML，打印音高序列与调号，人工核对。
 - [ ] 在 C++ 串成流水线：`PDF → system("audiveris ...") → MusicXML → 解析为 Score → 控制台打印音高`。
-- **产出**：端到端输入链路——这是 MVP 真正"可演示"的前提（项目目前还依赖人工提供 MusicXML）。
+- **产出**：端到端输入链路——这是 MVP 真正"可演示"的前提（项目已完成 OMR 黑盒集成，真实 oemer 已端到端跑通）。
 
 ---
 
@@ -83,11 +83,11 @@
 
 ---
 
-## 4. L3 — 简谱→五线（项目已规划、未实现 → 优秀练手）
+## 4. L3 — 简谱→五线（项目已完成，作为精读+复刻练习）
 
 **核心模块（见 `stage3_action_plan.md`）**
 - `jianpuToStaff(const JianpuDoc&) -> Score`：音级逆映射（degree→step/alter/octave）、时值逆映射（underlines/augmentDashes/dots→type+duration）、组装 `Score`（多声部/休止/和弦/装饰音/延音线）。
-- **`Score → MusicXML` 序列化**：项目当前只有"解析"没有"写出"，这是模块⑤ MusicXML 导出的前置。
+- **`Score → MusicXML` 序列化**：项目已实现 G2 序列化自洽（`scoreToMusicXML`），见阶段 3。
 - **round-trip 音高守恒自测**：`staffToJianpu → jianpuToStaff` 比较音高序列。
 
 **预估耗时**：2–3 周。
@@ -97,7 +97,7 @@
 **实践任务 / 里程碑**
 - [ ] 实现 `jianpuToStaff`，覆盖反向九项边界（对照 L2 的 §5 做"逆"断言）。
 - [ ] 实现 `Score → MusicXML` 写出，写出的文件能被本项目解析器读回且语义等价。
-- [ ] round-trip：对 `data/` 单声部子集，还原音高序列 100% 守恒（阶段 2 的 54/54 单测无回归）。
+- [ ] round-trip：对 `data/` 单声部子集，还原音高序列 100% 守恒（117 个 gtest 用例全绿 + 41 个 F3 Python 单测全绿，无回归）。
 - [ ] `main.cpp` 新增 `--to-musicxml [out.musicxml]` 演示端到端反向。
 - **产出**：双向转换闭环（建议打标签 `phase-3`）。
 
@@ -155,9 +155,9 @@
 | 阶段 | 状态 | 你可从这里切入 |
 |---|---|---|
 | L0 环境/MusicXML | ✅ 完成 | 精读 `score_model.hpp` / `musicxml_parser.cpp` 复刻 |
-| L1 OMR 黑盒 | ⬜ 未开始 | 直接动手做（见 L1 里程碑） |
+| L1 OMR 黑盒 | ✅ 完成（M2：oemer 黑盒集成 + 评测 harness） | 精读 `omr_adapter.cpp`/`omr_oemer.py` 复刻 |
 | L2 五线→简谱 | ✅ 完成（标签 `phase-2`） | 复刻 `staffToJianpu` + 跑通校验 |
-| L3 简→五线 | ⬜ 未开始（有 `stage3_action_plan.md`） | 直接动手做，练反向映射 |
+| L3 简→五线 | ✅ 完成（phase-3/3.1/3.2，双向闭环） | 精读 `jianpu_to_staff.cpp`/`musicxml_serializer.cpp` 复刻 |
 | L4 AI/DL | ⬜ 未开始 | 后期重点 |
 | L5 工程化 | ⬜ 未开始 | 收尾 |
 

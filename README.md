@@ -41,7 +41,7 @@
   - `omr_adapter` 子进程分派 oemer（默认）/ fixture（确定性，ctest 用）/ audiveris（未装）；产出 MusicXML 喂入既有 `MusicXMLParser → staffToJianpu` 流水线，端到端出简谱。
   - 评测 harness `tools/omr_eval_groundtruth.py` 量化 oemer→简谱 误差分布（Plan A 调号后处理 + H2 分维指标）；真实 oemer 路径已在本机端到端跑通。
 - **质量保障**：
-  - C++ 单元测试 **79/79 全绿**（header-only 自研框架，零外部依赖；含阶段 2 共 54、变调重算 16、阶段 3 新增 9 项 G1+G3；G2 序列化自洽 1 项随 MSVC 构建一并运行，合计 80）。
+  - C++ 单元测试 **117 个 gtest 用例（经 1 个 ctest 入口 `PuduTests` 运行）全绿 + 41 个 F3 Python 单测全绿**（header-only 自研框架，零外部依赖）。
   - music21 跨语言 ground-truth 校验：8/8 样本、音符 **100.0%**（13492/13492）、字段 **100.0%**（79240/79240）、计入类差异 = 0。
 
 ## 前置依赖
@@ -150,7 +150,7 @@ Pudu/  (工作区当前磁盘名为 omr/，规划重命名为 Pudu/)
 ## 下一步
 
 - **阶段 3**：已完成（`jianpuToStaff` + `Score→MusicXML` 序列化 + round-trip 自测）。详见 `stage3_action_plan.md`。
-- **阶段 1 OMR**：已完成黑盒集成（oemer + fixture 引擎 + CLI `--from-omr`），并落地评测 harness（Plan A 调号后处理、H2 分维指标）。下一步优化方向：F3 几何校正器（需 oemer sidecar 补丁）以改善音级识别，详见 `docs/jianpu-ocr-optimization-plan.md` 与 `docs/m2-real-run-guide.md`。
+- **阶段 1 OMR**：已完成黑盒集成（oemer + fixture 引擎 + CLI `--from-omr`），并落地评测 harness（Plan A 调号后处理、H2 分维指标）。精度优化焦点：**F3 几何校正器已落地并经全量 A/B 证实对 oemer 0.1.8 零效果（OFF==ON 逐字节相同），保留为实验性基础设施、不作上线**；**下一步优先为 M2-opt-A2（Plan A 生产路径补全：无 gt 也正确推断 a 小调 alter）**，详见 `docs/jianpu-ocr-optimization-plan.md` 与 `docs/m2-real-run-guide.md`。
 - **阶段 4/5**：AI/深度学习进阶、工程化与 GUI（待启动）。
 
 ## 常见问题

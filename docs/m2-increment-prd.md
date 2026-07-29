@@ -4,7 +4,7 @@
 > 日期：2026-07-16
 > 关联：阶段0/2/3/G4/M1.5 已完成；本 PRD 仅描述在既有内核之上**增量扩展适配层**，不改动任何数据模型。
 
-> **实施状态（2026-07-17）**：M2-1/2/3 已全部完成——`omr_adapter` 黑盒集成 + oemer/fixture 引擎 + CLI `--from-omr` 已落地，ctest 117/117 全绿；**真实 oemer 已在本机端到端跑通**（权重手动放置 + CUDA/cuDNN PATH 注入启用 GPU）。后续已追加评测 harness（P0-1）、Plan A 调号后处理、H2 分维指标；下一优化方向为 F3 几何校正器。见 `docs/m2-real-run-guide.md` 与 `data/omr_eval/README.md`。
+> **实施状态（2026-07-17；刷新至 F3 推送后）**：M2-1/2/3 已全部完成——`omr_adapter` 黑盒集成 + oemer/fixture 引擎 + CLI `--from-omr` 已落地，**117 个 gtest 用例（经 1 个 ctest 入口 `PuduTests` 运行）全绿 + 41 个 F3 Python 单测全绿**；**真实 oemer 已在本机端到端跑通**（权重手动放置 + CUDA/cuDNN PATH 注入启用 GPU）。后续已追加评测 harness（P0-1）、Plan A 调号后处理、H2 分维指标；**F3 几何校正器已落地并经全量 A/B 证实对 oemer 0.1.8 零效果（OFF==ON 逐字节相同），保留为实验性基础设施、不作上线；下一步优先为 M2-opt-A2（Plan A 生产路径补全）**。见 `docs/m2-real-run-guide.md` 与 `data/omr_eval/README.md`。
 
 ## 1. 产品目标
 黑盒接入 OMR（光学乐谱识别）：用户丢一个 PDF / 图片乐谱进 `--from-omr`，工具经子进程调用 OMR 引擎识别出 MusicXML，再喂入既有 `MusicXMLParser → staffToJianpu` 流水线，端到端产出简谱。OMR 引擎对 Pudu 是**黑盒**——Pudu 只消费其产出的 MusicXML。

@@ -257,13 +257,13 @@ harness 经 Pudu 投影成简谱后逐音比对，因此 gt 至少需提供以�
 **concerto 主测试集分维通过率（示例，真实 oemer 误差，非 100% 属正常）**：
 | 维度 | 通过率 | 说明 |
 |---|---|---|
-| `pitch_degree` | **17.66%** | 最弱——音级（哪一级）识别是主要准确率杀手 |
-| `rhythm` | 36.98% | 时值线错判普遍 |
-| `pitch_octave` | 59.34% | 八度点遗漏 |
-| `octave_jump` | 96.95% | 大八度级跳变较少 |
-| `pitch_accidental` | 96.32% | 受 §6.2 Plan A 泄漏压低（真实应更高） |
+| `pitch_degree` | **14.0%** | 最弱——音级（哪一级）识别是主要准确率杀手（07-20 对齐后口径） |
+| `rhythm` | 45.3% | 时值线错判普遍 |
+| `pitch_octave` | 59.2% | 加线整八度误计 |
+| `octave_jump` | 95.4% | 大八度级跳变较少 |
+| `pitch_accidental` | 82.7% | Plan A(gt 对齐) 修复后达标 |
 
-> 整体 `note_pass_rate` 仍为个位数，主因是 `pitch_degree` 极低——下一步优化（F3 几何校正器，需 oemer sidecar 补丁）旨在从源头改善音级识别，详见 `docs/jianpu-ocr-optimization-plan.md`。
+> 整体 `note_pass_rate` 仍为个位数，主因是 `pitch_degree`/`rhythm` 极低（oemer 基础识别质量，与 octave run-to-run 波动无关——P1 波动排查已关闭、std=0 伪命题）；F3 几何校正器经全量 A/B 证实对 oemer 0.1.8 零效果（OFF==ON 逐字节相同），保留实验性基础设施、不作上线；下一步优先为 M2-opt-A2（Plan A 生产路径补全：无 gt 也正确推断 a 小调 alter），详见 `docs/jianpu-ocr-optimization-plan.md`。
 
 ### 6.4 自验证基线
 

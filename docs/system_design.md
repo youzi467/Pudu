@@ -4,7 +4,7 @@
 > 日期：2026-07-21
 > 类型：**架构设计 + 任务分解（只出设计/签名/契约，不写实现体）**
 > 关联：`docs/jianpu-ocr-optimization-plan.md` §3、`SESSION_SUMMARY_OMR_2026-07-17_18.md`、`tools/omr_oemer.py`、`tools/omr_eval_lib.py`、`tools/omr_eval_groundtruth.py`、`MEMORY.md`、`.workbuddy/memory/2026-07-20.md`
-> 根因基线（07-20 concerto a 小调真实评测）：`note_pass` 2.65%；`pitch_degree` **14.0%**（最短板，占失败音符 ~86%，无方向性 升329/降366）→ **F3 靶心**；`pitch_octave` 59.2%（加线整八度误计）；`rhythm` 45.3%；`octave_jump` 95.4%；`pitch_accidental` 82.7%（Plan A 已修）；`rest` 97.0%。
+> 根因基线（07-20 concerto a 小调真实评测）：`note_pass` 2.65%；`pitch_degree` **14.0%**（最短板，占失败音符 ~86%，无方向性 升329/降366；F3 几何校正器全量 A/B 已证实零效果，非靶心）；`pitch_octave` 59.2%（加线整八度误计）；`rhythm` 45.3%；`octave_jump` 95.4%；`pitch_accidental` 82.7%（Plan A 已修）；`rest` 97.0%。
 
 ---
 
@@ -437,7 +437,7 @@ sequenceDiagram
     end
     O-->>U: 退出码 0（产出 musicxml + 可选 geometry.json）
     U->>G: build/Pudu.exe out.musicxml --to-jianpu(-json)
-    G-->>U: 简谱（F3 已修正音高）
+    G-->>U: 简谱（F3 实验性、默认 OFF；全量 A/B 证实 OFF==ON 逐字节相同、未改变 oemer 输出）
 ```
 
 ---
@@ -452,7 +452,7 @@ sequenceDiagram
 | **T02** | 几何重算核心 | `tools/geometric_pitch.py`、`tools/omr_oemer.py`（导入 F3 入口占位）、`tests/test_geometric_pitch.py` | T01 | P0 | 实现 `_geometric_pos`/`_pos_to_step_octave`/`_round_half_up`/`recompute_pitch_from_geometry`；`STAFF_ANCHOR`；发射序 1:1 对齐 + track 退化对齐 |
 | **T03** | Plan A + F3 集成编排 | `tools/omr_oemer.py`、`tools/geometric_pitch.py`、`tests/test_f3_integration.py` | T02 | P1 | `main()` 中 F3 在 Plan A 之后调用、仅改 step/octave；`--f3-geometric` 门控默认关；`--no-f3-geometric` 输出 == 原 oemer（回归单测） |
 | **T04** | 多声部/跨谱表/退化 B 计划 | `tools/geometric_pitch.py`、`tools/omr_oemer.py`、`tools/omr_eval_groundtruth.py` | T02 | P1 | 双谱表 track↔`<staff>` 映射；墨迹质心 vs bbox 中心选择；重叠符头/和弦处理；sidecar 缺失降级；CLI 自测脚本 |
-| **T05** | QA A/B harness 接入与回归 | `tools/omr_eval_groundtruth.py`、`tools/omr_oemer.py`、`docs/f3-abtest.md` | T03 | P0 | `--f3` 开关（透传 `--f3-geometric`）；**不改** `compare_jianpu_note`/`_merge_align`；确保 `--no-oemr` 100% 不变；跑 concerto 对比 `pitch_degree/octave` 提升 |
+| **T05** | QA A/B harness 接入与回归 | `tools/omr_eval_groundtruth.py`、`tools/omr_oemer.py`、`docs/f3-abtest.md` | T03 | P0 | `--f3` 开关（透传 `--f3-geometric`）；**不改** `compare_jianpu_note`/`_merge_align`；确保 `--no-oemr` 100% 不变；跑 concerto A/B 对比 `pitch_degree/octave`（实测 OFF==ON 逐字节相同、零效果） |
 
 ---
 
@@ -498,7 +498,7 @@ sequenceDiagram
 | R6 | F3 重算后 `pitch_octave` 仍错（加线整八度误计） | `_geometric_pos` 的 `delta` 用连续除法 + `round_half_up`，对加线区外推比 oemer 的 `round(diff/step)` 更稳；A/B 用 `omr_eval_note_diffs` 的 `octave` 列验证 |
 
 ### 9.3 需主理人/用户拍板
-- **Q1**：`--f3-geometric` 的默认开启策略——建议**默认关**，仅评测/实验开启；是否同意在「真实部署」也默认开？（建议先 A/B 验证 `pitch_degree` 提升且无回归再开）
+- **Q1**：`--f3-geometric` 的默认开启策略——建议**默认关**，仅评测/实验开启；是否同意在「真实部署」也默认开？（全量 A/B 已验证：OFF==ON 逐字节相同、`pitch_degree` 零提升且无回归 → 维持默认关、不作上线，保留为实验性基础设施）
 - **Q2**：Plan A 的「`--gt` 对齐法误清零小调变化音」泄漏（待验证 #2）应在 F3 前/中/后修？F3 不碰 alter，故该泄漏需独立修 Plan A（不在本设计范围，但影响最终 `pitch_accidental`）。
 - **Q3**：是否接受「F3 不重新识别谱号，仅读取 oemer 谱号」的边界（见 §8.6）？若需 F3 自判谱号，需额外字形逻辑，超出几何范畴，建议拒绝。
 

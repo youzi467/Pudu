@@ -1,7 +1,8 @@
-# 谱渡 Pudu — 测试构成、验证总结与学习路径（基于 70/70 通过态）
+# 谱渡 Pudu — 测试构成、验证总结与学习路径（基于 117 个 gtest 用例 + 41 个 F3 Python 单测 全绿）
 
 > 生成日期：2026-07-15 ｜ 状态基准：`main = 12849dd`（阶段2 squash + 合并 origin/main），本地 `ctest` 实测 **70/70 全绿**（原 54 + 变调 16）。
 > 本文档取代早期 `learning_path.md` 的阶段划分，并以本次单测结果为依据重新梳理学习路径。
+> **现状刷新（2026-07-21 后）**：当前 `HEAD == origin/main == 0736c92`，已全部推送、无未推送提交；**117 个 gtest 用例（经 1 个 ctest 入口 `PuduTests` 运行）全绿 + 41 个 F3 Python 单测全绿**；阶段1 OMR 与阶段3 反向均已落地（下文状态已同步）。
 
 ---
 
@@ -23,7 +24,7 @@
 | `test_duration.cpp` | 时值 → 增/减时线、附点 | 9 | L0 纯函数 | P0 |
 | `test_staff_to_jianpu.cpp` | 五线→简谱 端到端 + L1/L2/L3 渲染 | 23 | L1 管线 + L2 渲染 | P1 / P2 |
 | `test_transpose.cpp` | 变调重算（移调 / 改调号 / 解析） | 16 | L1.5 新功能 | P1 |
-| **合计** | | **70** | | |
+| **合计** | | **70**（阶段2 时代口径；当前总计 **117 个 gtest 用例 + 41 个 F3 Python 单测**） | | |
 
 `test_staff_to_jianpu.cpp` 内部再细分：
 - `staffToJianpu_*` 转换核心 **15**（P1）
@@ -87,8 +88,8 @@
 6. 变调重算：调名解析（大小调/升降号/容错）、移调保数字改听感、字面半音与按调名一致、移调同步 Score、rekey 保音高重算数字、休止/和弦处理、升/降号调拼写偏好——全部正确。
 
 **质量指标**
-- **通过率 100%**（70/70）。
-- **编译质量**：MSVC `/utf-8` + 显式 include（已修 `transpose.cpp` 缺 `<stdexcept>`/`<cstdlib>`），跨编译器（g++ 16/16 + MSVC 70/70）一致。
+- **通过率 100%**（117 个 gtest 用例全绿 + 41 个 F3 Python 单测全绿）。
+- **编译质量**：MSVC `/utf-8` + 显式 include（已修 `transpose.cpp` 缺 `<stdexcept>`/`<cstdlib>`），跨编译器一致（MSVC 构建下 117 个 gtest 用例全绿 + 41 个 F3 Python 单测全绿）。
 - **可回归性**：CTest 已注册（`enable_testing()` + `add_test`），可在构建目录一键 `ctest --test-dir build --output-on-failure`。
 - **外部 corroboration**（历史）：music21 跨语言 ground-truth 校验此前已达 音符/字段均 100%、计入差异=0——单测（白盒）与之（黑盒）互相印证。
 
@@ -97,7 +98,7 @@
 - **集成（阶段3 反向转换）**：本次验证锁定了 `JianpuDoc` / `JianpuNote` 的契约稳定性与 `staffToJianpu` 的可逆前提。阶段3 `jianpuToStaff` 可直接以 L0 为输入反向重建 `Score`，且变调重算已保证「L0 的 `fifths/tonicLabel` 与实际 pitch 自洽」→ G3 round-trip 音高守恒测试有了可信地基。
 - **部署**：CLI 已具备生产可用形态（`--to-jianpu` / `--to-jianpu-l2` / `--to-jianpu-json` / `--key` / `--rekey` / `--transpose`）。当前**无 GUI、无安装包、无 CI**，部署仍限于「源码 + 构建」。
 - **上线（MVP v1 收尾）**：阶段2 功能闭环已达成，但上线前必须完成：
-  1. **M0 推送** `origin/main` 仍缺阶段2 + 变调（本地 `main=12849dd`，需你在交互终端 `git push origin main`）。
+  1. **M0 推送** 已完成（`origin/main == 0736c92`，阶段2 + 变调 + 阶段3 + OMR + F3 已全部推送，无未推送提交）。
   2. **research_report 状态回填**（文档收尾，须在所有代码完成后做）。
   3. 剩余边界项（见 2.3）可视上线标准决定纳入与否。
 
@@ -127,7 +128,7 @@
 - **产出**：`Score`/`Note`/`Credit` 模型、`musicxml_parser`。
 - **衔接**：`Score` 是阶段2/阶段3 的共同输入与输出，是后续所有模块的契约边界。
 
-### 阶段 1 — OMR 黑盒集成 ⬜ 未开始（建议后置于阶段3）
+### 阶段 1 — OMR 黑盒集成 ✅ 已完成（M2：oemer 黑盒集成 + 评测 harness + Plan A + H2）
 - **目标**：把 PDF/JPG → MusicXML 的外部识别能力接入流水线（黑盒，不自己写识别）。
 - **任务**：选型/封装 OMR 工具；定义其输出到 `Score` 的适配层；处理识别误差与人工校正回路。
 - **产出**：`omr_adapter` + 输入预处理。
@@ -140,13 +141,13 @@
 - **产出**：CLI（`--to-jianpu*` / `--key` / `--rekey` / `--transpose`）、70 单测、README、阶段3 计划。
 - **衔接**：**L0 契约已锁定** → 是阶段3 的反向输入；变调保证 round-trip 音高自洽 → 是 G3 前置。
 
-### 阶段 3 — 简谱→五线谱（反向转换）🔶 下一站
+### 阶段 3 — 简谱→五线谱（反向转换）✅ 已完成（phase-3/3.1/3.2，双向闭环）
 - **目标（G1→G2→G3）**：`jianpuToStaff(JianpuDoc→Score)` + `Score→MusicXML` 序列化 + round-trip 音高 100% 守恒。
 - **任务**：
   - **S1** 复用 L0：直接以已验证的 `JianpuDoc` 为输入。
   - **S2** `jianpuToStaff`：数字/八度点/升降号 → `Note.pitch`（走 MIDI，与 `midiToJianpu` 逆运算）。
   - **S3** `Score→MusicXML`：序列化回 `.musicxml`（pugixml）。
-  - **S4** G3 round-trip：五线→简谱→五线，音高 100% 守恒（复用阶段2 的 70 测试 + 新增往返测试）。
+  - **S4** G3 round-trip：五线→简谱→五线，音高 100% 守恒（复用阶段2 单测 + 阶段3 新增 9 项往返测试，当前 117 个 gtest 用例全绿）。
   - **S5** 随 G3 收口补齐阶段2 边界项：小调 6=X、和弦逐音八度点（确保与 L1/L2 记谱一致）；极端连音比 46 处随 G3 同期处理（已单列不计分母）。
   - **S6** 可选 G4：简谱文本输入解析器。
   - **S7** 打 `phase-3` 标签。
@@ -168,17 +169,17 @@
 ### 学习路径总工期与依赖
 - 总工期约 **16–23 周**（阶段0 已完成，阶段2 已完成）。
 - 依赖 DAG：`L0→L2→L3`、`L0→L1`、`L1→L4`、`L2/L3→L4`、`L2/L3→L5`。
-- **推荐顺序**：阶段3（M1，下一站）→ 阶段1（M2，可并行/后置）→ 阶段4（M3）→ 阶段5（M4）。
+- **推荐顺序**：阶段3（已实现，先学）→ 阶段1（已实现，可并行/后置）→ 阶段4（M3）→ 阶段5（M4）。
 
 ### 给学习者的具体练习建议（按已验证契约）
-1. **读懂 70 个单测**：它们是"契约说明书"。改任何纯函数前，先跑对应模块的测试。
+1. **读懂 117 个 gtest 用例（+ 41 个 F3 Python 单测）**：它们是"契约说明书"。改任何纯函数前，先跑对应模块的测试。
 2. **红绿练习**：选一个尚未实现的阶段3 函数（如 `jianpuToStaff`），先写一个失败的测试，再实现到绿——这是把"已验证地基"用起来的最佳方式。
-3. **交叉验证**：阶段3 每实现一个子功能，立即跑 `ctest --test-dir build --output-on-failure` 确认 70/70 不破，再加往返测试。
-4. **文档即进度**：按 2.2 的 M0 清单，先 `git push origin main` 消掉当前唯一卡点，再开阶段3。
+3. **交叉验证**：阶段3 每实现一个子功能，立即跑 `ctest --test-dir build --output-on-failure` 确认 117 个 gtest 用例 + 41 个 F3 Python 单测不破，再加往返测试。
+4. **文档即进度**：`git push origin main` 已完成（当前 `origin/main == 0736c92`）；阶段3 反向转换已落地。
 
 ---
 
 ## 附：立即行动清单
-1. 交互终端：`git push origin main`（完成 M0，消除当前唯一卡点）。
-2. `ctest --test-dir build --output-on-failure` 确认 70/70 稳定。
+1. （历史动作）`git push origin main` 已完成（当前 `origin/main == 0736c92`）。
+2. `ctest --test-dir build --output-on-failure` 确认 117 个 gtest 用例 + 41 个 F3 Python 单测全绿。
 3. 启动阶段3 G1 `jianpuToStaff`（详见 `stage3_action_plan.md` 的 S1–S10）。

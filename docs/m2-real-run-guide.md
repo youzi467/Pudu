@@ -47,6 +47,23 @@ PY   = C:\Users\13157\.workbuddy\binaries\python\envs\default\Scripts\python.exe
   "%PY%" -m pip install augly
   ```
 
+### 1.2.1 打 Pudu 防御补丁（必做，幂等）
+
+oemer 0.1.8 在退化输入（空数组、退化线段）上会崩溃，Pudu 在 site-packages 中打了 6 处
+防御补丁。`pip install --upgrade oemer` 会覆盖 site-packages 导致补丁蒸发，因此安装 oemer
+后**必须**运行补丁安装器：
+
+```bat
+"%PY%" tools\install_oemer.py
+```
+
+- **幂等**：已打补丁的文件会被 SKIP，重复运行安全。
+- **安全**：版本漂移（oemer 升版或文件被修改）会 ABORT 并打印修复指引，绝不静默覆盖。
+- **只检查不改文件**：`"%PY%" tools\install_oemer.py --check-only` 可查看补丁状态。
+
+> 补丁清单与行尾铁律详见 `third_party/oemer-patches/README.md`，
+> 设计文档见 `docs/oemer-patch-strategy.md`。
+
 ### 1.3 权重文件（首次运行自动下载）
 oemer 权重托管在 **GitHub Releases**（`BreezeWhite/oemer/releases/download/checkpoints/`），
 共 4 个文件：
@@ -164,7 +181,7 @@ cd /c/Users/13157/WorkBuddy/omr/build
 - **M2-1 引擎可用性**：oemer 子进程可启动并产出 MusicXML（本指南第 3 步）。
 - **M2-2 结构语义校验**：`tools/omr_validate.py` 对产出做 music21 校验（第 4.1 步）。
 - **M2-3 全链路 ctest**：`test/test_omr_adapter.cpp` 用 **fixture 引擎**（C++ 原生确定性）
-  跑通 `OMR→MusicXMLParser→staffToJianpu` 全链路（已纳入 ctest，117/117 全绿）；
+  跑通 `OMR→MusicXMLParser→staffToJianpu` 全链路（已纳入 ctest，117 个 gtest 用例 + 41 个 F3 Python 单测全绿）；
   真实 oemer 路径因依赖外部引擎/权重/图片，由本文档的手动实跑验证。
 
 > 设计取舍：M2-3 的 ctest 用 fixture 引擎保证 CI 确定性；真实 oemer 路径通过本文档

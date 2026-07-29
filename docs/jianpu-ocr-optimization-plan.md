@@ -375,12 +375,12 @@ graph TD
 | **Plan A 调号后处理**（`correct_key_signature`，属 P1-1 的调号子集） | ✅ 已落地 + 验证，但有泄漏 | `tools/omr_oemer.py` 实现；自动经 harness `--gt` 注入。已知 `_apply_alters` 过度清零小调临时记号（"待验证 #2"），需加「gt 保留白名单」修复 |
 | **P0-2 预处理脚本** | ⬜ 未启动 | 需先有 harness A/B 结论再决定；当前未做 |
 | **P1-1 后处理规则引擎**（`jianpu_postcorrect`） | ⬜ 未启动（仅 Plan A 调号子集落地） | 节拍对账/八度连续性/调内一致性规则引擎尚未实现 |
-| **F3 几何校正器** | ⬜ 未启动（下一步） | 需 oemer sidecar 补丁暴露几何信息，再于 Pudu 侧做几何→音级重算；旨在改善 `pitch_degree`（当前最弱 17.66%） |
+| **F3 几何校正器** | ✅ 已落地·零效果·实验性（默认 OFF） | oemer sidecar 暴露几何信息 + Pudu 侧几何→音级重算已落地（41 Python 单测全绿）；**全量 6 页真实 A/B（oemer 0.1.8）OFF==ON 逐字节相同，对 `pitch_degree` 零效果**，保留实验性基础设施、不作上线（处置待拍板） |
 | **P2 fork oemer + 微调** | ⬜ 条件触发 | 待 harness 证明确为 oemer 瓶颈且集中于分割/识别时启动 |
 
 **主测试集**：`data/omr_eval/real/concerto_pages/`（Vivaldi a 小调协奏曲，6 单谱表页）。concerto 分维通过率：
-`pitch_degree` 17.66%（最弱）/ `rhythm` 36.98% / `pitch_octave` 59.34% / `octave_jump` 96.95% / `pitch_accidental` 96.32%（受 Plan A 泄漏压低）。
-整体 `note_pass_rate` 仍个位数，主因 `pitch_degree` 极低 → F3 几何校正为优先突破点。
+`pitch_degree` 14.0%（最弱）/ `rhythm` 45.3% / `pitch_octave` 59.2% / `octave_jump` 95.4% / `pitch_accidental` 82.7%（Plan A gt 对齐修复后达标）。（07-20 最新评测，对齐后口径；旧 17.66%/36.98%/96.32% 为 pre-alignment 旧口径，已作废）
+整体 `note_pass_rate` 仍个位数，主因 `pitch_degree`/`rhythm` 极低（oemer 基础识别质量，与 octave run-to-run 波动无关——P1 波动排查已关闭、std=0 伪命题）；F3 全量 A/B 已证实零效果、保留实验性，**下一步优先为 M2-opt-A2（Plan A 生产路径补全：无 gt 也正确推断 a 小调 alter）**。
 
 ---
 
