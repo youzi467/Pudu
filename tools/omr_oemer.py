@@ -189,26 +189,31 @@ def _apply_fifths(root, target_fifths):
 
 
 def _apply_alters(root, new_fifths):
-    """把每个音符的 ``<alter>`` 重写为目标调号下的自然变音记号（respell to key）。
+    """无 gt 兜底：保留 oemer 显式 alter，仅对未显式拼写音按调号推断。
 
-    关键发现（实测 Pudu 转 jianpu）：Pudu 同时依据 key 签名与显式 ``<alter>``
-    推导 ``(degree, accidental)``。仅改 key 而不改 note alter 时，F/C 会呈现
-    ``degree=3, accidental=flat``（♭3）而非 gt 的 ``degree=3, accidental=none``
-    （3），而 ``pitch_accidental`` 是计入 note_pass 的类别，故必须同步重拼写
-    note 的 accidental。
+    修复 P2 M2-opt-A2：保留 oemer 显式 alter，仅对未显式拼写音按调号推断。
 
-    oemer 产出常在各 measure 给出噪声化/不一致的 ``<key>``（如 1/3/1/2/1），
-    但其音符 ``<alter>`` 拼写才是 Pudu 实际听到的音高。最直接可靠的做法是
-    **按目标调号整体重拼写**：令 new_alter = keyAccidental[new_fifths][step]，
-    使整曲音符拼写与目标调号完全一致（如 D 大调：F/C -> 1，其余 -> 0），直接
-    匹配 gt 的拼写，从而让 Pudu 推导出正确的 (degree, accidental)，并消除
-    oemer 的调号噪声。
+    核心原则：**信任 oemer 已显式拼写的音高，仅对未显式拼写的音符按目标调号推断。**
 
-    已知局限（仅无 gt 兜底时生效）：本操作把"调外变化音"也归一到调内拼写。
-    当目标 fifths==0（如 a 小调）时 ``_accidental_map(0)=={}``，所有音 alter
-    被清零，含 a 小调合法的 G#/C# 也被抹去，造成精度泄漏。该局限在"有 gt"时
-    由 ``_apply_alters_gt_aligned`` 逐音对齐拷贝 gt 真值消解（见
-    correct_key_signature）；本函数仅作为无 gt 时的兜底。
+    原实现把**每个**音符的 ``<alter>`` 强制重拼写为目标调号下的值
+    ``new_alter = _accidental_map(new_fifths).get(step, 0)``。当目标
+    ``new_fifths == 0``（如 a 小调，相对 C 大调、0 升降号）时
+    ``_accidental_map(0) == {}``，于是**所有音符的 alter 被清零**，含 a 小调
+    合法的 G#/C#（oemer 已显式写成 ``<alter>1</alter>`` 的）也被抹成 0，造成
+    简谱变音记号丢失（pitch_accidental 精度泄漏）。
+
+    新逻辑（严格改进）：
+      * 遍历每个非休止、有 pitch、step ∈ CDEFGAB 的 note。
+      * 若该音符 oemer 已**显式写出** ``<alter>``（元素存在且 text 非空），视为
+        oemer 实际听测到的音高 —— **保留它，不覆盖**。为输出整洁，顺手把其 text
+        规范化为整数（``int(round(float(text)))``，如 "1.0"→"1"、"-1.0"→"-1"）；
+        解析失败则保留原值。
+      * 若该音符**没有**显式 ``<alter>``（oemer 视为相对调号的自然音），则按目标
+        调号 ``new_fifths`` 推断：``new_alter = _accidental_map(new_fifths).get(step, 0)``，
+        写入/覆盖其 ``<alter>``。与 ``_apply_fifths`` 已统一写入的调号保持一致，
+        仍能消解 oemer 的调号噪声。
+
+    这样同时改善 ``correct_key_signature`` 中 gt 对齐异常后的兜底路径。
     """
     new_acc = _accidental_map(new_fifths)
     for note in root.iter("note"):
@@ -224,9 +229,22 @@ def _apply_alters(root, new_fifths):
         if step not in _STEPS:
             continue
         alter_el = pitch.find("alter")
+        # 是否 oemer 已显式写出 alter（元素存在且 text 非空）
+        explicit = (alter_el is not None
+                    and alter_el.text is not None
+                    and str(alter_el.text).strip() != "")
+        if explicit:
+            # oemer 已显式拼写音高：信任并保留，仅规范化为整数（如 "1.0"→"1"）
+            try:
+                alter_el.text = str(int(round(float(alter_el.text))))
+            except (ValueError, TypeError):
+                pass  # 解析失败则保留原值
+            continue
+        # 未显式拼写：按目标调号推断（写入/覆盖 alter，消解 oemer 调号噪声）
+        new_alter = new_acc.get(step, 0)
         if alter_el is None:
             alter_el = ET.SubElement(pitch, "alter")
-        alter_el.text = str(new_acc.get(step, 0))
+        alter_el.text = str(new_alter)
 
 
 def _apply_alters_gt_aligned(pred_root, gt_root, new_fifths):
