@@ -1,0 +1,41 @@
+%% 谱渡 Pudu · oemer 补丁固化 — 安装主链路时序图
+%% 对应 docs/oemer-patch-strategy.md §4
+
+sequenceDiagram
+  autonumber
+  participant U as 用户/QA
+  participant E as install_oemer.py<br/>(entry)
+  participant L as oemer_patch_lib.py<br/>(OemerPatcher)
+  participant P as pip
+  participant G as git apply
+  participant S as site-packages/oemer/
+
+  U->>E: python tools/install_oemer.py
+  E->>L: run(repo_root)
+  L->>L: load_manifest() → version=0.1.8, [PatchSpec×N]
+  L->>L: ensure_oemer_installed("0.1.8")
+  alt oemer_version() != 0.1.8
+    L->>P: pip install oemer==0.1.8
+    P-->>S: 覆盖为原版（补丁丢失）
+  end
+  L->>L: locate_oemer_pkg() → pkg
+  loop 每个 PatchSpec
+    L->>L: lf_normalized_sha256(pkg/file)
+    alt sha == patched_lf
+      L-->>L: FileState=ALREADY_PATCHED → SKIP
+    else sha == original_lf
+      L->>G: git -c core.autocrlf=false apply -p1 patch<br/>(cwd=pkg)
+      G-->>S: 写入补丁（规范 LF）
+      L->>L: lf_normalized_sha256(pkg/file) 校验 == patched_lf
+      alt 校验失败
+        L->>G: git apply --reverse -p1 回滚
+        L-->>E: ApplyOutcome=ABORTED
+      else
+        L-->>E: ApplyOutcome=APPLIED
+      end
+    else 其它
+      L-->>E: FileState=DRIFT → ABORTED（打印重生成指引）
+    end
+  end
+  L-->>E: 汇总报告（APPLIED/SKIPPED/ABORTED 计数）
+  E-->>U: exit code（0=全 OK，非0=有 abort）

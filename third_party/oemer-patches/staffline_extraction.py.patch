@@ -1,0 +1,52 @@
+--- a/staffline_extraction.py
++++ b/staffline_extraction.py
+@@ -234,7 +234,7 @@
+             return self._unit_size
+         centers = [line.y_center for line in self.lines]
+         gaps = [centers[i] - centers[i-1] for i in range(1, len(self.lines))]
+-        self._unit_size = float(np.mean(gaps))
++        self._unit_size = float(np.mean(gaps)) if gaps else 10.0
+         return self._unit_size
+ 
+     @property
+@@ -247,7 +247,7 @@
+             self._slope = None
+         if self._slope is not None:
+             return self._slope
+-        self._slope = float(np.mean([l.slope for l in self.lines]))
++        self._slope = float(np.mean([l.slope for l in self.lines])) if self.lines else 0.0
+         return self._slope
+ 
+     def duplicate(self, x_offset=0, y_offset=0):
+@@ -355,7 +355,8 @@
+         raise Exception
+     assert all([len(staff) == len(aligned_staffs[0]) for staff in aligned_staffs])
+ 
+-    norm = lambda data: np.abs(np.array(data) / np.mean(data) - 1)
++    _mean = lambda d: float(np.mean(d)) if len(d) > 0 else 1.0
++    norm = lambda data: np.abs(np.array(data) / _mean(data) - 1) if len(data) > 0 else np.zeros(len(data))
+     valid_staffs: list[list[Staff]] = []
+     for staffs in aligned_staffs.T:
+         # Should all have 5 lines
+@@ -425,6 +426,10 @@
+     centers -= 1
+     norm = norm[1:-1] # Remove prepend / append
+     valid_centers, groups = filter_line_peaks(centers, norm)
++    # [Pudu patch #6] 该 x 区段无任何谱线峰（centers 为空）→ 返回空 staff 集合，
++    # 避免下游 groups[0] / max_gap 计算崩溃（与 #5 同源，均为退化输入空数组）。
++    if len(centers) == 0:
++        return np.array([], dtype=object), norm
+ 
+     # Assign points to each staff line
+     cc = centers[valid_centers]
+@@ -459,6 +464,10 @@
+ 
+ 
+ def filter_line_peaks(peaks: ndarray, norm: ndarray, max_gap_ratio: float = 1.5) -> Tuple[ndarray, List[int]]:
++    # [Pudu patch #5] 防御：该 x 区段未检出任何谱线峰时 peaks 为空，
++    # 直接返回空集，避免 peaks[0] / groups[-1] 索引崩溃（与 extract_part 空数组补丁同源）。
++    if len(peaks) == 0:
++        return np.array([], dtype=bool), []
+     valid_peaks = np.array([True for _ in range(len(peaks))])
+ 
+     # Filter by height

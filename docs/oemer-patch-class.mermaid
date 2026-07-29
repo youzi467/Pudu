@@ -1,0 +1,51 @@
+%% 谱渡 Pudu · oemer 补丁固化 — 类图
+%% 对应 docs/oemer-patch-strategy.md §3.1
+
+classDiagram
+  class PatchSpec {
+    +str file
+    +str patch_file
+    +str original_sha256_lf
+    +str patched_sha256_lf
+    +str rationale
+  }
+  class FileState {
+    <<enumeration>>
+    CLEAN
+    ALREADY_PATCHED
+    DRIFT
+  }
+  class ApplyOutcome {
+    <<enumeration>>
+    APPLIED
+    SKIPPED
+    ABORTED
+  }
+  class ChecksumsManifest {
+    +str oemer_version
+    +str wheel
+    +str line_ending
+    +dict files
+  }
+  class OemerPatcher {
+    -Path repo_root
+    -Path patches_dir
+    -ChecksumsManifest manifest
+    +load_manifest() ChecksumsManifest
+    +locate_oemer_pkg() Path
+    +oemer_version() str
+    +lf_normalized_sha256(path Path) str
+    +decide_state(spec PatchSpec, pkg Path) FileState
+    +apply_patch(spec PatchSpec, pkg Path, patches_dir Path) ApplyOutcome
+    +ensure_oemer_installed(version str, py str|None) None
+    +git_available() bool
+    +run(repo_root Path) int
+  }
+  class InstallOemerEntry {
+    +main() int
+  }
+  OemerPatcher --> ChecksumsManifest : loads
+  OemerPatcher --> PatchSpec : iterates
+  OemerPatcher ..> FileState : produces
+  OemerPatcher ..> ApplyOutcome : produces
+  InstallOemerEntry --> OemerPatcher : invokes run()

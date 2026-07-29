@@ -1,0 +1,51 @@
+{
+  "oemer_version": "0.1.8",
+  "wheel": "oemer-0.1.8-py3-none-any.whl",
+  "line_ending": "LF",
+  "files": {
+    "bbox.py": {
+      "patch_file": "bbox.py.patch",
+      "original_sha256_lf": "ff72f4b07889c33b63c8978a9abc7145392012396eca86da07b01de8a0e520e3",
+      "patched_sha256_lf": "126630fbb29a404bb74c8022257ae6ad47ab87ef2762610d7274d14c9f88482f",
+      "points": [
+        {
+          "id": 1,
+          "func": "find_lines",
+          "guard": "np.asarray(line).ravel() + len(seg)<4 skip degenerate segments"
+        }
+      ]
+    },
+    "staffline_extraction.py": {
+      "patch_file": "staffline_extraction.py.patch",
+      "original_sha256_lf": "ba60d544d0ccd737db11a982a3addf94b31ff433f7572c192b501bd812ad7d9d",
+      "patched_sha256_lf": "4717828270d0d9cf826998e25c798048af9cb3a15c922067afe73cafb6fce6bd",
+      "points": [
+        {
+          "id": 2,
+          "func": "Staff.unit_size",
+          "guard": "if gaps else 10.0 — empty gaps fallback to default unit size"
+        },
+        {
+          "id": 3,
+          "func": "Staff.slope",
+          "guard": "if self.lines else 0.0 — empty lines fallback to zero slope"
+        },
+        {
+          "id": 4,
+          "func": "extract/norm",
+          "guard": "_mean empty->1.0 / norm empty->zeros — defensive lambda for empty arrays"
+        },
+        {
+          "id": 5,
+          "func": "filter_line_peaks",
+          "guard": "if len(peaks)==0 return empty — skip peak filtering when no peaks detected [Pudu patch #5]"
+        },
+        {
+          "id": 6,
+          "func": "extract_line",
+          "guard": "if len(centers)==0 return empty — skip line assignment when no centers detected [Pudu patch #6]"
+        }
+      ]
+    }
+  }
+}

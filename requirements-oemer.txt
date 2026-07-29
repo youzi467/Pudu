@@ -1,0 +1,4 @@
+# Pudu oemer dependency pin
+# Only pins oemer itself; transitive deps (onnxruntime, opencv-headless, scipy,
+# scikit-learn, augly) are managed manually per docs/m2-real-run-guide.md §1.2.
+oemer==0.1.8
