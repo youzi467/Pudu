@@ -12,8 +12,8 @@
 > - **关键决策变更**：① `libmusicxml2` 不在 vcpkg registry → 改用 **pugixml**（MVP 只需读写 XML）；② 架构决定将"手搓 OpenCV"降级为**选做/练兵**，识别端由 **Audiveris/oemer 黑盒**承担（见 §1.3 与 §4）。
 > - **已完成**：MusicXML 规范通读 + 用 pugixml 解析示例并建立 Score 内存模型（原 S6–S7，已并入阶段 0/2 收尾）。
 > - **下一步**：核心双向转换（阶段 2/3）已闭合；下阶段接①阶段 3 边界硬化（和弦逐音八度点 / tieStop 反向还原 / 极端连音比）+ ②阶段 1 OMR 黑盒（Audiveris/oemer：PDF/JPG→MusicXML）打通端到端；随后阶段 4 AI / 5 工程化。
-> - **已完成**：阶段 0（环境地基）/ 2（五线→简谱核心）/ 3（简谱→五线，含 G1 jianpuToStaff / G2 scoreToMusicXML / G3 往返音高守恒 / G4 简谱文本输入解析器）；MSVC 实测 **98/98** 单测通过。
-- **未开始**：阶段 1（OMR 黑盒集成）/ 4（AI·DL）/ 5（工程化）。
+> - **已完成**：阶段 0（环境地基）/ 2（五线→简谱核心）/ 3（简谱→五线，含 G1 jianpuToStaff / G2 scoreToMusicXML / G3 往返音高守恒 / G4 简谱文本输入解析器）/ 1（OMR 黑盒集成：oemer + 评测 harness + Plan A + 权重校验）；MSVC 实测 **117 个 gtest 用例（1 个 ctest 入口）全绿 + 77 个 Python 单测全绿**。
+- **未开始**：阶段 4（AI·DL）/ 5（工程化）。
 > - 磁盘文件夹仍名为 `omr` / `omr-tool-research`（重命名为 `Pudu` / `Pudu-research` 待关闭工作区后执行）。
 
 ## 0. 执行摘要（先给结论）
@@ -151,9 +151,9 @@ struct JianpuDoc  { Key key; vector<JianpuNote> notes; };
 - **资源**：[MusicXML Tutorial PDF](https://wpmedia.musicxml.com/wp-content/uploads/2017/12/musicxml-tutorial.pdf)｜[OpenCV 文档](https://docs.opencv.org/)
 - **产出**：环境就绪；C++ 小程序：用 **pugixml** 读一个示例 MusicXML 并打印音符序列（OpenCV 谱线检测小程序为选做，待网络稳定后用 opencv.org 预编译包实现）。
 
-### 阶段 1：OMR 黑盒集成 + MusicXML 吃透（2–3 周 · ★★）  `状态：未开始（前置 MusicXML/pugixml 正在阶段0收尾）`
+### 阶段 1：OMR 黑盒集成 + MusicXML 吃透（2–3 周 · ★★）  `状态：✅ 完成（M2：oemer 黑盒接入 + 评测 harness + Plan A 调号后处理 + H2 分维指标 + 权重完整性校验；真 oemer 本机 GPU 端到端跑通）`
 
-> **进度（2026-07-13）**：未开始。前置（MusicXML 规范 + pugixml 解析 + Score 内存模型）正在阶段 0 收尾，完成后即进入本阶段。
+> **进度（MVP 已达成）**：✅ 完成。oemer 黑盒接入 + 评测 harness（Plan A 调号后处理 + H2 分维指标）+ 6 处补丁固化 + 权重完整性校验均已落地，真 oemer 本机 GPU 端到端跑通。
 
 - **技术点**：子进程调用 Audiveris/oemer 出 MusicXML；用 music21(Python) 探索解析已知谱（打印 pitch/key/measure），建立 Score 内存模型。
 - **资源**：[Audiveris GitHub](https://github.com/jostle/audiveris)｜[oemer](https://github.com/BreezeWhite/oemer)｜[music21 文档](https://web.mit.edu/music21/doc/index.html)
@@ -169,7 +169,7 @@ struct JianpuDoc  { Key key; vector<JianpuNote> notes; };
 
 ### 阶段 3：简谱→五线谱（2–3 周 · ★★★）  `状态：✅ 完成（2026-07-16，比 plan 提前约一周；含原"可选 P2"的 G4）`
 
-> **进度（2026-07-16）**：✅ 完成。G1 `jianpuToStaff`（JianpuDoc→Score）/ G2 `scoreToMusicXML`（Score→MusicXML，pugixml）/ G3 往返音高守恒（五线→简→五线 音高守恒）/ G4 简谱文本输入解析器（`parseJianpuText` 严格逆 `renderJianpuNote`，文本→JianpuDoc）全部实现；MSVC 实测 **98/98** 单测通过（既有 80 + G4 新增 18），`phase-3` 标签含 G1–G3、G4 纳入 `phase-3.1`。
+> **进度（2026-07-16）**：✅ 完成。G1 `jianpuToStaff`（JianpuDoc→Score）/ G2 `scoreToMusicXML`（Score→MusicXML，pugixml）/ G3 往返音高守恒（五线→简→五线 音高守恒）/ G4 简谱文本输入解析器（`parseJianpuText` 严格逆 `renderJianpuNote`，文本→JianpuDoc）全部实现；MSVC 实测 **117 个 gtest 用例全绿**（header-only 自研框架，1 个 ctest 入口），`phase-3` 标签含 G1–G3、G4 纳入 `phase-3.1`。
 
 - **技术点**：实现 `jianpuToStaff`：解析数字简谱→相对度数→按调号换算绝对音高→生成 MusicXML `pitch`；增时线/下划线→`type`+dot。
 - **产出**：双向转换闭环；自测往返一致性（五线→简→五线 音高守恒）。

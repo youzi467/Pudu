@@ -19,7 +19,7 @@
 
 ## 功能概览（阶段 2 + 阶段 3）
 
-- **输入**：MusicXML 文件（`data/*.musicxml`，支持 `score-partwise` 与 `.mxl`）。
+- **输入**：MusicXML 文件（`data/*.musicxml`，仅接受未压缩的 `score-partwise`；`.mxl` 压缩包被显式拒绝，需另存为 `.musicxml`）。
 - **转换** `staffToJianpu`：
   - 首调（movable-do）音级映射：`1` = 主音，按调号定位；调外音用临时升降记号。
   - 调号 / 调式 / 拍号识别；八度点（高低八度）；时值（增时线 / 减时线 / 附点）。
@@ -36,7 +36,7 @@
   - `jianpuToStaff(JianpuDoc) -> Score`：音级→绝对音高（逆 `midiToJianpu`，复用 `midiToPitch` 保证拼写口径一致）、八度点→octave、时值→`type`+`duration`（与 `typeToDuration` 严格互逆）、调号/拍号→`ScoreAttributes`、多声部按 `partIndex`/`voice` 还原、休止/和弦/装饰音/延音线映射回 `Note`。
   - `scoreToMusicXML(Score) -> .musicxml`：pugixml 写出 `score-partwise`；多声部用 `<backup>/<forward>` 还原并行时序、和弦用 `<chord/>`；写出的文件可被本仓库解析器读回且语义等价（G2 自洽测试）。
   - CLI `--to-musicxml [out.musicxml]`：演示「五线→简→五线」双向闭环，可叠加 `--key/--rekey/--transpose`。
-  - 已知限制：和弦逐音八度点在阶段 2 仅存音级，反向按「根音上方最近八度」还原（音级守恒，精确八度不保）；`tieStop` 反向不还原（仅 `tieStart`）。
+  - 和弦逐音独立八度点已支持（M1.5-A：反向精确还原）；`tieStop` 反向还原已支持（M1.5-B）。
 - **阶段 1 OMR 黑盒集成（`--from-omr`，M2）**：
   - `omr_adapter` 子进程分派 oemer（默认）/ fixture（确定性，ctest 用）/ audiveris（未装）；产出 MusicXML 喂入既有 `MusicXMLParser → staffToJianpu` 流水线，端到端出简谱。
   - 评测 harness `tools/omr_eval_groundtruth.py` 量化 oemer→简谱 误差分布（Plan A 调号后处理 + H2 分维指标）；真实 oemer 路径已在本机端到端跑通。
@@ -116,20 +116,24 @@ Pudu/  (工作区当前磁盘名为 omr/，规划重命名为 Pudu/)
 ├── vcpkg.json                  # 第三方依赖声明（pugixml）
 ├── README.md
 ├── src/
-│   ├── main.cpp                # 入口 + CLI（--to-jianpu* / --to-musicxml / --key / --rekey / --transpose）
+│   ├── main.cpp                # 入口 + CLI（--to-jianpu* / --to-musicxml / --key / --rekey / --transpose / --from-omr / --from-jianpu-text）
 │   ├── musicxml_parser.cpp     # MusicXML 解析（pugixml）
 │   ├── jianpu_converter.cpp    # 阶段2 五线→简谱转换 + L1/L2/L3 渲染
 │   ├── transpose.cpp           # 变调重算（transposeScore / parseKeyName / midiToPitch / ...）
 │   ├── jianpu_to_staff.cpp     # 阶段3 G1：JianpuDoc -> Score
-│   └── musicxml_serializer.cpp # 阶段3 G2：Score -> MusicXML（scoreToMusicXML）
+│   ├── jianpu_text_parser.cpp  # 阶段3 G4：简谱 L1 文本 -> JianpuDoc
+│   ├── musicxml_serializer.cpp # 阶段3 G2：Score -> MusicXML（scoreToMusicXML）
+│   └── omr_adapter.cpp         # 阶段1 OMR 黑盒适配（oemer/fixture/audiveris 子进程分派）
 ├── include/
 │   ├── score_model.hpp         # MusicXML 内存模型（Score/Note/.../Credit）
 │   ├── musicxml_parser.hpp     # 解析器接口
 │   ├── jianpu_model.hpp        # 阶段2 L0 简谱模型（JianpuDoc/...）
 │   ├── jianpu_converter.hpp    # 转换器 API（staffToJianpu / jianpuToL1/L2/Json）
 │   ├── transpose.hpp           # 变调重算 API（含 midiToPitch，阶段3 复用）
-│   └── jianpu_to_staff.hpp     # 阶段3 API（jianpuToStaff / scoreToMusicXML）
-├── test/                       # 单元测试（header-only 框架 + 6 测试文件）
+│   ├── jianpu_to_staff.hpp     # 阶段3 API（jianpuToStaff / scoreToMusicXML）
+│   ├── jianpu_text_parser.hpp  # 阶段3 G4 API（parseJianpuText）
+│   └── omr_adapter.hpp         # 阶段1 OMR 适配 API（OmrEngineConfig / runOmr）
+├── test/                       # 单元测试（header-only 自研框架 + 10 测试文件 + 117 用例）
 ├── data/                       # 测试 MusicXML 语料（8 份，.gitignore 已排除）
 └── omr-tool-research/          # 调研文档（技术选型/架构/规范/校验报告/计划）
     ├── results/research_report.md        # 总路线与 5 阶段规划
@@ -143,7 +147,7 @@ Pudu/  (工作区当前磁盘名为 omr/，规划重命名为 Pudu/)
 
 - 输入为 MusicXML 文本；PDF/JPG 输入链路（阶段 1 OMR）**已接入**：oemer 黑盒集成 + 评测 harness，详见 `docs/m2-real-run-guide.md` 与 `data/omr_eval/README.md`。
 - 小调「6=X」标法开关未实现（当前小调走首调相对法）。
-- 和弦成员仅存音级，逐音独立八度点未实现。
+- 和弦成员逐音独立八度点已支持（M1.5-A）；若简谱未标注逐音八度点，反向按根音上方最近八度还原（音级守恒）。
 - L2 连音弧为单音上方 SVG 弧近似；减时线连写按“连续同值”启发式（非真实 beat 分组）。
 - 变调段不重算首调（取初始调号）；极端连音比（7:8/7:4/9:4，46 处）单列未校验。
 
