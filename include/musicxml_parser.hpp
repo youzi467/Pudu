@@ -49,6 +49,12 @@ private:
     // MVP：当前声部是否已读取过 <attributes>（每部谱独立，仅读取一次）
     bool attributesSeen_ = false;
 
+    // P1-1：当前生效的"拍号"（随每个含 <time> 的 <measure> 更新，向后沿用上一个值）。
+    //   与 part.attributes.beats（仅取首拍号作全局默认）解耦，从而支持曲中变拍号，
+    //   供后处理引擎做"逐小节"节拍对账。
+    int currentBeats_ = 0;
+    int currentBeatType_ = 0;
+
     // 阶段 2 前置：本声部内的时间游标（单位 = quarterLength / 四分音符），跨小节连续推进；
     //   每遇非和弦 <note> 前进 duration/divisions，遇 <backup>/<forward> 按同换算回退/前进。
     //   每个 <note> 的 onset 即取当前游标值。每部谱开始时重置为 0。

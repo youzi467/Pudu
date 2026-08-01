@@ -53,3 +53,6 @@ test_omr_fixture_out.musicxml
 test_omr_pipeline.musicxml
 # 生成的简谱 HTML
 river_1_jianpu.html
+
+# 验证期临时构建/诊断产物
+.pcdeps/

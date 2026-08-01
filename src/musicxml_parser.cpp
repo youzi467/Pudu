@@ -134,6 +134,9 @@ void MusicXMLParser::parsePart(const pugi::xml_node& partNode, Score& out) {
     attributesSeen_ = false;
     // 阶段 2 前置：时间游标随每个声部重新计时
     qcursor_ = 0.0;
+    // P1-1：当前拍号随每个声部重新计时（首拍号将由首个含 <time> 的 <measure> 写入）
+    currentBeats_ = 0;
+    currentBeatType_ = 0;
 
     for (pugi::xml_node measureNode : partNode.children("measure")) {
         parseMeasure(measureNode, part);
@@ -146,34 +149,77 @@ void MusicXMLParser::parseMeasure(const pugi::xml_node& measureNode, Part& part)
     Measure measure;
     measure.number = measureNode.attribute("number").as_int(0);
 
+    // P1-1：不完全小节标记（repeat 末尾补白 / 弱起段等）。解析层只在真正标了
+    //   implicit="yes" 时才置 true，不改变任何既有单声部单拍号行为。
+    if (std::string(measureNode.attribute("implicit").as_string()) == "yes")
+        measure.implicit = true;
+
+    // P1-1 返工：结构性段落边界识别。出版谱中，反复段末尾 / Fine / 终止小节
+    //   经常是合法的不完全小节（与弱起互补），其占拍天然小于拍号目标值。
+    //   只读取【右侧】小节线（location 缺省即 "right"），避免把段落起始的
+    //   正向反复记号误当作段落结束。
+    for (pugi::xml_node bl : measureNode.children("barline")) {
+        const std::string loc = bl.attribute("location").as_string("right");
+        if (loc != "right") continue;
+        if (bl.child("repeat") || bl.child("ending")) {
+            measure.sectionEnd = true;
+            break;
+        }
+        const std::string style = bl.child("bar-style").text().as_string("");
+        if (style == "light-heavy" || style == "heavy-light" ||
+            style == "light-light" || style == "heavy-heavy") {
+            measure.sectionEnd = true;
+            break;
+        }
+    }
+
+    // P1-1：本小节先继承"当前生效拍号"（向后沿用上一个见到的值）。若该小节自身
+    //   含 <time>，下方会在遍历子节点时更新 currentBeats_/currentBeatType_ 并覆盖这里。
+    measure.beats = currentBeats_;
+    measure.beatType = currentBeatType_;
+
     for (pugi::xml_node child : measureNode.children()) {
         std::string name = child.name();
 
-        if (name == "attributes" && !attributesSeen_) {
-            if (pugi::xml_node d = child.child("divisions"))
-                part.attributes.divisions = d.text().as_int(1);
+        if (name == "attributes") {
+            // —— 仅首块读取：divisions / key / clef（每部谱只读一次）——
+            if (!attributesSeen_) {
+                if (pugi::xml_node d = child.child("divisions"))
+                    part.attributes.divisions = d.text().as_int(1);
 
-            if (pugi::xml_node k = child.child("key")) {
-                if (pugi::xml_node f = k.child("fifths"))
-                    part.attributes.fifths = f.text().as_int(0);
-                if (pugi::xml_node m = k.child("mode"))
-                    part.attributes.mode = m.text().as_string();
+                if (pugi::xml_node k = child.child("key")) {
+                    if (pugi::xml_node f = k.child("fifths"))
+                        part.attributes.fifths = f.text().as_int(0);
+                    if (pugi::xml_node m = k.child("mode"))
+                        part.attributes.mode = m.text().as_string();
+                }
+
+                if (pugi::xml_node c = child.child("clef")) {
+                    if (pugi::xml_node s = c.child("sign"))
+                        part.attributes.clefSign = s.text().as_string();
+                    if (pugi::xml_node l = c.child("line"))
+                        part.attributes.clefLine = l.text().as_int(2);
+                }
+                attributesSeen_ = true;
             }
 
+            // —— 拍号：每个含 <time> 的 <attributes> 都更新"当前拍号"（支持曲中变拍号）——
+            //   首拍号同时写入 part.attributes（作全局默认）；后续变拍号只更新当前值，
+            //   不动全局默认，供后处理引擎逐小节精确对账。
             if (pugi::xml_node t = child.child("time")) {
-                if (pugi::xml_node b = t.child("beats"))
-                    part.attributes.beats = b.text().as_int(4);
-                if (pugi::xml_node bt = t.child("beat-type"))
-                    part.attributes.beatType = bt.text().as_int(4);
+                if (pugi::xml_node b = t.child("beats")) {
+                    const int v = b.text().as_int(currentBeats_ > 0 ? currentBeats_ : 4);
+                    currentBeats_ = v;
+                    if (part.attributes.beats == 0) part.attributes.beats = v;  // 首拍号作全局默认
+                    measure.beats = v;
+                }
+                if (pugi::xml_node bt = t.child("beat-type")) {
+                    const int v = bt.text().as_int(currentBeatType_ > 0 ? currentBeatType_ : 4);
+                    currentBeatType_ = v;
+                    if (part.attributes.beatType == 0) part.attributes.beatType = v;
+                    measure.beatType = v;
+                }
             }
-
-            if (pugi::xml_node c = child.child("clef")) {
-                if (pugi::xml_node s = c.child("sign"))
-                    part.attributes.clefSign = s.text().as_string();
-                if (pugi::xml_node l = c.child("line"))
-                    part.attributes.clefLine = l.text().as_int(2);
-            }
-            attributesSeen_ = true;
 
         } else if (name == "note") {
             // 阶段 2 前置：传入当前游标，由 parseNote 填充 onset 并推进/回退游标

@@ -22,6 +22,7 @@
 #include "jianpu_to_staff.hpp"    // 阶段 3：简谱 -> 五线谱（jianpuToStaff / scoreToMusicXML）
 #include "jianpu_text_parser.hpp" // G4：简谱文本输入解析（L1 文本 -> JianpuDoc）
 #include "omr_adapter.hpp"          // 阶段1 OMR 黑盒集成适配层
+#include "jianpu_postcorrect.hpp"   // P1-1：后处理音乐规则引擎（确定性自修/标记）
 
 namespace {
 
@@ -209,6 +210,29 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // P1-1：后处理音乐规则引擎开关
+    //   --apply-postcorrect        在 staffToJianpu 之后挂一层确定性规则引擎，
+    //                              对 OMR 常见错误做"高置信自修 / 低置信标记"。
+    //                              默认关闭；不开启时 buildDoc 行为与此前逐字节一致
+    //                              （守住"转换 100% 不变"这条红线）。
+    //   --postcorrect-report <path>  把审计报告（JSON）写出到指定路径。
+    bool applyPostCorrect = false;
+    std::string postReportPath;
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "--apply-postcorrect") {
+            applyPostCorrect = true;
+        } else if (a == "--postcorrect-report" && i + 1 < argc) {
+            postReportPath = argv[i + 1];
+            ++i;
+        }
+    }
+    pudu::PostCorrectConfig postCfg;
+    postCfg.enabled = applyPostCorrect;
+    postCfg.autoFixBeatOverflow = true;   // 节拍对账默认积极自修
+    // flagOctaveJumps / enforceKeyConsistency / conservative 取结构体默认值：
+    //   非节拍类规则保持保守（仅 trivially-safe 自修，其余仅标记）。
+
     // 若指定了 --from-jianpu-text，则读取并解析文本文件（失败即报错退出）。
     // 解析结果存入 jianpuTextDoc，供下方 --to-musicxml 分支使用。
     pudu::JianpuDoc jianpuTextDoc;
@@ -243,10 +267,28 @@ int main(int argc, char* argv[]) {
     }
 
     // 统一构建简谱文档：若请求变调则先变调再投影（不就地修改 score）。
+    //   P1-1：末端可选挂载后处理规则引擎。buildDoc 会被多个输出分支调用，
+    //   但每个分支命中后即 return，故实际每次运行只会执行一次；报告采取
+    //   "每次调用都写出、末次覆盖"的策略，行为等价且无状态残留。
     auto buildDoc = [&]() -> pudu::JianpuDoc {
-        if (hasTranspose)
-            return pudu::transposeStaffToJianpu(score, tTarget, tMode);
-        return pudu::staffToJianpu(score);
+        pudu::JianpuDoc d = hasTranspose
+            ? pudu::transposeStaffToJianpu(score, tTarget, tMode)
+            : pudu::staffToJianpu(score);
+        if (applyPostCorrect) {
+            pudu::PostCorrectReport r;
+            d = pudu::correctJianpuDoc(d, postCfg, r);
+            std::cout << "[后处理] 自动修正 " << r.applied.size()
+                      << " 处 / 标记 " << r.flagged.size()
+                      << " 处 / 对账小节 " << r.measuresReconciled
+                      << " / 涉及音符 " << r.notesTouched << std::endl;
+            if (!postReportPath.empty()) {
+                if (pudu::writePostCorrectReportFile(r, postReportPath))
+                    std::cout << "[后处理] 审计报告已写出: " << postReportPath << std::endl;
+                else
+                    std::cerr << "[警告] 后处理报告写出失败: " << postReportPath << std::endl;
+            }
+        }
+        return d;
     };
 
     // 阶段 2：简谱转换预览（L1 纯文本）。命中即输出简谱并退出，不打印五线谱明细。

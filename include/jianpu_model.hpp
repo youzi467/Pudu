@@ -55,6 +55,9 @@ struct JianpuNote {
     bool tieFromPrev = false;   // M1.5-B：本音是连音的 stop 端（与 tieToNext 对称）
     bool isGrace = false;       // 装饰音(小音符, 不占基本时值)
     int tuplet = 0;             // 连音组: 0=常规,3=三连音,5=五连音...（阶段 2 暂置 0）
+    int tupletNormal = 0;       // 连音组"常规音符数"(normal-notes)：由 Score::Note.tupletNormal
+                              //   透传。P1-1 用于 BeatReconcile 精确折算占拍（2:3 二连音 /
+                              //   4:3 四连音等非三连音比不再被错算），0=未知（引擎保守跳过）
     std::vector<int> chordDegrees;   // 和弦其余音级(主音在 degree)
     std::vector<int> chordOctaveDots; // M1.5-A：与 chordDegrees 一一对应；成员相对【根音】的八度偏移(+1=高/-1=低/0=本位)
     bool rhythmUnresolvable = false; // M1.5-C：本音时值未能映射标准简谱时值(已由 staffToJianpu 回退 <type>)
@@ -64,6 +67,15 @@ struct JianpuNote {
 struct JianpuMeasure {
     int number = 0;
     std::vector<JianpuNote> notes;
+
+    // —— P1-1 后处理加性字段（不改动既有语义；0 = 用文档全局 beats/beatType）——
+    int beats = 0;         // 本小节拍号分子（由对应 Score::Measure 透传）
+    int beatType = 0;      // 本小节拍号分母
+    bool implicit = false; // 不完全小节/补白小节（由 Score::Measure 透传）；
+                         //   BeatReconcile 对 implicit 小节整条跳过（既不改也不标）
+    bool sectionEnd = false; // 右侧为结构性段落边界（反复/房子/终止线，由
+                         //   Score::Measure 透传）。出版记谱允许段落边界小节
+                         //   合法不足拍，BeatReconcile 据此不对"不足"归责。
 };
 
 // 单行（一个声部/层）。多声部谱 -> 多行。

@@ -2,7 +2,7 @@
 
 五线谱与简谱互转工具（MVP 阶段）。
 
-> 当前状态（2026-07-17）：已实现 **MusicXML ⇄ 简谱** 双向转换（阶段 2 + 阶段 3，MVP 达成），支持纯文本(L1)、二维 HTML(L2)、结构化 JSON(L3)，并通过 music21 跨语言 100% 校验。OMR 识别（阶段 1）已完成黑盒集成（oemer 接入 + 评测 harness + Plan A 调号后处理 + H2 分维指标），真引擎已在本机端到端跑通。
+> 当前状态（2026-07-17）：已实现 **MusicXML ⇄ 简谱** 双向转换（阶段 2 + 阶段 3，MVP 达成），支持纯文本(L1)、二维 HTML(L2)、结构化 JSON(L3)，并通过 music21 跨语言 100% 校验。OMR 识别（阶段 1）已完成黑盒集成（oemer 接入 + 评测 harness + Plan A 调号后处理 + H2 分维指标），真引擎已在本机端到端跑通；**P1-1 后处理音乐规则引擎已交付并本地真机验收（2026-08-01）：150/150 用例全绿，含 7 份出版级 GT 谱 no-op 红线回归**。
 
 ## 阶段与里程碑
 
@@ -28,6 +28,14 @@
   - **L1 纯文本**（`--to-jianpu`）：命令行核对用。
   - **L2 二维 HTML/Unicode**（`--to-jianpu-l2 [out.html]`）：自包含、可直接浏览器打开，含真实八度点、减时线横向连写、增时线、和弦列、连音弧。
   - **L3 结构化 JSON**（`--to-jianpu-json [out.json]`）：无损，供 `verify_jianpu_groundtruth.py` 逐音比对。
+- **P1-1 后处理音乐规则引擎（`--apply-postcorrect`，默认关闭）**：挂接在 `staffToJianpu` 之后的**确定性音乐规则引擎**，对 OMR 常见错误做「高置信自修 / 低置信标记」，产出可审计的 `applied`/`flagged` 轨迹。
+  - 开关：`--apply-postcorrect`（**默认关闭，需显式开启**）；`--postcorrect-report <path>` 将审计报告 JSON 写出（含每条 `applied`/`flagged` 详情）。
+  - 五类规则：`BeatReconcile`（小节节拍对账，**唯一带积极自修**的规则）、`Accidental`（临时记号与调号一致性）、`OctaveDot`（八度点自洽与异常跳变）、`TupletGroup`（连音组完整性）、`RestFill`（占拍缺失标记，**绝不臆造音符**）。
+  - **核心不变量：对干净输入必须 0 修正（no-op）**。已由 7 份出版级 ground-truth 乐谱（Bach Partita BWV1004 / Cello Suite BWV1007 / Vivaldi a 小调协奏曲 / Badinerie / Paganini Caprice 24 / Canon in D / Summer 3rd mvt）的语料级回归测试守护，断言 `applied` 与 `flagged` 皆空。
+  - 已知边界（诚实交代）：
+    - 多声部（`doc.lines.size() > 1`）文档整条跳过 `BeatReconcile` —— 因 `<forward>/<backup>` 不物化休止，稀疏声部小节天然不满拍，target 不可信。
+    - `implicit`（不完全/续接）小节跳过。
+    - 无法修复 `pitch_degree`（音名）错误 —— 转换后绝对音高已坍缩为首调音级，规则引擎看不到原始 step 名。
 - **变调重算（阶段 2 边界补全 / 阶段 3 前置）**：
   - 在任一 `--to-jianpu*` 前追加 `--key <调名>`（移调）、`--rekey <调名>`（改写调号）、`--transpose <±半音>`（字面移调）。
   - 单一事实源 = canonical Score：变调在 Score 上平移音高（或仅改调号）后复用既有转换器，保证 L0↔Score 自洽，满足阶段 3 往返（G3）音高守恒前提。
@@ -41,7 +49,7 @@
   - `omr_adapter` 子进程分派 oemer（默认）/ fixture（确定性，ctest 用）/ audiveris（未装）；产出 MusicXML 喂入既有 `MusicXMLParser → staffToJianpu` 流水线，端到端出简谱。
   - 评测 harness `tools/omr_eval_groundtruth.py` 量化 oemer→简谱 误差分布（Plan A 调号后处理 + H2 分维指标）；真实 oemer 路径已在本机端到端跑通。
 - **质量保障**：
-  - C++ 单元测试 **117 个 gtest 用例（经 1 个 ctest 入口 `PuduTests` 运行）全绿 + 41 个 F3 Python 单测全绿**（header-only 自研框架，零外部依赖）。
+  - C++ 单元测试 **150 个用例（既有 117 + P1-1 后处理规则引擎新增 33，经 1 个 ctest 入口 `PuduTests` 运行）+ 41 个 F3 Python 单测**全绿（header-only 自研测试框架，零外部依赖）。
   - music21 跨语言 ground-truth 校验：8/8 样本、音符 **100.0%**（13492/13492）、字段 **100.0%**（79240/79240）、计入类差异 = 0。
 
 ## 前置依赖
@@ -94,6 +102,9 @@ build/Pudu.exe data/cello-suite-no-1.musicxml --key D --to-musicxml sample_back_
 build/Pudu.exe data/cello-suite-no-1.musicxml --key D --to-jianpu
 build/Pudu.exe data/cello-suite-no-1.musicxml --rekey G --to-jianpu-l2 jianpu_l2_G.html
 build/Pudu.exe data/cello-suite-no-1.musicxml --transpose -3 --to-jianpu-json jianpu.json
+
+# P1-1 后处理音乐规则引擎：开启确定性自修并写出审计报告
+build/Pudu.exe data/cello-suite-no-1.musicxml --to-jianpu --apply-postcorrect --postcorrect-report report.json
 ```
 
 > 不带路径参数时，`Pudu.exe` 回退到内嵌「小星星」样例。若提示找不到 `pugixml.dll`，将 vcpkg 的 bin 目录加入 `PATH`：
@@ -116,9 +127,10 @@ Pudu/  (工作区当前磁盘名为 omr/，规划重命名为 Pudu/)
 ├── vcpkg.json                  # 第三方依赖声明（pugixml）
 ├── README.md
 ├── src/
-│   ├── main.cpp                # 入口 + CLI（--to-jianpu* / --to-musicxml / --key / --rekey / --transpose / --from-omr / --from-jianpu-text）
+│   ├── main.cpp                # 入口 + CLI（--to-jianpu* / --to-musicxml / --key / --rekey / --transpose / --from-omr / --from-jianpu-text / --apply-postcorrect）
 │   ├── musicxml_parser.cpp     # MusicXML 解析（pugixml）
 │   ├── jianpu_converter.cpp    # 阶段2 五线→简谱转换 + L1/L2/L3 渲染
+│   ├── jianpu_postcorrect.cpp  # P1-1 后处理规则引擎（5 类规则 + 审计报告 JSON）
 │   ├── transpose.cpp           # 变调重算（transposeScore / parseKeyName / midiToPitch / ...）
 │   ├── jianpu_to_staff.cpp     # 阶段3 G1：JianpuDoc -> Score
 │   ├── jianpu_text_parser.cpp  # 阶段3 G4：简谱 L1 文本 -> JianpuDoc
@@ -129,11 +141,12 @@ Pudu/  (工作区当前磁盘名为 omr/，规划重命名为 Pudu/)
 │   ├── musicxml_parser.hpp     # 解析器接口
 │   ├── jianpu_model.hpp        # 阶段2 L0 简谱模型（JianpuDoc/...）
 │   ├── jianpu_converter.hpp    # 转换器 API（staffToJianpu / jianpuToL1/L2/Json）
+│   ├── jianpu_postcorrect.hpp  # P1-1 后处理 API（correctJianpuDoc / PostCorrectReport）
 │   ├── transpose.hpp           # 变调重算 API（含 midiToPitch，阶段3 复用）
 │   ├── jianpu_to_staff.hpp     # 阶段3 API（jianpuToStaff / scoreToMusicXML）
 │   ├── jianpu_text_parser.hpp  # 阶段3 G4 API（parseJianpuText）
 │   └── omr_adapter.hpp         # 阶段1 OMR 适配 API（OmrEngineConfig / runOmr）
-├── test/                       # 单元测试（header-only 自研框架 + 10 测试文件 + 117 用例）
+├── test/                       # 单元测试（header-only 自研框架 + 11 测试文件 + 150 用例）
 ├── data/                       # 测试 MusicXML 语料（8 份，.gitignore 已排除）
 └── omr-tool-research/          # 调研文档（技术选型/架构/规范/校验报告/计划）
     ├── results/research_report.md        # 总路线与 5 阶段规划

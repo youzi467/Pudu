@@ -54,6 +54,7 @@ add_executable(Pudu
     src/musicxml_serializer.cpp   # 阶段 3 G2：Score -> MusicXML
     src/jianpu_text_parser.cpp    # G4：简谱文本输入解析（L1 文本 -> JianpuDoc）
     src/omr_adapter.cpp           # 阶段1 OMR 黑盒集成适配层
+    src/jianpu_postcorrect.cpp    # P1-1：后处理音乐规则引擎（确定性自修/标记）
 )
 
 # 头文件目录（score_model.hpp / musicxml_parser.hpp 位于 include/）
@@ -98,6 +99,7 @@ add_executable(PuduTests
     test/test_serializer.cpp        # 阶段 3 G2 序列化自洽（需 pugixml）
     test/test_jianpu_text_parser.cpp  # G4：简谱文本解析单测（含端到端闭环）
     test/test_m15_hardening.cpp        # M1.5 边界硬化单测（此前仅 g++ 手动验证，现纳入 ctest 全量回归）
+    test/test_jianpu_postcorrect.cpp   # P1-1 后处理规则引擎单测（含"干净输入 no-op"不变量红线）
     src/jianpu_converter.cpp
     src/transpose.cpp
     src/jianpu_to_staff.cpp
@@ -106,6 +108,7 @@ add_executable(PuduTests
     src/musicxml_parser.cpp       # 提供 MusicXMLParser::parseString：test_serializer.cpp 的往返自洽测试需把序列化结果解析回 Score
     src/omr_adapter.cpp           # 阶段1 OMR 黑盒集成适配层（M2-3 ctest）
     test/test_omr_adapter.cpp     # 阶段1 OMR 集成 ctest：OMR 产出 -> 解析 -> 简谱全链路
+    src/jianpu_postcorrect.cpp    # P1-1：与 Pudu 目标并列编入（避免链接遗漏）
 )
 
 target_include_directories(PuduTests PRIVATE

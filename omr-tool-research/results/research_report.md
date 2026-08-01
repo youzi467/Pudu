@@ -12,7 +12,7 @@
 > - **关键决策变更**：① `libmusicxml2` 不在 vcpkg registry → 改用 **pugixml**（MVP 只需读写 XML）；② 架构决定将"手搓 OpenCV"降级为**选做/练兵**，识别端由 **Audiveris/oemer 黑盒**承担（见 §1.3 与 §4）。
 > - **已完成**：MusicXML 规范通读 + 用 pugixml 解析示例并建立 Score 内存模型（原 S6–S7，已并入阶段 0/2 收尾）。
 > - **下一步**：核心双向转换（阶段 2/3）已闭合；下阶段接①阶段 3 边界硬化（和弦逐音八度点 / tieStop 反向还原 / 极端连音比）+ ②阶段 1 OMR 黑盒（Audiveris/oemer：PDF/JPG→MusicXML）打通端到端；随后阶段 4 AI / 5 工程化。
-> - **已完成**：阶段 0（环境地基）/ 2（五线→简谱核心）/ 3（简谱→五线，含 G1 jianpuToStaff / G2 scoreToMusicXML / G3 往返音高守恒 / G4 简谱文本输入解析器）/ 1（OMR 黑盒集成：oemer + 评测 harness + Plan A + 权重校验）；MSVC 实测 **117 个 gtest 用例（1 个 ctest 入口）全绿 + 77 个 Python 单测全绿**。
+> - **已完成**：阶段 0（环境地基）/ 2（五线→简谱核心）/ 3（简谱→五线，含 G1 jianpuToStaff / G2 scoreToMusicXML / G3 往返音高守恒 / G4 简谱文本输入解析器）/ 1（OMR 黑盒集成：oemer + 评测 harness + Plan A + 权重校验）；MSVC 实测 **150 个用例（1 个 ctest 入口）全绿 + 77 个 Python 单测全绿**。
 - **未开始**：阶段 4（AI·DL）/ 5（工程化）。
 > - 磁盘文件夹仍名为 `omr` / `omr-tool-research`（重命名为 `Pudu` / `Pudu-research` 待关闭工作区后执行）。
 
@@ -169,7 +169,7 @@ struct JianpuDoc  { Key key; vector<JianpuNote> notes; };
 
 ### 阶段 3：简谱→五线谱（2–3 周 · ★★★）  `状态：✅ 完成（2026-07-16，比 plan 提前约一周；含原"可选 P2"的 G4）`
 
-> **进度（2026-07-16）**：✅ 完成。G1 `jianpuToStaff`（JianpuDoc→Score）/ G2 `scoreToMusicXML`（Score→MusicXML，pugixml）/ G3 往返音高守恒（五线→简→五线 音高守恒）/ G4 简谱文本输入解析器（`parseJianpuText` 严格逆 `renderJianpuNote`，文本→JianpuDoc）全部实现；MSVC 实测 **117 个 gtest 用例全绿**（header-only 自研框架，1 个 ctest 入口），`phase-3` 标签含 G1–G3、G4 纳入 `phase-3.1`。
+> **进度（2026-07-16）**：✅ 完成。G1 `jianpuToStaff`（JianpuDoc→Score）/ G2 `scoreToMusicXML`（Score→MusicXML，pugixml）/ G3 往返音高守恒（五线→简→五线 音高守恒）/ G4 简谱文本输入解析器（`parseJianpuText` 严格逆 `renderJianpuNote`，文本→JianpuDoc）全部实现；MSVC 实测 **150 个用例全绿**（header-only 自研框架，1 个 ctest 入口），`phase-3` 标签含 G1–G3、G4 纳入 `phase-3.1`。
 
 - **技术点**：实现 `jianpuToStaff`：解析数字简谱→相对度数→按调号换算绝对音高→生成 MusicXML `pitch`；增时线/下划线→`type`+dot。
 - **产出**：双向转换闭环；自测往返一致性（五线→简→五线 音高守恒）。

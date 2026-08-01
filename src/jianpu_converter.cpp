@@ -130,6 +130,13 @@ JianpuDoc staffToJianpu(const Score& score) {
             for (const auto& measure : part.measures) {
                 JianpuMeasure jm;
                 jm.number = measure.number;
+                // P1-1：透传本小节拍号与不完全小节标记（供后处理引擎逐小节对账）。
+                //   单声部单拍号 fixture 的 Score::Measure.beats 默认 0，这里原样透传，
+                //   后处理回退到 doc.beats/beatType，行为与改动前逐字节一致。
+                jm.beats = measure.beats;
+                jm.beatType = measure.beatType;
+                jm.implicit = measure.implicit;
+                jm.sectionEnd = measure.sectionEnd;
 
                 // 仅取本 voice 的音符，按 onset 升序（对齐演奏/书写顺序）
                 std::vector<const Note*> sel;
@@ -160,7 +167,19 @@ JianpuDoc staffToJianpu(const Score& score) {
                     double rhythmQl = n.quarterLength;
                     if (n.tupletActual > 0 && n.tupletNormal > 0)
                         rhythmQl = n.quarterLength * n.tupletActual / n.tupletNormal;
-                    if (quarterLengthToRhythm(rhythmQl, ul, ad, dz)) {
+                    if (n.isGrace) {
+                        // P1-1 返工：装饰音按定义不占基本时值，MusicXML 中 <grace/>
+                        //   音符没有 <duration>，故 quarterLength 恒为 0。此时
+                        //   quarterLengthToRhythm(0) 必然失败，若据此置
+                        //   rhythmUnresolvable，等于把"合法的装饰音"污染成"时值解析
+                        //   失败"——干净出版谱也会被误标（badinerie m40 即此症状），
+                        //   进而毒化后处理 BeatReconcile/TupletGroup 的判断。
+                        //   装饰音的记谱时值只能来自 <type>，这不是"无法解析"。
+                        typeToDuration(n.type, ul, ad);
+                        jn.underlines = ul;
+                        jn.augmentDashes = ad;
+                        jn.dots = n.dots;
+                    } else if (quarterLengthToRhythm(rhythmQl, ul, ad, dz)) {
                         jn.underlines = ul;
                         jn.augmentDashes = ad;
                         jn.dots = dz;
@@ -183,6 +202,9 @@ JianpuDoc staffToJianpu(const Score& score) {
                     //   tuplet 存实际音符数(3=三连音,5=五连音...)，供校验器核对分组。
                     //   节奏仍由 quarterLength 反推(连音组回退 <type>，与音乐21 基准时值同口径)。
                     jn.tuplet = (n.tupletActual > 0) ? n.tupletActual : 0;
+                    // P1-1：透传连音"常规音符数"(normal-notes)。后处理 BeatReconcile
+                    //   优先用它精确折算占拍（2:3 二连音 / 4:3 四连音等非三连音比不再被错算）。
+                    jn.tupletNormal = n.tupletNormal;
 
                     // 和弦：主音已在 degree，其余音各自换算音级（规范 §2.5）。
                     // M1.5-A：逐音八度点按"相对根音"的偏移成对存储，与 chordDegrees 等长。

@@ -114,6 +114,19 @@ struct Measure {
     std::vector<Note> notes;       // 本小节内音符（按出现顺序；和弦后续音已并入
                                   //   chordPitches，不再单独入此列表，故不会重复计数）
 
+    // —— P1-1 后处理加性字段（不改动既有语义；0 = 用全局 part.attributes）——
+    int beats = 0;       // 本小节拍号分子（来自含 <time> 的 <measure>；0 表示沿用全局）
+    int beatType = 0;    // 本小节拍号分母
+    bool implicit = false; // 是否为不完全小节/补白小节（measure@implicit="yes"）。
+                         //   解析层只在真正标了 implicit 时置 true，其余默认 false，
+                         //   不影响任何既有单声部单拍号行为。
+    bool sectionEnd = false; // 本小节右侧是否为【结构性段落边界】：反复记号
+                         //   (<repeat>)、房子记号(<ending>)或终止线(light-heavy /
+                         //   heavy-light / light-light / heavy-heavy)。
+                         //   出版记谱中，段落边界处的小节允许合法地不足拍
+                         //   （反复段末尾与弱起互补、Fine/终止小节等），
+                         //   后处理据此避免把合法记法误判为节拍错误。
+
     // 真实事件数（不含被合并的和弦音），阶段 2 统计/校验用
     int totalEvents() const {
         int n = 0;
