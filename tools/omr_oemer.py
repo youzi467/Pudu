@@ -745,13 +745,24 @@ def main():
         sys.stderr.write(f"[错误] {e}\n")
         return 2
 
-    if len(positional) != 2:
+    if len(positional) == 0:
         sys.stderr.write(
-            "用法: python omr_oemer.py <input> <output.musicxml> "
+            "用法: python omr_oemer.py <input> [<output.musicxml>] "
             "[--gt <gt_path>] [--f3-geometric] [--no-f3-sidecar]\n")
         return 2
 
-    in_path, out_path = positional[0], positional[1]
+    in_path = positional[0]
+    if len(positional) >= 2:
+        # 用户显式指定了输出路径，行为不变
+        out_path = positional[1]
+    else:
+        # 仅传 1 个位置参数（只有 input）：out_path 自动推导为
+        # 与 input 同目录、同名 stem 的 .musicxml。例：
+        # data/river_1.jpg -> data/river_1.musicxml。后续 rename
+        # 会变成 no-op（文件已在目标路径），安全。
+        in_abs = os.path.abspath(in_path)
+        stem = os.path.splitext(os.path.basename(in_abs))[0]
+        out_path = os.path.join(os.path.dirname(in_abs), stem + ".musicxml")
     if not os.path.exists(in_path):
         sys.stderr.write(f"[错误] 输入不存在: {in_path}\n")
         return 1
