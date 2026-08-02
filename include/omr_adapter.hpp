@@ -31,6 +31,9 @@ struct OmrEngineConfig {
     std::string audiverisJar;       // audiveris 预设的 jar 路径（engine=="audiveris" 时使用）
     std::string toolsDir;           // omr_oemer.py / omr_fixture.py 所在目录（CMake 注入 PUDU_TOOLS_DIR）
     int timeoutMs = 120000;         // 子进程超时（毫秒）
+    // P0-2：oemer 前置图像增强（默认关）。true 时 runOmr 改调 tools/omr_pipeline.py，
+    //       该脚本是 omr_oemer.py 的透明代理；false 时命令串与 P0-2 之前逐字节一致。
+    bool preprocess = false;
 };
 
 // 解析可用于 oemer 的 python 解释器（自动选址）：

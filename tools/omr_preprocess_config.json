@@ -1,0 +1,50 @@
+{
+  "_comment": "谱渡 Pudu · P0-2 oemer 前置图像增强配置。default 段必须与 tools/omr_preprocess.py 的 DEFAULTS 逐字段一致（单测 tests/test_omr_preprocess_config.py 把关）。presets 为增量覆盖，只写与 default 不同的键。优先级: --preprocess-config > 环境变量 PUDU_OMR_PREPROCESS_CONFIG > 本文件 > 代码内置 DEFAULTS。合并顺序: DEFAULTS <- default <- 代码 PRESETS[active] <- 本文件 presets[active]。",
+  "active_preset": "default",
+  "default": {
+    "enable_contrast_norm": true,
+    "clahe_clip_limit": 2.0,
+    "clahe_tile_grid": 8,
+    "enable_shadow_suppress": true,
+    "shadow_kernel_px": 31,
+    "denoise_strength": 3,
+    "binarize_method": "adaptive",
+    "block_size": 25,
+    "C": 10,
+    "enable_deskew": false,
+    "max_deskew_deg": 2.0,
+    "min_deskew_deg": 0.15,
+    "enable_border_crop": false,
+    "border_margin_px": 8,
+    "output_format": "png",
+    "max_long_side_px": 0,
+    "upscale_min_long_side_px": 0,
+    "fail_open": true,
+    "emit_metrics_sidecar": true,
+    "preset": "default"
+  },
+  "presets": {
+    "scan": {
+      "enable_shadow_suppress": false,
+      "binarize_method": "otsu",
+      "denoise_strength": 3,
+      "enable_deskew": false
+    },
+    "photo": {
+      "enable_shadow_suppress": true,
+      "shadow_kernel_px": 41,
+      "binarize_method": "adaptive",
+      "block_size": 31,
+      "C": 12,
+      "enable_deskew": true,
+      "max_deskew_deg": 2.0
+    },
+    "low_contrast": {
+      "enable_contrast_norm": true,
+      "clahe_clip_limit": 3.0,
+      "binarize_method": "adaptive",
+      "block_size": 21,
+      "C": 6
+    }
+  }
+}

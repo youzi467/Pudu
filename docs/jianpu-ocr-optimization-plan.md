@@ -373,7 +373,7 @@ graph TD
 | **P0-1 错误分析 harness** | ✅ 已落地 + 验证 | `tools/omr_eval_groundtruth.py` + `tools/omr_eval_lib.py` 已实现；`--no-oemr` 自洽 100%（concerto 11598/11598）；真实 oemer 误差已可量化 |
 | **H2 分维指标**（本方案未单列，后续追加） | ✅ 已落地 + 验证 | `category_pass`（每维度独立通过率）、`octave_jump` 提升为评分类别、`omr_eval_note_diffs.json` 逐音差异转储，均已合入 harness |
 | **Plan A 调号后处理**（`correct_key_signature`，属 P1-1 的调号子集） | ✅ 已落地 + 验证，但有泄漏 | `tools/omr_oemer.py` 实现；自动经 harness `--gt` 注入。已知 `_apply_alters` 过度清零小调临时记号（"待验证 #2"），需加「gt 保留白名单」修复 |
-| **P0-2 预处理脚本** | ⬜ 未启动 | 需先有 harness A/B 结论再决定；当前未做 |
+| **P0-2 预处理脚本** | ✅ 已落地+验证（默认 OFF，需 `--omr-preprocess`） | `tools/omr_preprocess.py`+`omr_pipeline.py`+config+CLI 开关；透明代理守住 R-P0-04 out_path 锚定（绕开 oemer 用 input basename 落产物的陷阱）；cv2 延迟导入、fail-open 降级；沙箱 190 pytest 全绿（含 QA 加固的 C++ no-op 红线变异测试 10/10 全检出）；C++ 净增 12 行、`omr_oemer.py` 零 diff。T03/T04/T05 真 cv2/C++ 实编/no-op 逐字节比对待本机验 |
 | **P1-1 后处理规则引擎**（`jianpu_postcorrect`） | ✅ 已落地 + 验证（默认 OFF，需 `--apply-postcorrect`） | 五类规则（BeatReconcile / Accidental / OctaveDot / TupletGroup / RestFill）+ 审计报告 JSON（`--postcorrect-report`）；新增 33 用例（含 7 份出版级 GT 谱语料级 no-op 回归）全绿。**边界**：BeatReconcile 对多声部文档与 `implicit` 小节整条跳过（`<forward>/<backup>` 不物化休止 → target 不可信）；无法修 `pitch_degree`（音名已坍缩为首调音级）。为守不变量，配套加性扩展了 `Measure.beats/beatType/implicit` 与 `Note.tupletNormal`（解析→转换→引擎全链路贯通） |
 | **F3 几何校正器** | ✅ 已落地·零效果·实验性（默认 OFF） | oemer sidecar 暴露几何信息 + Pudu 侧几何→音级重算已落地（41 Python 单测全绿）；**全量 6 页真实 A/B（oemer 0.1.8）OFF==ON 逐字节相同，对 `pitch_degree` 零效果**，保留实验性基础设施、不作上线（处置待拍板） |
 | **P2 fork oemer + 微调** | ⬜ 条件触发 | 待 harness 证明确为 oemer 瓶颈且集中于分割/识别时启动 |

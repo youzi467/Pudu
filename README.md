@@ -48,6 +48,14 @@
 - **阶段 1 OMR 黑盒集成（`--from-omr`，M2）**：
   - `omr_adapter` 子进程分派 oemer（默认）/ fixture（确定性，ctest 用）/ audiveris（未装）；产出 MusicXML 喂入既有 `MusicXMLParser → staffToJianpu` 流水线，端到端出简谱。
   - 评测 harness `tools/omr_eval_groundtruth.py` 量化 oemer→简谱 误差分布（Plan A 调号后处理 + H2 分维指标）；真实 oemer 路径已在本机端到端跑通。
+- **P0-2 前置图像预处理增强（`--omr-preprocess`，默认关闭）**：
+  - 在 oemer 识别**之前**插入一层 Python + OpenCV 图像增强（阴影抑制 → CLAHE 对比度归一 → 中值去噪 → 小角度纠偏 → 边框裁切 → 自适应/Otsu 二值化 → 缩放），改善**拍照/扫描/低对比度/轻微倾斜/带阴影**谱面的识别鲁棒性。
+  - **默认关闭，且是 no-op 红线**：不加该开关时 `runOmr` 仍直接调用 `tools/omr_oemer.py`，子进程命令串与 P0-2 之前**逐字节一致**，不产生任何临时文件、不追加任何参数。
+  - 打开后 `runOmr` 改调透明代理 `tools/omr_pipeline.py`——它把增强图写进临时目录再转发给 `omr_oemer.py`，**输出路径按原始输入推导**（与 oemer 口径一致），退出码原样透传；临时目录 `try/finally` + `atexit` 双保险清理（`--keep-temp` 可保留用于排查）。
+  - **失败即降级（fail-open）**：OpenCV 缺失、读图失败、任一步异常，均自动回退到原图继续识别，绝不让预处理成为新的失败点。
+  - 配置四级优先级：`--preprocess-config` > 环境变量 `PUDU_OMR_PREPROCESS_CONFIG` > `tools/omr_preprocess_config.json` > 代码内 `DEFAULTS`；内置 `default` / `scan` / `photo` / `low_contrast` 四套预设（`--preprocess-preset`）。
+  - 每次运行旁写 `<out>.preprocess.json` 指标（schema `pudu.omr.preprocess.metrics/v1`：分步耗时、纠偏角与决策、墨迹占比、降级原因），便于 A/B 与调参。
+  - 独立调参入口：`python tools/omr_preprocess.py <in> <out.png> [--preset photo]`，可脱离 C++ 直接查看增强效果。
 - **质量保障**：
   - C++ 单元测试 **150 个用例（既有 117 + P1-1 后处理规则引擎新增 33，经 1 个 ctest 入口 `PuduTests` 运行）+ 41 个 F3 Python 单测**全绿（header-only 自研测试框架，零外部依赖）。
   - music21 跨语言 ground-truth 校验：8/8 样本、音符 **100.0%**（13492/13492）、字段 **100.0%**（79240/79240）、计入类差异 = 0。
@@ -105,6 +113,16 @@ build/Pudu.exe data/cello-suite-no-1.musicxml --transpose -3 --to-jianpu-json ji
 
 # P1-1 后处理音乐规则引擎：开启确定性自修并写出审计报告
 build/Pudu.exe data/cello-suite-no-1.musicxml --to-jianpu --apply-postcorrect --postcorrect-report report.json
+
+# 阶段 1 OMR：图片 -> MusicXML -> 简谱（需本机 oemer 环境）
+build/Pudu.exe --from-omr data/score.jpg --to-jianpu
+
+# P0-2 前置图像增强（默认关；加上开关才启用，适合拍照/低对比度/轻微倾斜的谱面）
+build/Pudu.exe --from-omr data/photo.jpg --omr-preprocess --to-jianpu
+
+# P0-2 独立调参：脱离 C++ 直接看增强效果 / 对比预设
+python tools/omr_preprocess.py data/photo.jpg out_photo.png --preset photo
+python tools/omr_preprocess.py data/scan.png  out_scan.png  --preset scan
 ```
 
 > 不带路径参数时，`Pudu.exe` 回退到内嵌「小星星」样例。若提示找不到 `pugixml.dll`，将 vcpkg 的 bin 目录加入 `PATH`：
@@ -127,7 +145,7 @@ Pudu/  (工作区当前磁盘名为 omr/，规划重命名为 Pudu/)
 ├── vcpkg.json                  # 第三方依赖声明（pugixml）
 ├── README.md
 ├── src/
-│   ├── main.cpp                # 入口 + CLI（--to-jianpu* / --to-musicxml / --key / --rekey / --transpose / --from-omr / --from-jianpu-text / --apply-postcorrect）
+│   ├── main.cpp                # 入口 + CLI（--to-jianpu* / --to-musicxml / --key / --rekey / --transpose / --from-omr / --omr-preprocess / --from-jianpu-text / --apply-postcorrect）
 │   ├── musicxml_parser.cpp     # MusicXML 解析（pugixml）
 │   ├── jianpu_converter.cpp    # 阶段2 五线→简谱转换 + L1/L2/L3 渲染
 │   ├── jianpu_postcorrect.cpp  # P1-1 后处理规则引擎（5 类规则 + 审计报告 JSON）
@@ -146,7 +164,13 @@ Pudu/  (工作区当前磁盘名为 omr/，规划重命名为 Pudu/)
 │   ├── jianpu_to_staff.hpp     # 阶段3 API（jianpuToStaff / scoreToMusicXML）
 │   ├── jianpu_text_parser.hpp  # 阶段3 G4 API（parseJianpuText）
 │   └── omr_adapter.hpp         # 阶段1 OMR 适配 API（OmrEngineConfig / runOmr）
-├── test/                       # 单元测试（header-only 自研框架 + 11 测试文件 + 150 用例）
+├── tools/                      # Python 侧工具链（子进程调用，C++ 不直接依赖）
+│   ├── omr_oemer.py            # 阶段1 oemer 识别脚本（P0-2 零改动）
+│   ├── omr_pipeline.py         # P0-2 透明代理：预处理后转发 omr_oemer.py（默认不参与链路）
+│   ├── omr_preprocess.py       # P0-2 增强核心库 + 独立调参 CLI（cv2 全部惰性导入）
+│   └── omr_preprocess_config.json  # P0-2 默认配置与 4 套预设（default/scan/photo/low_contrast）
+├── test/                       # C++ 单元测试（header-only 自研框架 + 11 测试文件）
+├── tests/                      # Python 单元测试（pytest；P0-2 新增 5 文件，不依赖 cv2/numpy）
 ├── data/                       # 测试 MusicXML 语料（8 份，.gitignore 已排除）
 └── omr-tool-research/          # 调研文档（技术选型/架构/规范/校验报告/计划）
     ├── results/research_report.md        # 总路线与 5 阶段规划

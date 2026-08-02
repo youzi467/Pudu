@@ -176,7 +176,9 @@ bool runOmr(const std::string& input, const std::string& outMusicXml,
             err = "oemer 引擎需设置 toolsDir（CMake 注入 PUDU_TOOLS_DIR）";
             return false;
         }
-        cmd = "\"" + cfg.python + "\" \"" + cfg.toolsDir + "/omr_oemer.py\" \"" +
+        // P0-2：开关关时脚本名恒为 omr_oemer.py，命令串与 P0-2 之前逐字节一致
+        const char* script = cfg.preprocess ? "/omr_pipeline.py" : "/omr_oemer.py";
+        cmd = "\"" + cfg.python + "\" \"" + cfg.toolsDir + script + "\" \"" +
               input + "\" \"" + outMusicXml + "\"";
     } else if (cfg.engine == "audiveris") {
         if (cfg.audiverisJar.empty()) {

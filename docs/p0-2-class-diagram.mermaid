@@ -1,0 +1,146 @@
+classDiagram
+    class PreprocessConfig {
+        <<dataclass, pure>>
+        +bool enable_contrast_norm = True
+        +float clahe_clip_limit = 2.0
+        +int clahe_tile_grid = 8
+        +bool enable_shadow_suppress = True
+        +int shadow_kernel_px = 31
+        +int denoise_strength = 3
+        +str binarize_method = "adaptive"
+        +int block_size = 25
+        +int C = 10
+        +bool enable_deskew = False
+        +float max_deskew_deg = 2.0
+        +float min_deskew_deg = 0.15
+        +bool enable_border_crop = False
+        +int border_margin_px = 8
+        +str output_format = "png"
+        +int max_long_side_px = 0
+        +int upscale_min_long_side_px = 0
+        +bool fail_open = True
+        +bool emit_metrics_sidecar = True
+        +str preset = "default"
+        +to_dict() dict
+        +from_dict(d: dict)$ tuple~PreprocessConfig, list~
+        +sanitize() list~str~
+    }
+
+    class DeskewDecision {
+        <<dataclass, pure>>
+        +bool apply
+        +float angle_deg
+        +str reason
+    }
+
+    class PreprocessMetrics {
+        <<dict schema v1, pure>>
+        +str schema
+        +bool ok
+        +bool degraded
+        +str~None~ degrade_reason
+        +str src
+        +str dst
+        +dict config
+        +str config_source
+        +list~int~ size_in
+        +list~int~ size_out
+        +float mean_contrast_in
+        +float mean_contrast_out
+        +float mean_intensity_in
+        +float mean_intensity_out
+        +str binarize_method
+        +float~None~ bin_thresh
+        +float~None~ ink_ratio_out
+        +float~None~ deskew_angle_est_deg
+        +float deskew_applied_deg
+        +str deskew_decision
+        +dict steps_timing_ms
+        +float total_ms
+        +list~str~ warnings
+    }
+
+    class OmrPreprocessModule {
+        <<module tools/omr_preprocess.py>>
+        +DEFAULTS: dict
+        +CONFIG_ENV_VAR: str
+        +METRICS_SCHEMA: str
+        +IMAGE_EXTS: set
+        +load_config(path, env_var) tuple~PreprocessConfig, str, list~
+        +decide_deskew(angle_deg, cfg) DeskewDecision
+        +build_metrics(**kw) dict
+        +is_supported_input(path) bool
+        +preprocess_for_omr(src, dst, cfg) dict
+        -_lazy_cv2() module
+        -_to_gray(img) ndarray
+        -_suppress_shadow(gray, cfg) ndarray
+        -_normalize_contrast(gray, cfg) ndarray
+        -_denoise(gray, cfg) ndarray
+        -_estimate_skew_angle(gray) float~None~
+        -_rotate(gray, angle) ndarray
+        -_crop_border(gray, cfg) ndarray
+        -_binarize(gray, cfg) tuple~ndarray, float~
+        -_resize(gray, cfg) ndarray
+    }
+
+    class PipelineArgs {
+        <<dataclass, pure>>
+        +str in_path
+        +str out_path
+        +bool out_explicit
+        +list~str~ passthrough
+        +str~None~ config_path
+        +str~None~ preset
+        +bool keep_temp
+        +bool disable_preprocess
+    }
+
+    class OmrPipelineModule {
+        <<module tools/omr_pipeline.py>>
+        +PRIVATE_FLAGS: set
+        +PRIVATE_VALUE_FLAGS: set
+        +DOWNSTREAM_VALUE_FLAGS: set
+        +split_args(argv) tuple~list, dict, list~
+        +resolve_out_path(positional) tuple~str, str, bool~
+        +parse_args(argv) PipelineArgs
+        +build_downstream_cmd(py, script, in_path, out_path, passthrough) list~str~
+        +metrics_sidecar_path(out_path) str
+        +should_preprocess(args, cfg) tuple~bool, str~
+        +run(argv, runner) int
+        -_make_tempdir() str
+        -_cleanup(tempdir, keep) None
+    }
+
+    class OmrEngineConfig {
+        <<C++ struct, include/omr_adapter.hpp>>
+        +string engine = "oemer"
+        +string python = "python"
+        +bool pythonExplicit = false
+        +string audiverisJar
+        +string toolsDir
+        +int timeoutMs = 120000
+        +bool preprocess = false
+    }
+
+    class OmrAdapter {
+        <<C++ src/omr_adapter.cpp>>
+        +runOmr(input, outMusicXml, cfg, err) bool
+        +isOmrEngineAvailable(cfg, detail) bool
+        +resolveOmerPython(cfg) string
+    }
+
+    class OmrOemerRunner {
+        <<unchanged tools/omr_oemer.py>>
+        +_parse_args(argv) tuple
+        +main() int
+    }
+
+    OmrPreprocessModule ..> PreprocessConfig : 构造/净化
+    OmrPreprocessModule ..> DeskewDecision : decide_deskew 返回
+    OmrPreprocessModule ..> PreprocessMetrics : build_metrics 返回
+    OmrPipelineModule ..> PipelineArgs : parse_args 返回
+    OmrPipelineModule ..> OmrPreprocessModule : load_config / preprocess_for_omr
+    OmrPipelineModule ..> OmrOemerRunner : 子进程调用（argv 透传）
+    OmrAdapter --> OmrEngineConfig : 读取 preprocess 分派
+    OmrAdapter ..> OmrPipelineModule : preprocess==true
+    OmrAdapter ..> OmrOemerRunner : preprocess==false（与 P0-2 前逐字节一致）

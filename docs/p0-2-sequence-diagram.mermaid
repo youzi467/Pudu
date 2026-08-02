@@ -1,0 +1,57 @@
+sequenceDiagram
+    autonumber
+    participant U as 用户 CLI
+    participant M as main.cpp
+    participant A as omr_adapter::runOmr
+    participant P as tools/omr_pipeline.py
+    participant C as tools/omr_preprocess.py
+    participant O as tools/omr_oemer.py (未改)
+    participant E as oemer.ete
+    participant FS as 文件系统
+
+    U->>M: Pudu --from-omr in.jpg --omr-engine oemer --omr-preprocess
+    M->>M: omrPreprocess=true → cfg.preprocess=true
+    M->>A: runOmr(in.jpg, in.jpg.pudu.musicxml, cfg, err)
+    A->>A: engine=="oemer" && preprocess → script="/omr_pipeline.py"
+    A->>P: "<py>" "<tools>/omr_pipeline.py" "in.jpg" "in.jpg.pudu.musicxml"
+
+    P->>P: split_args → positional / private / passthrough
+    P->>P: resolve_out_path → out="in.jpg.pudu.musicxml"（显式）
+    P->>C: load_config(--preprocess-config | env | tools/*.json | DEFAULTS)
+    C-->>P: (cfg, config_source, warnings)
+    P->>P: should_preprocess? 图像扩展名 && !--no-preprocess
+    P->>FS: mkdtemp(pudu_omr_pre_*)
+    P->>C: preprocess_for_omr(in.jpg, <tmp>/in.pre.png, cfg)
+    C->>C: _lazy_cv2()  # 此刻才 import cv2
+    C->>C: gray → shadow → contrast → denoise
+    C->>C: _estimate_skew_angle → decide_deskew(angle, cfg)
+    C->>C: (可选) rotate → crop → binarize → resize
+    C->>FS: imwrite(<tmp>/in.pre.png)
+    C-->>P: metrics(ok=true, degraded=false, ...)
+
+    alt 预处理失败 / 无 cv2 / 非图像输入（R-P1-04 降级）
+        C-->>P: metrics(ok=false, degraded=true, degrade_reason=...)
+        P->>P: stderr "[警告][preprocess] 增强失败，降级使用原图"
+        P->>P: downstream_input = 原始 in.jpg
+    else 预处理成功
+        P->>P: downstream_input = <tmp>/in.pre.png
+    end
+
+    P->>O: "<py>" omr_oemer.py "<downstream_input>" "in.jpg.pudu.musicxml" [--gt ... --f3-geometric ...]
+    O->>O: _parse_args → positional=2 → 使用显式 out_path
+    O->>O: out_dir=dirname(out_path); produced=out_dir/<stem>.musicxml
+    O->>E: sys.argv=["oemer", downstream_input, "-o", out_dir]; ete.main()
+    E->>FS: 写 out_dir/<stem>.musicxml (+ <stem>.geometry.json)
+    O->>FS: os.replace(<stem>.geometry.json → in.jpg.pudu.geometry.json)
+    O->>FS: os.replace(<stem>.musicxml → in.jpg.pudu.musicxml)
+    O->>O: correct_key_signature(out_path, gt)
+    O-->>P: rc
+
+    P->>FS: 写 in.jpg.pudu.preprocess.json（metrics）
+    P->>FS: finally: rmtree(<tmp>)（--keep-temp 则保留并打印）+ 清理 out_dir/*.pre.* 残留
+    P-->>A: rc（透传下游退出码）
+    A->>A: outputLooksValid(out) → 校验 score-partwise
+    A-->>M: true
+    M->>U: [OMR] 产出 MusicXML
+
+    note over M,O: no-op 路径：未传 --omr-preprocess → cfg.preprocess=false<br/>runOmr 直接调 omr_oemer.py，命令串与 P0-2 前逐字节一致；<br/>omr_pipeline.py / omr_preprocess.py 从不被加载，零临时文件、零 sidecar

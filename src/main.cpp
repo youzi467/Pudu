@@ -85,6 +85,7 @@ int main(int argc, char* argv[]) {
     std::cout << "=== 谱渡 Pudu · MusicXML 解析骨架 ===" << std::endl;
 
     // 阶段1 OMR 黑盒集成：--from-omr <input> [--omr-engine oemer|audiveris|fixture]
+    //   [--omr-preprocess] 打开 P0-2 前置图像增强（默认关；关时链路与 P0-2 之前完全一致）。
     //   经 omr_adapter 调子进程 OMR 引擎产出 MusicXML，再喂入既有解析器流水线。
     //   fixture 引擎为 C++ 原生（确定性、零外部依赖），用于 ctest 与沙箱演示；
     //   oemer 为默认真引擎目标（待用户环境具备 oemer 与乐谱图片时实跑）。
@@ -93,6 +94,7 @@ int main(int argc, char* argv[]) {
     std::string omrEngine = "oemer";
     std::string omrPythonPath;
     bool omrPythonExplicit = false;
+    bool omrPreprocess = false;     // P0-2：--omr-preprocess 打开前置图像增强（默认关）
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--from-omr" && i + 1 < argc) {
@@ -106,6 +108,8 @@ int main(int argc, char* argv[]) {
             omrPythonExplicit = true;
             omrPythonPath = argv[i + 1];
             ++i;
+        } else if (a == "--omr-preprocess") {
+            omrPreprocess = true;
         }
     }
 
@@ -117,6 +121,7 @@ int main(int argc, char* argv[]) {
 #ifdef PUDU_TOOLS_DIR
         cfg.toolsDir = PUDU_TOOLS_DIR;
 #endif
+        cfg.preprocess = omrPreprocess;
         if (omrPythonExplicit && !omrPythonPath.empty()) {
             cfg.python = omrPythonPath;
             cfg.pythonExplicit = true;
