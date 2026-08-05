@@ -760,7 +760,7 @@ graph TD
 
 ## 12. 实验结论（T05 执行后回填）
 
-> **状态（2026-08-05 更新）**：P1-2 实现已全部落地并通过单测；**轨 A 真机 oemer sweep 已于 2026-08-05 在修复后代码（p0-2.2 预处理 + Bug B 修复）上重跑完成**，真实数值结论见 **§12.5**（此前一次 run 因缓存未感知预处理版本复用修复前结果，数值无效已作废）。**轨 B（退化语料）尚未执行**——那是验证预处理真实收益的关键实验，见 §13 推荐下一步 #1。所有结论性数字均由真机跑出，**未凭空填写**（呼应 SK-11）。
+> **状态（2026-08-05 更新）**：P1-2 实现已全部落地并通过单测；**轨 A 真机 oemer sweep 已于 2026-08-05 在修复后代码（p0-2.2 预处理 + Bug B 修复）上重跑完成**，真实数值结论见 **§12.5**（此前一次 run 因缓存未感知预处理版本复用修复前结果，数值无效已作废）。**轨 B 真机 oemer sweep 已于 2026-08-05 在修复后代码（p0-2.2 + Bug B）上重跑完成**（合成退化语料 n=36），真实数值结论见 **§12.6**；轨 A + 轨 B 综合判定见 **§12.7**（preprocess_default=off / postcorrect_default=off / confidence=directional-only，与轨 A 一致，且退化图上预处理方向性负向）。所有结论性数字均由真机跑出，**未凭空填写**（呼应 SK-11）。
 
 ### 12.1 本实现轮已验证（不依赖 oemer / GPU）
 
@@ -908,6 +908,106 @@ python -m tools.omr_abtest_p1_2 report --work-root data/omr_eval/_abtest/p1_2 --
 - **Bug B（BeatReconcile 在干净 GT 上破 P1-1 红线）**：修复前 Stage-3 13/13 **FAIL** → `postcorrect_default=fail`；修复后（`src/jianpu_postcorrect.cpp` 的 `requireMeterCorroboration` 审计门）13/13 **PASS** → `postcorrect_default` 恢复正常判定（结果为 off，但系增益门槛未达，非红线阻断）。
 
 **关键洞察（呼应设计 §13 洞察 2）**：轨 A 干净语料上「预处理 = neutral」是**语料与被测能力不匹配**的预期结果——oemer 的 CNN 对这张干净、高对比度的 concerto 扫描件免疫于这些预处理变换，不证明预处理「无效」。预处理是否有真实收益，须在**轨 B 退化语料**（拍照/低对比度/阴影/旋转/模糊）上验证，那是把结论从「看起来无用」提升到「在困难图上有/无用」的唯一低成本路径。轨 A 的结论仅对 concerto 这类干净谱型成立，不外推（U5）。
+
+### 12.6 真机轨 B 实测结论（2026-08-05 · p0-2.2 预处理 + Bug B 修复后，合成退化语料）
+
+> **数值有效性声明（provenance）**：本节数值来自 `p1_2_railB`，在修复后代码（p0-2.2 + Bug B）上**真机重跑**。退化语料由 `tools/omr_degrade_corpus.py` 对 6 页 concerto 做 5 种合成退化（gblur/jpeg40/shadow/rot15/lowc）生成，6×(1+5)=36 页困难图、gt 不变（与 §12.5 同属修复后代码，无缓存失效问题）。下方数值为真实产出。
+
+> **SK-10 日志文件名损坏（已知小瑕疵，非阻塞）**：真机日志中 fatal 页名出现字符脱落（如 `concerto-in-a-minor-a-vivaldi_p__gblur`、`...vvaldi...`、`p1_gblur` 缺下划线、`4__rot15` 缺 `p` 等）。这是 harness 打印 fatal 页时的**日志字符串损坏**（仅影响展示），真实页为 `concerto-in-a-minor-a-vivaldi_p1__gblur` 与 `concerto-in-a-minor-a-vivaldi_p4__rot15`，与 §1/§4/§5 一致，不影响结论。可后续修 `omr_abtest_p1_2.py` 的 SK-10 打印逻辑。
+
+**环境指纹**（取自 `abtest_report.md §2`）：
+
+| 项 | 值 |
+|---|---|
+| `pudu_exe_sha256` | `693c6b4d701451aa` |
+| `oemer_version` | `0.1.8` |
+| `preprocess_config_sha256` | `8f22f0dc7897bfc2`（= p0-2.2，与轨 A 同） |
+| `eval_lib_sha256` | `dc5da2cdc8359d58` |
+| `git_head` | `dfdb0aeb0234` |
+| `thresholds.min_improved_pages` | `24` |
+| `thresholds.max_worsened_pages` | `6` |
+| `bootstrap_seed` | `20260801` |
+
+**cell 矩阵**（14 cell，baseline = `pre_off__pc_off`；n=36 退化页）：
+
+| cell_id | arm | postcorrect | note_pass% | field_pass% | notes | 降级页 | fatal | 后处理 applied/flagged |
+|---|---|---|---|---|---|---|---|---|
+| `pre_off__pc_off` | pre_off | off | 7.37 | 31.45 | 5128 | 0 | 2 | 0/0 |
+| `pre_off__pc_on` | pre_off | on | 7.39 | 31.46 | 5128 | 0 | 2 | 10/233 |
+| `pipe_noop__pc_off` | pipe_noop | off | 7.37 | 31.45 | 5128 | ⚠ 36 | 2 | 0/0 |
+| `pipe_noop__pc_on` | pipe_noop | on | 7.39 | 31.46 | 5128 | ⚠ 36 | 2 | 10/233 |
+| `pre_default__pc_off` | pre_default | off | 10.92 | 3.29 | 3306 | ⚠ 4 | 0 | 0/0 |
+| `pre_default__pc_on` | pre_default | on | 10.92 | 3.30 | 3306 | ⚠ 4 | 0 | 6/261 |
+| `pre_scan__pc_off` | pre_scan | off | 6.03 | 0.43 | 3087 | ⚠ 8 | 2 | 0/0 |
+| `pre_scan__pc_on` | pre_scan | on | 6.03 | 0.43 | 3087 | ⚠ 8 | 2 | 3/224 |
+| `pre_photo__pc_off` | pre_photo | off | 4.62 | -3.02 | 3010 | ⚠ 4 | 1 | 0/0 |
+| `pre_photo__pc_on` | pre_photo | on | 4.62 | -3.02 | 3010 | ⚠ 4 | 1 | 0/170 |
+| `pre_low_contrast__pc_off` | pre_low_contrast | off | 8.87 | 11.61 | 3711 | ⚠ 7 | 2 | 0/0 |
+| `pre_low_contrast__pc_on` | pre_low_contrast | on | 8.87 | 11.62 | 3711 | ⚠ 7 | 2 | 9/193 |
+| `pre_photo_nodeskew__pc_off` | pre_photo_nodeskew | off | 4.62 | -3.02 | 3010 | ⚠ 4 | 1 | 0/0 |
+| `pre_photo_nodeskew__pc_on` | pre_photo_nodeskew | on | 4.62 | -3.02 | 3010 | ⚠ 4 | 1 | 0/170 |
+
+> `pipe_noop` 的「⚠ 36 降级页」= `degrade_reason=skipped:no_preprocess_flag`（控制臂显式无预处理，预期标注）；`pre_*` 的「降级页」为相对 baseline 真正变差的页数（pre_default=4 / pre_scan=8 / pre_photo=4 / pre_low_contrast=7 / pre_photo_nodeskew=4），均触发 SK-10 排除。`fatal=2` 的 cell 其 fatal 页为 `p1__gblur` + `p4__rot15`（见下方阻断性发现）。
+
+**Δ 表（相对各自 baseline）**——退化语料上预处理**普遍负向**（field 大幅下滑，note 仅微增）：
+
+| cell_id | baseline | Δnote(pp) | Δfield(pp) | Δevent_count | 改善/恶化/打平 | sign p | CI95(pp) | verdict |
+|---|---|---|---|---|---|---|---|---|
+| `pre_off__pc_on` | `pre_off__pc_off` | +0.02 | +0.01 | +0 | 1/0/35 | 1.0000 | [+0.00,+0.06] | directional |
+| `pipe_noop__pc_off` | `pre_off__pc_off` | +0.00 | +0.00 | +0 | 0/0/36 | 1.0000 | [+0.00,+0.00] | neutral |
+| `pipe_noop__pc_on` | `pipe_noop__pc_off` | +0.02 | +0.01 | +0 | 1/0/35 | 1.0000 | [+0.00,+0.06] | directional |
+| `pre_default__pc_off` | `pre_off__pc_off` | +3.55 | **-28.16** | +4476 | 16/13/7 | 0.7111 | [+0.21,+7.13] | directional |
+| `pre_default__pc_on` | `pre_default__pc_off` | +0.00 | +0.01 | +0 | 0/0/36 | 1.0000 | [+0.00,+0.00] | neutral |
+| `pre_scan__pc_off` | `pre_off__pc_off` | -1.35 | **-31.03** | +4052 | 14/14/8 | 1.0000 | [-5.09,+1.50] | regression |
+| `pre_scan__pc_on` | `pre_scan__pc_off` | +0.00 | +0.00 | +0 | 0/0/36 | 1.0000 | [+0.00,+0.00] | neutral |
+| `pre_photo__pc_off` | `pre_off__pc_off` | -2.75 | **-34.48** | +4618 | 17/13/6 | 0.5847 | [-6.85,+0.87] | regression |
+| `pre_photo__pc_on` | `pre_photo__pc_off` | +0.00 | +0.00 | +0 | 0/0/36 | 1.0000 | [+0.00,+0.00] | neutral |
+| `pre_low_contrast__pc_off` | `pre_off__pc_off` | +1.49 | **-19.84** | +2857 | 17/12/7 | 0.4583 | [-0.57,+3.46] | directional |
+| `pre_low_contrast__pc_on` | `pre_low_contrast__pc_off` | +0.00 | +0.01 | +0 | 0/0/36 | 1.0000 | [+0.00,+0.00] | neutral |
+| `pre_photo_nodeskew__pc_off` | `pre_off__pc_off` | -2.75 | **-34.48** | +4618 | 17/13/6 | 0.5847 | [-6.85,+0.87] | regression |
+| `pre_photo_nodeskew__pc_on` | `pre_photo_nodeskew__pc_off` | +0.00 | +0.00 | +0 | 0/0/36 | 1.0000 | [+0.00,+0.00] | neutral |
+
+**阻断性发现（SK-10）**：fatal 页只有两个，且**出现在每一个 cell（含 `pipe_noop__pc_off` 纯 oemer）**：
+- `concerto-in-a-minor-a-vivaldi_p1__gblur`（高斯模糊·页1）
+- `concerto-in-a-minor-a-vivaldi_p4__rot15`（旋转 1.5°·页4）
+
+→ 这是 **oemer 自身**对这两种合成退化的失效（与我们的预处理无关），按 SK-10 排除出决策；所有 cell 的 `fatal` 列均为这 2 页（部分 cell 仅 `p4__rot15`），决策口径统一可比。
+
+**决策（取自 `abtest_report.md §8`）**：
+
+- `preprocess_default` = **`off`**（维持 opt-in）
+  - `pre_default`：C0 可比(无 fatal)✅｜C1 降级页=4 ❌｜C2 Δnote=+3.55pp(≥1.0 过) Δfield=-28.16pp(≥1.0 **未过**)❌｜C3 最差维度 rhythm=-6.49pp(≥-1.0)❌｜C4 改善/恶化=16/13(≥24/≤6)❌｜C5 Δevent_count=+4476(≤0)❌ ⇒ 不推荐默认开
+  - `pre_low_contrast`：C1 降级页=7 ❌｜C2 Δnote=+1.49pp Δfield=-19.84pp ❌｜C3 rhythm=-7.41pp ❌｜C4 17/12 ❌｜C5 +2857 ❌｜verdict=directional(p=0.4583) ⇒ 不推荐默认开
+  - `pre_photo`：C2 Δnote=-2.75 Δfield=-34.48 ❌｜C3 rhythm=-13.18pp ❌｜C4 17/13 ❌｜C5 +4618 ❌｜verdict=regression(p=0.5847) ⇒ 不推荐默认开
+  - `pre_scan`：C2 Δnote=-1.35 Δfield=-31.03 ❌｜C3 rhythm=-9.24pp ❌｜C4 14/14 ❌｜C5 +4052 ❌｜verdict=regression(p=1.0000) ⇒ 不推荐默认开
+  - **无 preset 通过 C1–C5** ⇒ `preprocess_default=off`。最佳候选 `pre_low_contrast`（Δfield=-19.84pp / Δnote=+1.49pp / verdict=directional），但仍为负向 field，不推荐默认开。
+  - R1 归因：photo(-2.75pp) 与 photo_nodeskew(-2.75pp) 完全一致，未构成「deskew 有害」的充分证据（两者差异为 0）。
+- `postcorrect_default` = **`off`**
+  - C1′ 不变量：43/13 份干净 GT 跑 `--apply-postcorrect`，applied 全为 0 ✅（轨 A 同结论，Bug B 修复后稳定 PASS）
+  - SK-10：`pre_off__pc_on` 有 fatal 页 `p1__gblur`+`p4__rot15`，Δ 不可比 ⇒ 取 off
+- `confidence` = **directional-only**（n=36 pages, concerto_pages_degraded 36p）—— 方向性证据，未达统计显著，禁止表述为「已验证/已证明」（SK-11）。
+
+**关键洞察（轨 B 对设计 §13 洞察 2 的修正）**：
+- 轨 A（干净·n=6）= 全部 neutral；轨 B（退化·n=36）= 预处理**方向性负向**（field −19~−34pp，仅 note 微增）。即在**本合成退化语料**上，预处理不仅"无用"，还**显著伤害结构化（field/rhythm）精度**。
+- 机理：Δevent_count 爆炸（+2857~+4618）说明预处理往谱中灌入大量 spurious 事件、破坏节奏结构；这与 Bug C 教训一致——oemer 是**灰度 CNN**，二值化/对比压缩/deskew 等预处理不仅没给它更多线索，反而剥夺其原生灰度线索。
+- **原假设「退化图靠预处理救」在本合成语料下被证伪**：§12.5 末尾设想的「若轨 B 显著正向则分轨开默认」分支**未触发**；结论仍是 `off`。
+- **置信度边界（SK-11 / U5）**：n=36 仍是合成退化（非真实拍摄/扫描），结论仅对"concerto 谱型 + 这 5 种合成退化"成立，**不外推到真实手机拍照/低对比扫描**（需 U4 真实样本，列为 P2-2）。维持 `directional-only`，不称"已验证/已证明"。
+
+### 12.7 综合判定（轨 A + 轨 B 合并 · P1-2 最终分轨建议）
+
+| 维度 | 轨 A（干净·n=6） | 轨 B（退化·n=36） | 合并结论 |
+|---|---|---|---|
+| 预处理默认 | off（全部 neutral） | off（全部负向 field） | **off（维持 opt-in）** |
+| 后处理默认 | off（C1′ PASS，增益门槛未达） | off（C1′ PASS，SK-10 不可比） | **off** |
+| 置信度 | directional-only (n=6) | directional-only (n=36) | **directional-only**（合并 n=42，仍未达显著） |
+| 最佳候选 preset | `pre_default`（neutral） | `pre_low_contrast`（directional 负向最小） | 手动 opt-in 仅推荐 `pre_low_contrast`，且须用户自担 field 风险 |
+
+**P1-2 最终交付判定（一句话）**：
+> 预处理与后处理在「默认开关」维度**均维持 off**；两者在任何 preset / 任何语料（干净或合成退化）上均无统计显著增益，且在退化图上预处理对 field/rhythm **方向性有害**。产品侧维持「opt-in、默认关」；若用户手动开启预处理，引擎侧唯一低风险候选为 `pre_low_contrast`（仅做对比度增强、破坏性最小），但仍不保证 field 不降。所有结论置信度为 directional-only，真实拍摄样本（U4）验证留待 P2-2。
+
+**对设计原假设的修正**：
+- 设计 §0 洞察 2 / §8-U3 设想"退化图是预处理显身手的地方"——**本合成语料未支持该设想**，反而显示负向。这不改"语料-能力不匹配"判断，但把方向从"中性"推到"负向"，强化"oemer 灰度 CNN 不需预处理"的结论。
+- 不做"对退化类输入默认开预处理"的分轨（§12.5 provenance 规则设想的分支未触发）。
 
 ---
 
