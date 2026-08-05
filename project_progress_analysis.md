@@ -60,7 +60,7 @@
 ## 4. 当前进行中 / 焦点事项
 
 ### 4.1 已落地并已于 2026-07-20 提交（含推送 private 远端）
-- **Plan A 调号重推断（gt 对齐法）**（`tools/omr_oemer.py`+`omr_eval_groundtruth.py`）：commit `2c53f44`。真实 concerto `pitch_accidental` 82.7%（a 小调不再清零泄漏）。⚠️ 注：gt 对齐法**仅在有 gt 时生效**；真实推理（无 gt）仍回退原 `_apply_alters`，a 小调泄漏仍在 → 见 4.3 的 M2-opt-A2 生产缺口。
+- **Plan A 调号重推断（gt 对齐法）**（`tools/omr_oemer.py`+`omr_eval_groundtruth.py`）：commit `2c53f44`。真实 concerto `pitch_accidental` 82.7%（a 小调不再清零泄漏）。⚠️ 旧注曾称"无 gt 真实推理仍回退原 `_apply_alters` 误清零 a 小调"——该缺口已于 **commit `997b3aa`（M2-opt-A2）** 通过修复版 `_apply_alters`（信任 oemer 显式 alter、仅对未拼写音按调号推断）关闭，见 4.3。
 - **H2 分维指标 + 评测 harness 修正 + gt 按页切分**（`tools/omr_eval_lib.py`/`omr_eval_groundtruth.py`/`_split_gt_per_page.py`）：commit `bbfa420`。
 - **`_merge_align` 同小节音序对齐 fallback**（`tools/omr_eval_lib.py`）：commit `a4e4e96`。真实数据 A/B：event_count 未配对 2197→1926（−12.3%），notes_compared 808→944（+16.8%），note_pass 2.48%→2.65%。
 - **`.gitignore` 排除 OMR 运行产物**：commit `6e5bf5e`。12 项运行产物本地保留、不入库。
@@ -69,12 +69,12 @@
 ### 4.2 已落地但经全量 A/B 证伪：F3 几何校正器（实验性基础设施，不作上线）
 - 实施：oemer sidecar 补丁暴露符头 y/谱线坐标 → Pudu 侧用真实几何重算 step/octave/clef，主攻 `pitch_degree`（占失败音符 ~86%）。
 - 结论：**全量 6 页真实 A/B（oemer 0.1.8）OFF==ON 逐字节相同**，`category_pass` 全维度一致（pitch_octave 46.08% 等），41 个 Python 单测全绿。**F3 对 oemer 0.1.8 零效果**，保留为实验性基础设施、默认 OFF、不作音准改进上线。
-- 根因：oemer 音高虽由几何决定，但其输出符头几何已被自身正确解析，F3 重算未能改变 oemer 原始输出，故 OFF==ON 无差异。下一步精度优化焦点转向 **M2-opt-A2**（见 4.3）。
+- 根因：oemer 音高虽由几何决定，但其输出符头几何已被自身正确解析，F3 重算未能改变 oemer 原始输出，故 OFF==ON 无差异。当时定点下一焦点为 **M2-opt-A2**（见 4.3，现已于 commit `997b3aa` 完成）。
 
 ### 4.3 未决 / 待办（按优先级）
 - **P0 · oemer site-packages 补丁固化**：6 处防御补丁在 `pip install --upgrade oemer` 时丢失；必须 fork oemer 或随 Pudu 分发（阶段4 计划）。
 - **P1 · octave run-to-run 波动排查（已关闭·伪命题）**：受控复跑 12 次（5×GPU+2×CPU+5×F3-on，同图 p1），`pitch_octave` 恒 63.64%、std=0，跨运行八度翻转 0、GPU==CPU。历史「~14pt（46% vs 60%）」为跨评测批次 6 页聚合误读（46.08%=f3 批次；~59.2%=07-20 全曲），非同图推理波动。无需再做。
-- **P2 · 下一优先：Plan A 生产路径缺口（M2-opt-A2，待修）** ⭐：gt 对齐法已修评测期泄漏，但**真实推理无 gt 时回退原 `_apply_alters` 仍把 a 小调合法变化音误清零**。需改用 oemer 检测的调号 + 符头拼写推断 alter（不依赖 gt）。真实瓶颈是 oemer 基础识别质量（`pitch_degree` 14%/`rhythm` 45%），与 octave 波动无关。
+- **P2 · 已完成：Plan A 生产路径缺口（M2-opt-A2，commit `997b3aa`）** ⭐：gt 对齐法已修评测期泄漏；无 gt 真实推理的 a 小调泄漏亦已由修复版 `_apply_alters`（信任 oemer 显式 alter、仅对未拼写音按调号推断）关闭，`tests/test_omr_oemer_altinfer.py` 8 passed、端到端 `correct_key_signature(out, None)` 保留显式变化音。真实瓶颈仍是 oemer 基础识别质量（`pitch_degree` 14%/`rhythm` 45%），与 octave 波动无关。
 - **P3 · F3 几何校正器处置拍板**：F3 已证实零效果、保留为实验性基础设施（默认 OFF、标注清晰），待拍板「保留实验性标注 or 移除」（见 §6/§8）。
 
 ---
@@ -108,7 +108,7 @@
 |---|---|---|
 | **P0** | oemer site-packages 补丁丢失 | 6 处防御补丁在 `pip install --upgrade oemer` 时会全丢；必须 fork 或随 Pudu 分发 |
 | **P1** | octave run-to-run 波动排查（已关闭·伪命题） | 受控复跑 12 次（5×GPU+2×CPU+5×F3-on，同图 p1）：`pitch_octave` 恒 63.64%、std=0，跨运行八度翻转 0、GPU==CPU。历史「~14pt」为跨评测批次 6 页聚合误读，非同图推理波动。无需再做 |
-| **P2** | **M2-opt-A2 Plan A 生产路径补全（下一优先）** | gt 对齐法已修评测期泄漏；无 gt 真实推理仍回退原 `_apply_alters` 误清零 a 小调变化音；用 oemer 调号+符头拼写推断 alter（不依赖 gt） |
+| **P2（已完成）** | **M2-opt-A2 Plan A 生产路径补全（commit `997b3aa`）** | gt 对齐法已修评测期泄漏；无 gt 真实推理的 a 小调泄漏已由修复版 `_apply_alters`（信任显式 alter）关闭；`tests/test_omr_oemer_altinfer.py` 8 passed |
 | **P2** | 多页纵向拼接加剧八度错乱 | octave_jumps 69 vs 单页 5；真实评测须用单页分页 |
 | **P2** | 近空白页 oemer 崩溃 | 非识别失败，是输入无内容；补丁 #5/#6 仍崩在零谱线 |
 | **P2** | harness 非递归 | `os.listdir(corpus_dir)` 只扫一层，须直接指向 `concerto_pages/` 子目录 |
@@ -147,7 +147,7 @@
 | ✅ 已完成 | 6 F3 提交已推送 + Plan A/H2/对齐/.gitignore + F3 几何校正器 | **DONE** | HEAD==origin/main==0736c92，0/0 同步，零丢失风险已解除 |
 | **P0** | fork oemer 固化 6 防御补丁（或随 Pudu 分发） | 待办 | pip upgrade 即丢，须固化 |
 | **P1** | octave run-to-run 波动排查（已关闭） | **CLOSED** | 受控复跑 12 次 std=0，伪命题，无需再做 |
-| **P2** | **M2-opt-A2 Plan A 生产路径补全**（无 gt 也正确推断 alter） | **下一优先** | 解除真实推理 a 小调泄漏 |
+| **P2（已完成）** | **M2-opt-A2 Plan A 生产路径补全**（无 gt 也正确推断 alter，commit `997b3aa`） | **已完成** | 解除真实推理 a 小调泄漏 |
 | **P3** | **F3 几何校正器处置拍板**（保留实验性标注 or 移除） | 待拍板 | 全量 A/B 零效果（OFF==ON 逐字节相同），实验性基础设施 |
 | **P3** | P0-2 预处理脚本（A/B 由 harness 量化净收益后再决定） | 待办 | 照片类输入鲁棒性 |
 | **P4** | **M2-opt-C 后处理规则引擎/更强 OMR（条件项）** | 待定 | 节拍对账/八度连续性/调内一致性；依 P2 结果定开关 |
