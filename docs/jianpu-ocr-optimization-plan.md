@@ -377,6 +377,7 @@ graph TD
 | **P1-1 后处理规则引擎**（`jianpu_postcorrect`） | ✅ 已落地 + 验证（默认 OFF，需 `--apply-postcorrect`） | 五类规则（BeatReconcile / Accidental / OctaveDot / TupletGroup / RestFill）+ 审计报告 JSON（`--postcorrect-report`）；新增 33 用例（含 7 份出版级 GT 谱语料级 no-op 回归）全绿。**边界**：BeatReconcile 对多声部文档与 `implicit` 小节整条跳过（`<forward>/<backup>` 不物化休止 → target 不可信）；无法修 `pitch_degree`（音名已坍缩为首调音级）。为守不变量，配套加性扩展了 `Measure.beats/beatType/implicit` 与 `Note.tupletNormal`（解析→转换→引擎全链路贯通） |
 | **F3 几何校正器** | ✅ 已落地·零效果·实验性（默认 OFF） | oemer sidecar 暴露几何信息 + Pudu 侧几何→音级重算已落地（41 Python 单测全绿）；**全量 6 页真实 A/B（oemer 0.1.8）OFF==ON 逐字节相同，对 `pitch_degree` 零效果**，保留实验性基础设施、不作上线（处置待拍板） |
 | **P2 fork oemer + 微调** | ⬜ 条件触发 | 待 harness 证明确为 oemer 瓶颈且集中于分割/识别时启动 |
+| **P1-2 预处理 A/B + 后处理前后对比** | 🔧 实现完成 · 真机未跑（待预算） | `tools/omr_abtest_lib.py` + `omr_abtest_p1_2.py` + `omr_degrade_corpus.py`（轨 B，U3）已实现；团队质量关卡 252 全绿（含 14 子测试，未 import cv2/numpy/scipy）+ T04 不变量加固 24 全绿；`plan` 已验证 7 arm × 14 cell 矩阵 + 13-GT 不变量覆盖；**完整 oemer 真机 sweep（≈45 min / 轨 B ≈4 h）未在本实现轮执行**，结论待真机跑后回填 `docs/p1-2-abtest-design.md §12` |
 
 **主测试集**：`data/omr_eval/real/concerto_pages/`（Vivaldi a 小调协奏曲，6 单谱表页）。concerto 分维通过率：
 `pitch_degree` 14.0%（最弱）/ `rhythm` 45.3% / `pitch_octave` 59.2% / `octave_jump` 95.4% / `pitch_accidental` 82.7%（Plan A gt 对齐修复后达标）。（07-20 最新评测，对齐后口径；旧 17.66%/36.98%/96.32% 为 pre-alignment 旧口径，已作废）

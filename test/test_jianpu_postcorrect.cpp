@@ -870,3 +870,189 @@ PC_CORPUS_TEST("data/canon-in-d-violin-solo.musicxml",
 PC_CORPUS_TEST("data/summer-third-movement.musicxml",
                postcorrect_corpus_summer_third_movement)
 
+// P1-2 Bug B 回归：分页 GT 切片。p5(m117-166)/p6(m167-240) 只继承了曲首 4/4，
+//   丢失了原谱 m96 处的 4/4 -> 2/4 变拍号，整页声明 4/4、实际每小节 2.0 拍。
+//   修复前 BeatReconcile 在这两份【干净 GT】上分别静默自修 7 处 / 4 处（破红线）。
+PC_CORPUS_TEST("data/omr_eval/real/concerto_pages/concerto-in-a-minor-a-vivaldi_p5.gt.musicxml",
+               postcorrect_corpus_vivaldi_page5_stale_meter)
+PC_CORPUS_TEST("data/omr_eval/real/concerto_pages/concerto-in-a-minor-a-vivaldi_p6.gt.musicxml",
+               postcorrect_corpus_vivaldi_page6_stale_meter)
+
+// ======================================================================
+// 13. P1-2 Bug B：拍号可信度自证（meter corroboration）
+//
+//   红线：声明拍号被段内多数小节否证时，BeatReconcile 的对账前提不成立，
+//         必须整段退出（既不自修也不标记）。
+//   反向保证：拍号被佐证时，孤立的真实节拍错误仍要照修不误。
+// ======================================================================
+
+namespace {
+
+// 直接构造简谱音（绕过 Score/MusicXML，聚焦节拍逻辑）
+JianpuNote jpNote(int degree, int underlines = 0, int augmentDashes = 0, int dots = 0) {
+    JianpuNote n;
+    n.degree = degree;
+    n.underlines = underlines;
+    n.augmentDashes = augmentDashes;
+    n.dots = dots;
+    return n;
+}
+
+// "附点四分 + 八分" = 2.0 拍：真实 p5/p6 GT 里被误改的那种小节形态。
+// 在声明 4/4 下缺 2.0 拍，且只有 #0 能靠"单音一步"(1.5 -> 3.5)精确归零 ->
+// 修复前必然命中"唯一无歧义归责"分支被自修。
+JianpuMeasure twoBeatMeasure(int number) {
+    JianpuMeasure m;
+    m.number = number;
+    m.notes.push_back(jpNote(3, 0, 0, 1));   // 附点四分 = 1.5
+    m.notes.push_back(jpNote(4, 1, 0, 0));   // 八分     = 0.5
+    return m;
+}
+
+// 4 个四分音符 = 4.0 拍（在 4/4 下严格归零）
+JianpuMeasure fourBeatMeasure(int number) {
+    JianpuMeasure m;
+    m.number = number;
+    for (int i = 0; i < 4; ++i) m.notes.push_back(jpNote(1 + i));
+    return m;
+}
+
+// 3 个四分 + 二分 = 5.0 拍（4/4 下溢出 1 拍，唯一归责=末音 2.0 -> 1.0）
+JianpuMeasure fiveBeatMeasure(int number) {
+    JianpuMeasure m;
+    m.number = number;
+    for (int i = 0; i < 3; ++i) m.notes.push_back(jpNote(1 + i));
+    m.notes.push_back(jpNote(4, 0, 1, 0));   // 二分 = 2.0
+    return m;
+}
+
+// 声明 4/4、实际全是 2 拍小节的整页（p5/p6 分页 GT 的最小复现）
+JianpuDoc staleMeterPageDoc(int measureCount) {
+    JianpuDoc doc = buildSingleLineDoc(4, 4);
+    for (int i = 0; i < measureCount; ++i)
+        doc.lines[0].measures.push_back(twoBeatMeasure(i + 1));
+    return doc;
+}
+
+} // anonymous namespace
+
+// (1) ★ 红线：声明拍号失真的整页干净记谱 -> applied/flagged 皆空、逐音不变
+TEST(postcorrect_stale_meter_page_is_noop) {
+    JianpuDoc doc = staleMeterPageDoc(6);
+
+    PostCorrectReport rep;
+    JianpuDoc out = correctJianpuDoc(doc, enabledCfg(), rep);
+
+    EXPECT_EQ(rep.applied.size(), 0u);
+    EXPECT_EQ(rep.flagged.size(), 0u);
+    EXPECT_EQ(rep.measuresReconciled, 0);
+    EXPECT_EQ(rep.notesTouched, 0);
+    EXPECT_TRUE(sameDoc(doc, out));   // 输出与输入语义等价
+}
+
+// (2) 对照组：关掉自证门就会退回 Bug B 的错误行为，证明门确实是修复点
+TEST(postcorrect_stale_meter_without_audit_reproduces_bug) {
+    JianpuDoc doc = staleMeterPageDoc(6);
+
+    PostCorrectConfig cfg = enabledCfg();
+    cfg.requireMeterCorroboration = false;   // 仅用于对照，CI 红线要求恒 true
+    PostCorrectReport rep;
+    JianpuDoc out = correctJianpuDoc(doc, cfg, rep);
+
+    // 首小节按弱起豁免，其余 5 小节均被"单音一步"静默自修
+    EXPECT_EQ(countKind(rep.applied, CorrectionKind::BeatReconcile), 5);
+    EXPECT_FALSE(sameDoc(doc, out));
+}
+
+// (3) 反向保证：拍号被段内多数小节佐证时，孤立的真实节拍错误仍照修不误
+TEST(postcorrect_corroborated_meter_still_fixes_real_error) {
+    JianpuDoc doc = buildSingleLineDoc(4, 4);
+    for (int i = 0; i < 7; ++i)
+        doc.lines[0].measures.push_back(fourBeatMeasure(i + 1));
+    doc.lines[0].measures.push_back(fiveBeatMeasure(8));   // 唯一一处真实溢出
+
+    PostCorrectReport rep;
+    JianpuDoc out = correctJianpuDoc(doc, enabledCfg(), rep);
+
+    EXPECT_EQ(countKind(rep.applied, CorrectionKind::BeatReconcile), 1);
+    EXPECT_EQ(rep.measuresReconciled, 1);
+    EXPECT_EQ(rep.notesTouched, 1);
+
+    const Correction* c = findKind(rep.applied, CorrectionKind::BeatReconcile);
+    EXPECT_TRUE(c != nullptr);
+    if (c) {
+        EXPECT_EQ(c->measure, 8);
+        EXPECT_EQ(c->noteIndex, 3);
+        EXPECT_TRUE(c->confidence >= 1.0);
+    }
+    // 末音由二分改回四分，小节归零
+    const JianpuNote& fixed = out.lines[0].measures[7].notes[3];
+    EXPECT_EQ(fixed.augmentDashes, 0);
+    EXPECT_EQ(fixed.underlines, 0);
+    EXPECT_EQ(fixed.dots, 0);
+}
+
+// (4) 门限不可过敏：少数几处一致偏差不足以否证被多数小节佐证的拍号
+TEST(postcorrect_minority_deviation_does_not_distrust_meter) {
+    JianpuDoc doc = buildSingleLineDoc(4, 4);
+    for (int i = 0; i < 6; ++i)
+        doc.lines[0].measures.push_back(fourBeatMeasure(i + 1));
+    doc.lines[0].measures.push_back(fiveBeatMeasure(7));   // 2 处同样的溢出
+    doc.lines[0].measures.push_back(fiveBeatMeasure(8));   // bestAlt=2 < onTarget=6
+
+    PostCorrectReport rep;
+    correctJianpuDoc(doc, enabledCfg(), rep);
+
+    EXPECT_EQ(countKind(rep.applied, CorrectionKind::BeatReconcile), 2);
+    EXPECT_EQ(rep.measuresReconciled, 2);
+}
+
+// (5) 样本过少时不裁决拍号：既有小规模用例（1~3 小节）行为逐字不变
+TEST(postcorrect_meter_audit_needs_enough_samples) {
+    JianpuDoc doc = buildSingleLineDoc(4, 4);
+    doc.lines[0].measures.push_back(fourBeatMeasure(1));   // 干净，避免被当弱起
+    doc.lines[0].measures.push_back(twoBeatMeasure(2));    // 唯一一处缺 2 拍
+
+    PostCorrectReport rep;
+    correctJianpuDoc(doc, enabledCfg(), rep);
+
+    // 可统计小节只有 2 个 (< kMeterAuditMinMeasures=4)，不裁决 -> 维持原行为
+    EXPECT_EQ(countKind(rep.applied, CorrectionKind::BeatReconcile), 1);
+}
+
+// (6) 拍号段独立裁决：元数据失真时整段退出；如实声明变拍号时两段各自自洽
+TEST(postcorrect_meter_audit_is_per_time_signature_run) {
+    // (a) 后半段【谎称】仍是 4/4 -> 全篇同一拍号段，2.0 拍共识(5) > 归零数(4)
+    //     -> 整段否证 -> 连前半段那处真实溢出也一并保守放弃
+    JianpuDoc doc = buildSingleLineDoc(4, 4);
+    for (int i = 0; i < 4; ++i)
+        doc.lines[0].measures.push_back(fourBeatMeasure(i + 1));
+    doc.lines[0].measures.push_back(fiveBeatMeasure(5));
+    for (int i = 0; i < 5; ++i) {
+        JianpuMeasure m = twoBeatMeasure(6 + i);
+        m.beats = 4; m.beatType = 4;
+        doc.lines[0].measures.push_back(m);
+    }
+
+    PostCorrectReport rep;
+    correctJianpuDoc(doc, enabledCfg(), rep);
+    EXPECT_EQ(rep.applied.size(), 0u);
+    EXPECT_EQ(rep.flagged.size(), 0u);
+
+    // (b) 后半段【如实】声明 2/4 -> 切成两段，各自自洽 -> 前段真实溢出照修
+    JianpuDoc doc2 = buildSingleLineDoc(4, 4);
+    for (int i = 0; i < 4; ++i)
+        doc2.lines[0].measures.push_back(fourBeatMeasure(i + 1));
+    doc2.lines[0].measures.push_back(fiveBeatMeasure(5));
+    for (int i = 0; i < 5; ++i) {
+        JianpuMeasure m = twoBeatMeasure(6 + i);
+        m.beats = 2; m.beatType = 4;      // 如实声明变拍号
+        doc2.lines[0].measures.push_back(m);
+    }
+
+    PostCorrectReport rep2;
+    correctJianpuDoc(doc2, enabledCfg(), rep2);
+    EXPECT_EQ(countKind(rep2.applied, CorrectionKind::BeatReconcile), 1);
+    EXPECT_EQ(rep2.flagged.size(), 0u);
+}
+

@@ -54,5 +54,45 @@ test_omr_pipeline.musicxml
 # 生成的简谱 HTML
 river_1_jianpu.html
 
+# OMR 预处理/增强管道产物（P0-2：tools/omr_preprocess.py / omr_pipeline.py）
+# R-P0-04：omr_oemer.py 用 input basename 落产物，命名口径须与之一致
+# oemer 推理 sidecar（含 *.jpg.pudu.geometry.json）
+data/*.geometry.json
+# omr_pipeline 写的增强指标 sidecar
+data/*.preprocess.json
+# oemer 额外预览图（PNG 非确定，不纳入比对/版本控制）
+data/*_teaser.png
+# 根目录 T03 增强预览图（用户手跑时可能落在仓库根）
+out_*.png
+# 根目录 T03 显式 --metrics 落盘
+out_*.preprocess.json
+
 # 验证期临时构建/诊断产物
 .pcdeps/
+
+# ===== 工程/QA 验证期诊断产物（非交付物）=====
+# 仅锚定仓库根，不影响 tools/ 下既有下划线脚本（如 _split_gt_per_page.py）。
+# 来自 Bug A/B/C 与 P1-2 真机验证的 scratch，不属于交付物。
+/_*.py
+/_*.txt
+/_*.ps1
+/_*.json
+/_*_verify/
+/_qa_*/
+/_bugb_*/
+/_bugc_*/
+
+# OMR 测试临时输出（根目录，非交付物）
+/test_omr_*.musicxml
+
+# QA 结果快照（无下划线前缀的遗留 scratch，非交付物）
+/qa_result.txt
+/qa1_verify.txt
+/full_result.txt
+/suite_result.txt
+
+# 误落在 docs/ 下的同类诊断快照
+docs/_*.txt
+
+# 预处理/QA 在 data/ 下产生的诊断目录（非交付物）
+data/_bugc_*/

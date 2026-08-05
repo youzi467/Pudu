@@ -228,7 +228,12 @@ class PipelineE2EStubTest(unittest.TestCase):
         runner = _Runner(returncode=1)
         rc, _stdout, _stderr = self._run([self.src, self.out], runner)
         self.assertEqual(rc, 1)
-        self.assertFalse(os.path.exists(os.path.dirname(runner.last_input)))
+        # fix (b) fail-open 兜底会再对原图跑一次（raw 也 rc=1），故"首次"调用
+        # 的 input 才是增强临时图；临时目录仍须在 finally 中被删除。
+        enhanced_input = runner.calls[0][2]
+        self.assertIn(omr_pipeline.TEMP_DIR_PREFIX, enhanced_input)
+        self.assertFalse(os.path.exists(os.path.dirname(enhanced_input)),
+                         "下游失败后临时目录必须删除")
 
     def test_keep_temp_preserves_dir_and_prints_path(self):
         self._install_success_stub()
@@ -322,11 +327,17 @@ class PipelineE2EStubTest(unittest.TestCase):
         self.assertIn("[警告] 下游告警", stderr)
 
     def test_stdout_contains_only_downstream_output(self):
-        """stdout 纯净：pipeline 自身诊断一律走 stderr。"""
+        """stdout 纯净：pipeline 自身诊断一律走 stderr。
+
+        fix (b) 兜底会让下游被再调用一次（增强失败后回退原图），故 stdout 可能
+        出现重复的下流输出——但绝不可混入 pipeline 自身以 ``[preprocess]`` 开头的
+        诊断（那些只走 stderr）。
+        """
         self._install_success_stub()
         runner = _Runner(stdout="DOWNSTREAM-ONLY\n", emit_out=True)
         _rc, stdout, stderr = self._run([self.src, self.out], runner)
-        self.assertEqual(stdout, "DOWNSTREAM-ONLY\n")
+        self.assertIn("DOWNSTREAM-ONLY", stdout)
+        self.assertNotIn("[preprocess]", stdout)
         self.assertIn("[preprocess]", stderr)
 
     def test_degraded_run_still_forwards_rc(self):

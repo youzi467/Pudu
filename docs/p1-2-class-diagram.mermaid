@@ -1,0 +1,185 @@
+%% 谱渡 Pudu · P1-2 预处理 A/B + 后处理前后对比 · 类图
+%% 抽取自 docs/p1-2-abtest-design.md §4.1
+%% 纯函数层：omr_abtest_lib.py（ArmSpec/CellResult/DeltaResult/Decision 等）
+%% 编排层：omr_abtest_p1_2.py（AbtestDriver）
+%% harness 接线：omr_eval_groundtruth.py（OemerOpts/ProjectOpts）
+classDiagram
+    class ArmSpec {
+        +str arm_id
+        +Optional~str~ preprocess
+        +Optional~str~ preprocess_config
+        +bool f3_geometric
+        +str label
+        +to_oemer_opts() OemerOpts
+    }
+
+    class ScoreSpec {
+        +bool postcorrect
+        +bool emit_report
+        +str suffix
+        +to_project_opts(report_dir) ProjectOpts
+    }
+
+    class DecisionThresholds {
+        +float min_note_pass_gain_pp
+        +float min_field_pass_gain_pp
+        +float max_category_regress_pp
+        +int min_improved_pages
+        +int max_worsened_pages
+        +bool require_zero_degraded
+        +float postcorrect_min_field_gain_pp
+        +int bootstrap_iters
+        +int bootstrap_seed
+    }
+
+    class ExperimentConfig {
+        +str run_id
+        +str corpus_dir
+        +str work_root
+        +Tuple~ArmSpec~ arms
+        +Tuple~ScoreSpec~ scores
+        +Tuple baseline_cell
+        +bool reuse_oemer_cache
+        +bool deskew_probe
+        +DecisionThresholds thresholds
+        +EnvFingerprint env
+        +plan_cells() List~CellPlan~
+    }
+
+    class EnvFingerprint {
+        +str pudu_exe_sha256
+        +str oemer_version
+        +str preprocess_config_sha256
+        +str eval_lib_sha256
+        +str git_head
+    }
+
+    class CellPlan {
+        +str cell_id
+        +ArmSpec arm
+        +ScoreSpec score
+        +str workspace_dir
+        +str cache_dir
+        +bool needs_oemer
+    }
+
+    class PreprocessMetricsSummary {
+        +int pages_total
+        +List~str~ degraded_pages
+        +Dict~str,str~ degrade_reasons
+        +Dict~str,str~ deskew_decisions
+        +Dict~str,float~ deskew_applied_deg
+        +Dict~str,float~ ink_ratio_out
+        +float total_ms_mean
+        +bool any_degraded()
+    }
+
+    class PostCorrectSummary {
+        +int applied_total
+        +int flagged_total
+        +int measures_reconciled
+        +int notes_touched
+        +Dict~str,int~ by_kind
+    }
+
+    class CellResult {
+        +str cell_id
+        +str arm_id
+        +bool postcorrect
+        +float note_pass_rate
+        +float field_pass_rate
+        +int notes_compared
+        +Dict~str,float~ category_pass
+        +Dict~str,int~ category_distribution
+        +Dict~str,float~ per_page_note_pass
+        +List~str~ fatal_files
+        +PreprocessMetricsSummary preprocess
+        +PostCorrectSummary postcorrect_stats
+        +str raw_report_path
+    }
+
+    class DeltaResult {
+        +str cell_id
+        +str baseline_cell_id
+        +float d_note_pass_pp
+        +float d_field_pass_pp
+        +Dict~str,float~ d_category_pass_pp
+        +Dict~str,int~ d_category_count
+        +int d_event_count
+        +int pages_improved
+        +int pages_worsened
+        +int pages_tied
+        +float sign_test_p
+        +Tuple~float,float~ ci95_note_pass_pp
+        +str verdict
+        +bool degraded_contaminated
+    }
+
+    class InvariantResult {
+        +bool passed
+        +int gt_files_checked
+        +Dict~str,int~ applied_per_file
+        +List~str~ violations
+    }
+
+    class Decision {
+        +str preprocess_default
+        +List~str~ preprocess_criteria_trace
+        +str postcorrect_default
+        +List~str~ postcorrect_criteria_trace
+        +List~str~ blocking_findings
+        +str confidence
+    }
+
+    class AbtestDriver {
+        -ExperimentConfig cfg
+        +plan() List~CellPlan~
+        +prepare_workspace(CellPlan) str
+        +run_cell(CellPlan) CellResult
+        +check_invariant() InvariantResult
+        +run_all() AbtestSummary
+    }
+
+    class AbtestSummary {
+        +ExperimentConfig config
+        +List~CellResult~ cells
+        +List~DeltaResult~ deltas
+        +InvariantResult invariant
+        +Decision decision
+        +to_json() dict
+        +to_markdown() str
+    }
+
+    class OemerOpts {
+        +Optional~str~ preprocess
+        +Optional~str~ preprocess_config
+        +Optional~str~ preprocess_metrics
+        +bool f3_geometric
+    }
+
+    class ProjectOpts {
+        +bool postcorrect_pred
+        +bool postcorrect_gt
+        +Optional~str~ postcorrect_report
+    }
+
+    ExperimentConfig "1" *-- "N" ArmSpec
+    ExperimentConfig "1" *-- "N" ScoreSpec
+    ExperimentConfig "1" *-- "1" DecisionThresholds
+    ExperimentConfig "1" *-- "1" EnvFingerprint
+    ExperimentConfig ..> CellPlan : plan_cells()
+    CellPlan "1" --> "1" ArmSpec
+    CellPlan "1" --> "1" ScoreSpec
+    ArmSpec ..> OemerOpts : to_oemer_opts()
+    ScoreSpec ..> ProjectOpts : to_project_opts()
+    AbtestDriver "1" --> "1" ExperimentConfig
+    AbtestDriver ..> CellResult : run_cell()
+    AbtestDriver ..> InvariantResult : check_invariant()
+    AbtestDriver ..> AbtestSummary : run_all()
+    CellResult "1" *-- "1" PreprocessMetricsSummary
+    CellResult "1" *-- "1" PostCorrectSummary
+    AbtestSummary "1" *-- "N" CellResult
+    AbtestSummary "1" *-- "N" DeltaResult
+    AbtestSummary "1" *-- "1" InvariantResult
+    AbtestSummary "1" *-- "1" Decision
+    DeltaResult ..> CellResult : compares

@@ -39,6 +39,17 @@ struct PostCorrectConfig {
     bool flagOctaveJumps   = true;     // 异常八度跳变标记
     bool enforceKeyConsistency = true; // 调内/临时记号一致性
     bool conservative = true;          // true=非节拍类仅高置信自修，其余仅标记
+
+    // P1-2 Bug B 修复：拍号可信度自证（meter corroboration）。
+    //   BeatReconcile 的全部结论都建立在"小节目标拍值 target 正确"这一前提上。
+    //   当拍号元数据本身失真（分页 GT 丢失曲中变拍号、OMR 未识别拍号等），
+    //   target 是错的，于是【整段】小节都被误判为"不足/溢出"，其中恰好能被
+    //   "单音一步"归零的那几处会被静默自修 —— 干净输入 applied>0，红线即破。
+    //   开启后：逐拍号段统计"实际占拍"，若存在一个被更多小节一致认同的占拍值
+    //   否证了声明拍号，则判定该段 target 不可信，BeatReconcile 整段跳过
+    //   （既不改也不标）。该门只会【减少】输出，不会新增任何修正。
+    // 🔴 CI 红线依赖此项为 true —— 关闭仅供单测对比两分支行为。
+    bool requireMeterCorroboration = true;
 };
 
 // 修正类别（对应五类规则）

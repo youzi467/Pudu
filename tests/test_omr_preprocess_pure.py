@@ -10,6 +10,10 @@
 * **fail-open**：注入异常后 ``ok=False`` / ``degraded=True`` 且
   ``degrade_reason`` 非空；``fail_open=False`` 时如实抛出。
 * :func:`is_supported_input` / :func:`is_noop_config` 的判定边界。
+* **Bug C 过度预处理**：:func:`safe_denoise_strength` 的线宽感知钳制
+  （1px 五线必须关掉去噪）、:func:`staffline_retention` /
+  :func:`is_over_processed` 的熔断阈值与"无法判定时不熔断"契约，
+  以及新增 metrics 字段的默认值/类型。
 """
 
 import math
@@ -26,10 +30,12 @@ for _p in (TOOLS, REPO_ROOT):
 
 import omr_preprocess  # noqa: E402
 from omr_preprocess import (  # noqa: E402
-    DEFAULTS, METRICS_SCHEMA, TIMING_STEPS, TOOL_VERSION,
+    DEFAULTS, METRICS_SCHEMA, STAFFLINE_RETENTION_MIN, TIMING_STEPS,
+    TOOL_VERSION,
     DeskewDecision, PreprocessConfig,
-    build_metrics, decide_deskew, is_noop_config, is_supported_input,
-    preprocess_for_omr,
+    build_metrics, decide_deskew, is_noop_config, is_over_processed,
+    is_supported_input, preprocess_for_omr, safe_denoise_strength,
+    staffline_retention,
 )
 
 
@@ -159,8 +165,14 @@ class BuildMetricsTest(unittest.TestCase):
         "mean_intensity_in", "mean_intensity_out",
         "mean_contrast_in", "mean_contrast_out",
         "binarize_method", "bin_thresh", "ink_ratio_out",
+        # Bug C 诊断字段：五线保真度（线宽 / 实际去噪核 / 能量留存）
+        "staffline_thickness_px", "denoise_strength_applied",
+        "staffline_energy_in", "staffline_energy_out", "staffline_retention",
         "deskew_angle_est_deg", "deskew_applied_deg", "deskew_decision",
         "steps_timing_ms", "total_ms", "warnings", "tool_version",
+        # fix (b) fail-open 兜底追踪字段（默认空，fail-open 时填充）
+        "fell_back_to_raw", "enhanced_oemer_rc", "enhanced_oemer_stderr",
+        "raw_oemer_rc", "raw_oemer_stderr",
     }
 
     def test_empty_call_produces_full_schema(self):
@@ -351,6 +363,127 @@ class FailOpenTest(unittest.TestCase):
         payload = json.loads(json.dumps(metrics, ensure_ascii=False))
         self.assertFalse(payload["ok"])
         self.assertTrue(payload["degrade_reason"])
+
+
+class SafeDenoiseStrengthTest(unittest.TestCase):
+    """Bug C 防线①：中值滤波核的线宽感知钳制（纯函数）。
+
+    安全条件 ``k <= 2t - 1``（推导见 :func:`safe_denoise_strength` 文档串）。
+    railA 语料实测 ``t=1`` -> 必须返回 0（完全关闭去噪）。
+    """
+
+    def test_one_px_staffline_disables_denoise(self):
+        """核心回归：1px 五线时任何请求核都必须被钳成 0。"""
+        for requested in (3, 5, 7, 9):
+            self.assertEqual(safe_denoise_strength(requested, 1.0), 0,
+                             f"requested={requested}")
+
+    def test_two_px_staffline_allows_kernel_three_only(self):
+        """t=2 -> limit=2*2-1=3：只放行最小核，更大的请求一律削到 3。"""
+        self.assertEqual(safe_denoise_strength(3, 2.0), 3)
+        self.assertEqual(safe_denoise_strength(9, 2.0), 3)
+
+    def test_thick_staffline_keeps_requested_kernel(self):
+        """线够粗时不应无谓削弱去噪能力。"""
+        self.assertEqual(safe_denoise_strength(3, 5.0), 3)
+        self.assertEqual(safe_denoise_strength(5, 5.0), 5)
+        self.assertEqual(safe_denoise_strength(9, 5.0), 9)
+
+    def test_even_limit_rounds_down_to_odd(self):
+        """t=3.5 -> limit=2*3-1=5（int 截断），结果必须是奇数。"""
+        result = safe_denoise_strength(9, 3.5)
+        self.assertEqual(result % 2, 1)
+        self.assertEqual(result, 5)
+
+    def test_requested_zero_or_negative_stays_off(self):
+        for requested in (0, -1, 2):
+            self.assertEqual(safe_denoise_strength(requested, 10.0), 0,
+                             f"requested={requested}")
+
+    def test_unmeasurable_thickness_is_conservative(self):
+        """测不出线宽时宁可不去噪——保住五线远比去噪重要。"""
+        for thickness in (None, 0, 0.0, -1.0, float("nan"), "abc"):
+            self.assertEqual(safe_denoise_strength(5, thickness), 0,
+                             f"thickness={thickness!r}")
+
+    def test_garbage_requested_is_safe(self):
+        self.assertEqual(safe_denoise_strength(None, 5.0), 0)
+        self.assertEqual(safe_denoise_strength("x", 5.0), 0)
+
+    def test_return_type_is_int(self):
+        self.assertIsInstance(safe_denoise_strength(5, 5.0), int)
+        self.assertIsInstance(safe_denoise_strength(5, None), int)
+
+
+class StafflineRetentionTest(unittest.TestCase):
+    """Bug C 防线②：五线能量留存率与过度预处理判定（纯函数）。"""
+
+    def test_ratio_is_out_over_in(self):
+        self.assertAlmostEqual(staffline_retention(0.02, 0.01), 0.5)
+        self.assertAlmostEqual(staffline_retention(0.02, 0.02), 1.0)
+
+    def test_undecidable_inputs_return_none(self):
+        """原图本就没有五线 / 输入无效 -> None（不得据此降级）。"""
+        for pair in ((0.0, 0.01), (None, 0.01), (0.02, None),
+                     (-0.1, 0.01), ("x", 0.01)):
+            self.assertIsNone(staffline_retention(*pair), f"pair={pair}")
+
+    def test_over_processed_threshold(self):
+        self.assertTrue(is_over_processed(0.35))     # railA denoise 实测档
+        self.assertTrue(is_over_processed(0.55))
+        self.assertFalse(is_over_processed(0.60))    # 恰等于下限 -> 放行
+        self.assertFalse(is_over_processed(0.97))    # 健康档
+        self.assertFalse(is_over_processed(1.01))
+
+    def test_none_retention_never_trips(self):
+        """无法判定时绝不熔断（避免把测量失败变成功能回归）。"""
+        self.assertFalse(is_over_processed(None))
+        self.assertFalse(is_over_processed("x"))
+        self.assertFalse(is_over_processed(float("nan")))
+
+    def test_custom_threshold(self):
+        self.assertTrue(is_over_processed(0.8, min_retention=0.9))
+        self.assertFalse(is_over_processed(0.8, min_retention=0.7))
+
+    def test_default_threshold_matches_constant(self):
+        self.assertEqual(STAFFLINE_RETENTION_MIN, 0.60)
+
+
+class BugCMetricsFieldTest(unittest.TestCase):
+    """Bug C 新增 metrics 字段的默认值与类型契约。"""
+
+    def test_defaults_are_null_safe(self):
+        metrics = build_metrics()
+        self.assertIsNone(metrics["staffline_thickness_px"])
+        self.assertIsNone(metrics["staffline_energy_in"])
+        self.assertIsNone(metrics["staffline_energy_out"])
+        self.assertIsNone(metrics["staffline_retention"])
+        self.assertEqual(metrics["denoise_strength_applied"], 0)
+        self.assertIsInstance(metrics["denoise_strength_applied"], int)
+
+    def test_values_are_coerced(self):
+        metrics = build_metrics(
+            staffline_thickness_px="1", denoise_strength_applied="5",
+            staffline_energy_in=0.02, staffline_energy_out=0.01,
+            staffline_retention_ratio=0.5)
+        self.assertEqual(metrics["staffline_thickness_px"], 1.0)
+        self.assertEqual(metrics["denoise_strength_applied"], 5)
+        self.assertAlmostEqual(metrics["staffline_retention"], 0.5)
+
+    def test_bad_denoise_applied_falls_back_to_zero(self):
+        self.assertEqual(
+            build_metrics(denoise_strength_applied=None)[
+                "denoise_strength_applied"], 0)
+        self.assertEqual(
+            build_metrics(denoise_strength_applied="x")[
+                "denoise_strength_applied"], 0)
+
+    def test_staffline_timing_key_exists(self):
+        """新增的测量步骤必须进 TIMING_STEPS，否则会被静默丢弃并告警。"""
+        self.assertIn("staffline", TIMING_STEPS)
+        metrics = build_metrics(steps_timing_ms={"staffline": 2.0})
+        self.assertEqual(metrics["steps_timing_ms"]["staffline"], 2.0)
+        self.assertEqual(metrics["warnings"], [])
 
 
 class MathSanityTest(unittest.TestCase):

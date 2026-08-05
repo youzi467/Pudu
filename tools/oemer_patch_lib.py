@@ -13,6 +13,21 @@ json, pathlib, dataclasses, enum, sys, importlib.metadata）。
   5. 编排全部补丁，汇总报告。
 
 行尾铁律：patch 内容 LF；apply 用 core.autocrlf=false；所有 sha 先 LF 归一化。
+
+manifest schema v2 —— 增量补丁链（stages）
+------------------------------------------
+v1 的 ``files[fn]`` 是「一文件一补丁」：``original_sha256_lf`` -> ``patched_sha256_lf``。
+一旦给同一个文件追加新补丁点，``patched_sha256_lf`` 就会变，**已装到旧终态的现网机器**
+会被判成 DRIFT 而 ABORT——用户被迫重装 oemer 才能升级补丁，这是不可接受的。
+
+v2 因此允许 ``files[fn].stages``：一条**有序**的增量补丁链，每级自带
+``from_sha256_lf`` / ``to_sha256_lf``。判定与应用都基于「当前 sha 落在链上的哪一环」：
+
+* sha == 链尾 ``to``            -> ALREADY_PATCHED（全部跳过，幂等）
+* sha == 某级 ``from``          -> CLEAN，从该级起把**后续所有级**依次 apply
+* 其余                          -> DRIFT（abort，绝不猜）
+
+未声明 ``stages`` 的条目自动退化成「单级链」，与 v1 行为逐字节一致。
 """
 
 from __future__ import annotations
@@ -47,18 +62,66 @@ CHECKSUMS_FILE = PATCHES_DIR / "oemer-0.1.8.checksums.json"
 # ---------------------------------------------------------------------------
 
 @dataclasses.dataclass(frozen=True)
+class PatchStage:
+    """增量补丁链上的一级（schema v2）。
+
+    Attributes:
+        patch_file: ``third_party/oemer-patches/`` 下的 patch 名。
+        from_sha256_lf: 应用本级**之前**文件应有的 LF 归一化 sha256。
+        to_sha256_lf: 应用本级**之后**文件应有的 LF 归一化 sha256。
+    """
+    patch_file: str
+    from_sha256_lf: str
+    to_sha256_lf: str
+
+
+@dataclasses.dataclass(frozen=True)
 class PatchSpec:
-    """单个补丁规格（从 checksums.json 的 files 条目构建）。"""
+    """单个文件的补丁规格（从 checksums.json 的 files 条目构建）。
+
+    ``stages`` 为空时退化为「单级链」（schema v1 语义），
+    此时 :attr:`chain` == ``(PatchStage(patch_file, original, patched),)``。
+    """
     file: str                    # 相对 oemer 包根的路径，如 "bbox.py"
-    patch_file: str              # third_party/oemer-patches/ 下的 patch 名
-    original_sha256_lf: str      # 原版文件的 LF 归一化 sha256
-    patched_sha256_lf: str       # 补丁后文件的 LF 归一化 sha256
+    patch_file: str              # third_party/oemer-patches/ 下的 patch 名（链首）
+    original_sha256_lf: str      # 链首之前（wheel 原版）的 LF 归一化 sha256
+    patched_sha256_lf: str       # 链尾之后（终态）的 LF 归一化 sha256
+    stages: tuple = ()           # tuple[PatchStage, ...]；空 = 单级链（v1）
+
+    @property
+    def chain(self) -> tuple:
+        """归一化后的补丁链（永远至少 1 级）。
+
+        Returns:
+            ``tuple[PatchStage, ...]``——v2 直接返回 ``stages``；
+            v1 合成一条单级链，保证下游逻辑只需处理「链」这一种形态。
+        """
+        if self.stages:
+            return tuple(self.stages)
+        return (PatchStage(
+            patch_file=self.patch_file,
+            from_sha256_lf=self.original_sha256_lf,
+            to_sha256_lf=self.patched_sha256_lf,
+        ),)
+
+
+@dataclasses.dataclass(frozen=True)
+class StateDecision:
+    """三态判定的富结果（schema v2：支持增量补丁链）。
+
+    Attributes:
+        state: FileState（CLEAN / ALREADY_PATCHED / DRIFT）。
+        start_index: 若 ``state == CLEAN``，应从 ``spec.chain`` 的哪一环
+            （0-based）开始 apply；其余情况等于 ``len(spec.chain)``（无需 apply）。
+    """
+    state: FileState
+    start_index: int
 
 
 class FileState(enum.Enum):
     """文件三态（主判据 = LF 归一化 sha256）。"""
-    CLEAN = "clean"                # == original_lf sha → 需要 apply
-    ALREADY_PATCHED = "patched"    # == patched_lf sha → 跳过（幂等）
+    CLEAN = "clean"                # == 链上某级 from_sha → 需要从该级起 apply
+    ALREADY_PATCHED = "patched"    # == 链尾 to_sha → 跳过（幂等）
     DRIFT = "drift"                # 两者都不是 → 版本漂移，abort
 
 
@@ -95,7 +158,7 @@ def load_manifest(repo_root: Optional[pathlib.Path] = None) -> tuple[str, list[P
         FileNotFoundError: checksums.json 不存在。
         KeyError / ValueError: manifest 格式错误。
     """
-    root = repo_root if repo_root is not None else REPO_ROOT
+    root = pathlib.Path(repo_root) if repo_root is not None else REPO_ROOT
     manifest_path = root / "third_party" / "oemer-patches" / "oemer-0.1.8.checksums.json"
     if not manifest_path.exists():
         raise FileNotFoundError(
@@ -108,14 +171,54 @@ def load_manifest(repo_root: Optional[pathlib.Path] = None) -> tuple[str, list[P
 
     patches: list[PatchSpec] = []
     for file_name, info in manifest["files"].items():
-        patches.append(PatchSpec(
+        raw_stages = info.get("stages") or []
+        stages = tuple(
+            PatchStage(
+                patch_file=stage["patch_file"],
+                from_sha256_lf=stage["from_sha256_lf"],
+                to_sha256_lf=stage["to_sha256_lf"],
+            )
+            for stage in raw_stages
+        )
+        spec = PatchSpec(
             file=file_name,
             patch_file=info["patch_file"],
             original_sha256_lf=info["original_sha256_lf"],
             patched_sha256_lf=info["patched_sha256_lf"],
-        ))
+            stages=stages,
+        )
+        _validate_chain(spec)
+        patches.append(spec)
 
     return oemer_ver, patches
+
+
+def _validate_chain(spec: PatchSpec) -> None:
+    """校验补丁链自洽：首尾 sha 与扁平字段一致、相邻级首尾相接。
+
+    manifest 是手工维护的，链断了就会在真机上表现成莫名其妙的 DRIFT；
+    在加载期直接抛错，比等到 apply 时才发现要便宜得多。
+
+    Raises:
+        ValueError: 链不自洽。
+    """
+    chain = spec.chain
+    if chain[0].from_sha256_lf != spec.original_sha256_lf:
+        raise ValueError(
+            f"{spec.file}: stages[0].from_sha256_lf 与 original_sha256_lf 不一致\n"
+            f"  stages[0].from = {chain[0].from_sha256_lf}\n"
+            f"  original       = {spec.original_sha256_lf}")
+    if chain[-1].to_sha256_lf != spec.patched_sha256_lf:
+        raise ValueError(
+            f"{spec.file}: stages[-1].to_sha256_lf 与 patched_sha256_lf 不一致\n"
+            f"  stages[-1].to = {chain[-1].to_sha256_lf}\n"
+            f"  patched       = {spec.patched_sha256_lf}")
+    for index in range(1, len(chain)):
+        if chain[index].from_sha256_lf != chain[index - 1].to_sha256_lf:
+            raise ValueError(
+                f"{spec.file}: 补丁链在第 {index + 1} 级断裂\n"
+                f"  上一级 to   = {chain[index - 1].to_sha256_lf}\n"
+                f"  本级 from   = {chain[index].from_sha256_lf}")
 
 
 def locate_oemer_pkg() -> pathlib.Path:
@@ -174,33 +277,45 @@ def lf_normalized_sha256(path: pathlib.Path) -> str:
     return hashlib.sha256(norm).hexdigest()
 
 
-def decide_state(spec: PatchSpec, pkg: pathlib.Path) -> FileState:
-    """三态判定（主判据 = LF 归一化 sha256）。
+def decide_state(spec: PatchSpec, pkg: pathlib.Path) -> StateDecision:
+    """三态判定（主判据 = LF 归一化 sha256），并定位当前在补丁链上的位置。
 
-    判定逻辑：
-      - sha == patched_lf → ALREADY_PATCHED（幂等跳过）
-      - sha == original_lf → CLEAN（需要 apply）
-      - 其它 → DRIFT（版本漂移，abort）
+    判定逻辑（基于 ``spec.chain`` 这条有序增量补丁链）：
+      - sha == 链尾 ``to``            -> ALREADY_PATCHED（全部跳过，幂等）
+      - sha == 链上某级 ``from``      -> CLEAN，从本级起 apply 后续所有级
+      - 其它                          -> DRIFT（版本漂移，abort）
+
+    之所以基于「链」而非扁平的 original/patched，是为了让已经装到旧终态
+    （例如 6 点补丁态）的现网机器能识别自己落在链的第 2 环，从而只补第 7
+    点、而不会被判成 DRIFT。参见 manifest schema v2 文档。
 
     Args:
         spec: 补丁规格。
         pkg: oemer 包目录。
 
     Returns:
-        FileState 枚举值。
+        StateDecision（state + start_index）。
     """
     target = pkg / spec.file
     if not target.exists():
         # 文件不存在也是一种 drift（oemer 可能已重构目录）
-        return FileState.DRIFT
+        return StateDecision(state=FileState.DRIFT, start_index=len(spec.chain))
 
     sha = lf_normalized_sha256(target)
-    if sha == spec.patched_sha256_lf:
-        return FileState.ALREADY_PATCHED
-    elif sha == spec.original_sha256_lf:
-        return FileState.CLEAN
-    else:
-        return FileState.DRIFT
+    chain = spec.chain
+    tail_index = len(chain)
+
+    # 1) 链尾：全部增量级都已 apply（含单级链＝原 ALREADY_PATCHED）
+    if sha == chain[tail_index - 1].to_sha256_lf:
+        return StateDecision(state=FileState.ALREADY_PATCHED, start_index=tail_index)
+
+    # 2) 链上某一级的起点：从这里起 apply 后续所有级
+    for index, stage in enumerate(chain):
+        if sha == stage.from_sha256_lf:
+            return StateDecision(state=FileState.CLEAN, start_index=index)
+
+    # 3) 其余：既不是链尾也不是任何一级起点 → DRIFT
+    return StateDecision(state=FileState.DRIFT, start_index=tail_index)
 
 
 def git_available() -> bool:
@@ -248,23 +363,56 @@ def _git_apply(
     )
 
 
+def _rollback_stages(
+    applied_stages: list[PatchStage],
+    pkg: pathlib.Path,
+    patches_dir: pathlib.Path,
+) -> str:
+    """按反向顺序 reverse-apply 已成功 apply 的各级，回滚到 CLEAN 起点。
+
+    增量链上：stage[i] 的 ``to`` == stage[i+1] 的 ``from``，因此反向依次
+    reverse-apply 已应用的最高级→最低级，即可把文件完整还原到 apply 前的状态。
+
+    Args:
+        applied_stages: 已成功 apply 的各级（顺序 = 应用时的顺序）。
+        pkg: oemer 包目录。
+        patches_dir: patch 文件所在目录。
+
+    Returns:
+        回滚状态描述字符串（成功/失败细节）。
+    """
+    details: list[str] = []
+    for stage in reversed(applied_stages):
+        patch_path = patches_dir / stage.patch_file
+        rb = _git_apply(patch_path, pkg, reverse=True)
+        if rb.returncode == 0:
+            details.append(f"已回滚 {stage.patch_file}")
+        else:
+            detail = rb.stderr.strip() if rb.stderr.strip() else ""
+            details.append(f"回滚失败 {stage.patch_file}{(': ' + detail) if detail else ''}")
+    if all("已回滚" in d for d in details):
+        return "全部回滚成功：" + "; ".join(details)
+    return "回滚异常：" + "; ".join(details)
+
+
 def apply_patch(
     spec: PatchSpec,
     pkg: pathlib.Path,
     patches_dir: pathlib.Path,
     check_only: bool = False,
 ) -> PatchResult:
-    """三态判定 → APPLY/SKIP/ABORT。
+    """三态判定 → APPLY/SKIP/ABORT（schema v2：支持增量补丁链）。
 
     流程：
-      1. decide_state → ALREADY_PATCHED → SKIP
+      1. decide_state → ALREADY_PATCHED → SKIP（幂等；链尾 sha 已匹配）
       2. decide_state → DRIFT → ABORT（打印重生成指引）
-      3. decide_state → CLEAN →
-         a. git apply --check（二次 sanity，失败则 ABORT）
-         b. git apply -p1（实际应用）
-         c. 回验 lf sha == patched_lf，失败则 git apply --reverse 回滚 → ABORT
-         d. 成功 → APPLIED
-      4. check_only=True 时，只判定不实际 apply（CLEAN 报告为「需要 apply」但不执行）
+      3. decide_state → CLEAN → 从 ``start_index`` 起，把链上**后续所有级**
+         依次 apply：
+         a. 逐级 git apply --check（失败则 ABORT 并回滚已应用的上级）
+         b. 逐级 git apply -p1（失败则 ABORT 并回滚）
+         c. 逐级回验 lf sha == 该级 ``to_sha256_lf``，不匹配则 ABORT 并整体回滚
+         d. 全部级成功 → APPLIED
+      4. check_only=True 时，只判定不实际 apply（CLEAN 报告「需补 N 个增量级」）
 
     Args:
         spec: 补丁规格。
@@ -275,13 +423,14 @@ def apply_patch(
     Returns:
         PatchResult（spec + state + outcome + message）。
     """
-    patch_path = patches_dir / spec.patch_file
-    state = decide_state(spec, pkg)
+    decision = decide_state(spec, pkg)
+    state = decision.state
+    chain = spec.chain
 
     if state == FileState.ALREADY_PATCHED:
         return PatchResult(
             spec=spec, state=state, outcome=ApplyOutcome.SKIPPED,
-            message="已打补丁，跳过（幂等）。",
+            message="已打补丁（含全部增量级），跳过（幂等）。",
         )
 
     if state == FileState.DRIFT:
@@ -292,9 +441,9 @@ def apply_patch(
             message=(
                 f"版本漂移（DRIFT）：文件 {spec.file} 的 LF 归一化 sha256\n"
                 f"  实际:   {actual_sha}\n"
-                f"  原版:   {spec.original_sha256_lf}\n"
-                f"  补丁后: {spec.patched_sha256_lf}\n"
-                f"  两者都不匹配 → oemer 可能已升版或文件被手工修改。\n"
+                f"  链首:   {chain[0].from_sha256_lf}\n"
+                f"  链尾:   {chain[-1].to_sha256_lf}\n"
+                f"  不在链上任何一环 → oemer 可能已升版或文件被手工修改。\n"
                 f"  解决方法：\n"
                 f"    1. 确认 oemer 版本: python -c \"import importlib.metadata; print(importlib.metadata.version('oemer'))\"\n"
                 f"    2. 若版本不是 {OEMER_VERSION}，锁版本: pip install oemer=={OEMER_VERSION}\n"
@@ -303,62 +452,76 @@ def apply_patch(
             ),
         )
 
-    # state == CLEAN → 需要 apply
+    # state == CLEAN → 从 start_index 起 apply 链上剩余级
+    pending = chain[decision.start_index:]
     if check_only:
         return PatchResult(
             spec=spec, state=state, outcome=ApplyOutcome.SKIPPED,
-            message="文件为原版（CLEAN），需要打补丁（--check-only 模式未实际应用）。",
-        )
-
-    if not patch_path.exists():
-        return PatchResult(
-            spec=spec, state=state, outcome=ApplyOutcome.ABORTED,
-            message=f"patch 文件不存在: {patch_path}",
-        )
-
-    # 二次 sanity: git apply --check
-    check_result = _git_apply(patch_path, pkg, check_only=True)
-    if check_result.returncode != 0:
-        return PatchResult(
-            spec=spec, state=state, outcome=ApplyOutcome.ABORTED,
             message=(
-                f"git apply --check 失败（patch context 可能不匹配）:\n"
-                f"  {check_result.stderr.strip()}\n"
-                f"  请重新生成补丁: python tools/_regen_oemer_patches.py"
+                f"文件处于补丁链第 {decision.start_index + 1}/{len(chain)} 环（CLEAN），"
+                f"还需应用 {len(pending)} 个增量级"
+                f"（--check-only 模式未实际应用）。"
             ),
         )
 
-    # 实际 apply
-    apply_result = _git_apply(patch_path, pkg, reverse=False)
-    if apply_result.returncode != 0:
-        return PatchResult(
-            spec=spec, state=state, outcome=ApplyOutcome.ABORTED,
-            message=f"git apply 失败:\n  {apply_result.stderr.strip()}",
-        )
+    applied_stages: list[PatchStage] = []
+    for stage in pending:
+        patch_path = patches_dir / stage.patch_file
+        if not patch_path.exists():
+            rb = _rollback_stages(applied_stages, pkg, patches_dir)
+            return PatchResult(
+                spec=spec, state=state, outcome=ApplyOutcome.ABORTED,
+                message=f"patch 文件不存在: {patch_path}\n{rb}",
+            )
 
-    # 回验 sha
-    target = pkg / spec.file
-    applied_sha = lf_normalized_sha256(target)
-    if applied_sha != spec.patched_sha256_lf:
-        # 回滚
-        rollback = _git_apply(patch_path, pkg, reverse=True)
-        rollback_status = "成功" if rollback.returncode == 0 else "失败"
-        rollback_detail = f": {rollback.stderr.strip()}" if rollback.stderr.strip() else ""
-        rollback_msg = f"回滚{rollback_status}{rollback_detail}"
-        return PatchResult(
-            spec=spec, state=state, outcome=ApplyOutcome.ABORTED,
-            message=(
-                f"apply 后 sha 校验失败（回验不匹配）:\n"
-                f"  期望: {spec.patched_sha256_lf}\n"
-                f"  实际: {applied_sha}\n"
-                f"  {rollback_msg}\n"
-                f"  请重新生成补丁: python tools/_regen_oemer_patches.py"
-            ),
-        )
+        # 逐级二次 sanity: git apply --check
+        check_result = _git_apply(patch_path, pkg, check_only=True)
+        if check_result.returncode != 0:
+            rb = _rollback_stages(applied_stages, pkg, patches_dir)
+            return PatchResult(
+                spec=spec, state=state, outcome=ApplyOutcome.ABORTED,
+                message=(
+                    f"git apply --check 失败（patch context 可能不匹配）于 {stage.patch_file}:\n"
+                    f"  {check_result.stderr.strip()}\n"
+                    f"  {rb}\n"
+                    f"  请重新生成补丁: python tools/_regen_oemer_patches.py"
+                ),
+            )
+
+        # 逐级实际 apply
+        apply_result = _git_apply(patch_path, pkg, reverse=False)
+        if apply_result.returncode != 0:
+            rb = _rollback_stages(applied_stages, pkg, patches_dir)
+            return PatchResult(
+                spec=spec, state=state, outcome=ApplyOutcome.ABORTED,
+                message=(
+                    f"git apply 失败于 {stage.patch_file}:\n"
+                    f"  {apply_result.stderr.strip()}\n  {rb}"
+                ),
+            )
+
+        # 逐级回验 sha
+        target = pkg / spec.file
+        applied_sha = lf_normalized_sha256(target)
+        if applied_sha != stage.to_sha256_lf:
+            rb = _rollback_stages(applied_stages, pkg, patches_dir)
+            return PatchResult(
+                spec=spec, state=state, outcome=ApplyOutcome.ABORTED,
+                message=(
+                    f"apply 后 sha 校验失败（回验不匹配）于 {stage.patch_file}:\n"
+                    f"  期望: {stage.to_sha256_lf}\n"
+                    f"  实际: {applied_sha}\n"
+                    f"  {rb}\n"
+                    f"  请重新生成补丁: python tools/_regen_oemer_patches.py"
+                ),
+            )
+
+        # 本级成功，记入已应用列表（供失败回滚使用）
+        applied_stages.append(stage)
 
     return PatchResult(
         spec=spec, state=state, outcome=ApplyOutcome.APPLIED,
-        message="成功应用补丁。",
+        message=f"成功应用 {len(pending)} 个增量级补丁。",
     )
 
 
@@ -406,7 +569,7 @@ def run(
     Returns:
         退出码：0 = 全部 APPLIED/SKIPPED；非 0 = 有 ABORTED。
     """
-    root = repo_root if repo_root is not None else REPO_ROOT
+    root = pathlib.Path(repo_root) if repo_root is not None else REPO_ROOT
     patches_dir = root / "third_party" / "oemer-patches"
 
     # 1. 加载 manifest

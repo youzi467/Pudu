@@ -29,11 +29,29 @@ gt_musicxml=该谱的 ground-truth MusicXML），harness 对每对：
 CLI
 ---
     python omr_eval_groundtruth.py <corpus_dir> [--oemr | --no-oemr]
+        [--preprocess-preset <name> | --no-preprocess]
+        [--preprocess-config <path>] [--preprocess-metrics <path>]
+        [--apply-postcorrect] [--postcorrect-report <path>] [--reuse-pred]
 
   * ``--oemr``    （默认）运行 oemer 把 image 识别为 pred.musicxml 再评测。
   * ``--no-oemr`` 自验：直接用 ``gt.musicxml`` 当 ``pred``（跳过 oemer）。
                   用于验证比对管线本身——此时 ``note_pass_rate`` 必为 100%，
                   ``category_distribution`` 必为空（gt 与自身比对零差异）。
+
+P1-2 A/B 接线（4 处可选参数化，全部 keyword-only 且默认值 == 现行为）
+--------------------------------------------------------------------
+① ``run_oemer(..., preprocess=/preprocess_config=/preprocess_metrics=)``
+   —— ``preprocess is None`` 时直调 ``omr_oemer.py``（历史链路，argv 逐字节
+   不变）；否则改走 P0-2 透明代理 ``omr_pipeline.py``。
+② ``pudu_jianpu_json(..., postcorrect=/postcorrect_report=)`` —— pred 侧可选
+   挂 P1-1 后处理规则引擎。
+③ ``_eval_one`` / ``eval_corpus(..., oemer_opts=/project_opts=/reuse_pred=)``
+   —— 向下透传 + 支持复用磁盘已有 pred（后处理 A/B 不需重跑 oemer）。
+④ CLI 新增上述 opt-in flag；``summary`` 增 ``"experiment"`` 自描述字段。
+
+🔴 红线（SK-7）：所有新参数缺省时，子进程 argv 与 P1-2 前**逐字节一致**，
+由 ``tests/test_omr_eval_groundtruth_wiring.py`` 把关。
+🔴 红线（SK-4）：ground-truth 侧投影**永不**施加 ``--apply-postcorrect``。
 
 环境
 ----
@@ -54,6 +72,8 @@ import json
 import argparse
 import tempfile
 import subprocess
+from dataclasses import dataclass
+from typing import Optional
 
 # ---- 让本目录的 omr_eval_lib 可导入（harness 与 lib 同目录 tools/） ----
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -80,10 +100,72 @@ ROOT = r"C:\Users\13157\WorkBuddy\omr"
 BUILD = os.path.join(ROOT, "build")
 EXE = os.path.join(BUILD, "Pudu.exe")
 OMER_RUNNER = os.path.join(TOOLS_DIR, "omr_oemer.py")
+#: P0-2 预处理透明代理（``run_oemer`` 在 ``preprocess is not None`` 时改走此脚本）。
+PIPELINE_RUNNER = os.path.join(TOOLS_DIR, "omr_pipeline.py")
 VENV_PYTHON = r"C:\Users\13157\.workbuddy\binaries\python\envs\default\Scripts\python.exe"
 
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".pdf")
 GT_SUFFIX = ".gt.musicxml"
+
+#: 路径模板占位符：``preprocess_metrics`` / ``postcorrect_report`` 支持逐页展开。
+BASE_PLACEHOLDER = "{base}"
+
+
+# ----------------------------------------------------------------------
+# P1-2 A/B 实验可选参数载体（默认值 == P0-1 现行为，见 SK-7 红线）
+# ----------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class OemerOpts:
+    """oemer 侧可选参数（P1-2 接线点 ①）。
+
+    Attributes:
+        preprocess: ``None`` = 直调 ``omr_oemer.py``（历史行为，逐字节不变）；
+            ``"off"`` = 经 ``omr_pipeline.py --no-preprocess``（透明代理 sanity）；
+            其余取值 = 经 ``omr_pipeline.py --preprocess-preset <值>``。
+        preprocess_config: 透传 ``--preprocess-config``（仅代理路径可用）。
+        preprocess_metrics: 透传 ``--preprocess-metrics``；支持 ``{base}``
+            占位符，由 :func:`_eval_one` 按当前页 base 展开（SK-5：降级必须
+            逐页可观测）。
+        f3_geometric: 透传 ``--f3-geometric``（P1-2 恒 False，F3 已证零效果）。
+    """
+
+    preprocess: Optional[str] = None
+    preprocess_config: Optional[str] = None
+    preprocess_metrics: Optional[str] = None
+    f3_geometric: bool = False
+
+
+@dataclass(frozen=True)
+class ProjectOpts:
+    """Pudu 投影侧可选参数（P1-2 接线点 ②）。
+
+    Attributes:
+        postcorrect_pred: pred 侧是否加 ``--apply-postcorrect``。
+        postcorrect_gt: 🔴 **SK-4 红线：恒 False**。gt 是参照系，对参照系施加
+            修正等于移动靶心，会让全部 Δ 失真。:func:`eval_corpus` 内有硬断言。
+        postcorrect_report: pred 侧 ``--postcorrect-report`` 落点；支持
+            ``{base}`` 占位符逐页展开。
+    """
+
+    postcorrect_pred: bool = False
+    postcorrect_gt: bool = False
+    postcorrect_report: Optional[str] = None
+
+
+def _expand_base(template, base):
+    """把路径模板中的 ``{base}`` 展开为当前页 base；无占位符则原样返回。
+
+    Args:
+        template: 路径模板（可为 None）。
+        base: 当前页 stem（SK-3：同一页在所有 cell 必须同 stem）。
+
+    Returns:
+        Optional[str]: 展开后的路径；``template`` 为假值时返回 None。
+    """
+    if not template:
+        return None
+    return str(template).replace(BASE_PLACEHOLDER, base)
 
 
 # ----------------------------------------------------------------------
@@ -91,13 +173,30 @@ GT_SUFFIX = ".gt.musicxml"
 # ----------------------------------------------------------------------
 
 def run_oemer(image_path, out_musicxml, gt_path=None, venv_python=VENV_PYTHON,
-              f3_geometric=False):
+              f3_geometric=False,
+              *,
+              preprocess=None,
+              preprocess_config=None,
+              preprocess_metrics=None):
     """调用 ``tools/omr_oemer.py`` 把五线谱图片识别为 MusicXML。
 
     命令：``venv_python tools/omr_oemer.py <image> <out_musicxml> [--gt <gt>]
     [--f3-geometric]``（omr_oemer.py 为位置参数契约，--gt 注入 ground-truth
     做方案A调号后处理重推断，--f3-geometric 开启 F3 几何音高校正，详见
     omr_oemer.py 模块 docstring）。
+
+    **P1-2 接线点 ①**：当 ``preprocess is not None`` 时，runner 换成 P0-2 的
+    透明代理 ``tools/omr_pipeline.py``，argv 构造为::
+
+        [venv_python, PIPELINE_RUNNER, image, out]
+        + (["--no-preprocess"] if preprocess == "off"
+           else ["--preprocess-preset", preprocess])
+        + (["--preprocess-config", cfg]     if cfg)
+        + (["--preprocess-metrics", m]      if m)
+        + (["--gt", gt_path]                if gt_path)      # C4/SK-2：所有 arm 必带
+        + (["--f3-geometric"]               if f3_geometric)
+
+    ``preprocess is None`` 时 argv 与 P0-2 前**逐字节一致**（SK-7 红线）。
 
     Args:
         image_path: 输入五线谱图片路径。
@@ -108,12 +207,35 @@ def run_oemer(image_path, out_musicxml, gt_path=None, venv_python=VENV_PYTHON,
         venv_python: 含 oemer/music21/opencv 的 venv 解释器。
         f3_geometric: 是否透传 ``--f3-geometric`` 给 oemer 运行器（开启 F3
             几何音高校正）。也可经环境变量 ``PUDU_F3_GEOMETRIC=1`` 启用。
+        preprocess: 见 :class:`OemerOpts`。keyword-only，默认 None = 现行为。
+        preprocess_config: 见 :class:`OemerOpts`。keyword-only。
+        preprocess_metrics: 见 :class:`OemerOpts`。keyword-only。
 
     Returns:
         bool: 成功产出有效 MusicXML 为 True，否则 False（并打印原因）。
+
+    Raises:
+        ValueError: SK-8 —— ``preprocess is None``（直调 oemer）时却给了
+            ``preprocess_config`` / ``preprocess_metrics``。私有 flag 不可能
+            被 ``omr_oemer.py`` 识别，静默忽略会让整轮实验白跑，故显式报错。
     """
+    if preprocess is None and (preprocess_config or preprocess_metrics):
+        raise ValueError(
+            "SK-8 私有 flag 隔离：preprocess is None（直调 omr_oemer.py）时"
+            "不允许指定 preprocess_config/preprocess_metrics；"
+            "请显式给定 preprocess（'off' 或 preset 名）以走 omr_pipeline.py 代理")
+
     f3_geometric = f3_geometric or (os.environ.get("PUDU_F3_GEOMETRIC") == "1")
-    cmd = [venv_python, OMER_RUNNER, image_path, out_musicxml]
+    runner = OMER_RUNNER if preprocess is None else PIPELINE_RUNNER
+    cmd = [venv_python, runner, image_path, out_musicxml]
+    if preprocess == "off":
+        cmd += ["--no-preprocess"]
+    elif preprocess:
+        cmd += ["--preprocess-preset", preprocess]
+    if preprocess_config:
+        cmd += ["--preprocess-config", preprocess_config]
+    if preprocess_metrics:
+        cmd += ["--preprocess-metrics", preprocess_metrics]
     if gt_path:
         cmd += ["--gt", gt_path]
     if f3_geometric:
@@ -138,11 +260,19 @@ def run_oemer(image_path, out_musicxml, gt_path=None, venv_python=VENV_PYTHON,
 # 步骤 2/3：Pudu 投影为简谱 JSON
 # ----------------------------------------------------------------------
 
-def pudu_jianpu_json(musicxml_path):
+def pudu_jianpu_json(musicxml_path, *, postcorrect=False,
+                     postcorrect_report=None):
     """封装 ``build/Pudu.exe <musicxml> --to-jianpu-json <out.json>``。
+
+    **P1-2 接线点 ②**：``postcorrect=True`` 时追加 ``--apply-postcorrect``
+    （P1-1 后处理规则引擎，只作用于 Pudu 投影层，与 oemer 无关，见 C3）；
+    ``postcorrect_report`` 非空时再追加 ``--postcorrect-report <path>``
+    输出审计报告。两者默认关闭 ⇒ argv 与 P1-1 前逐字节一致（SK-7 红线）。
 
     Args:
         musicxml_path: 输入 MusicXML 路径（可为 oemer 产出或 ground-truth）。
+        postcorrect: 是否加 ``--apply-postcorrect``。keyword-only，默认 False。
+        postcorrect_report: 审计报告落点（已展开为具体路径）。keyword-only。
 
     Returns:
         dict: 解析后的 JianpuDoc JSON。
@@ -152,9 +282,17 @@ def pudu_jianpu_json(musicxml_path):
     """
     fd, tmp = tempfile.mkstemp(suffix=".json", prefix="eval_jp_")
     os.close(fd)
+    cmd = [EXE, musicxml_path, "--to-jianpu-json", tmp]
+    if postcorrect:
+        cmd += ["--apply-postcorrect"]
+    if postcorrect_report:
+        parent = os.path.dirname(os.path.abspath(postcorrect_report))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        cmd += ["--postcorrect-report", postcorrect_report]
     try:
         proc = subprocess.run(
-            [EXE, musicxml_path, "--to-jianpu-json", tmp],
+            cmd,
             cwd=BUILD, capture_output=True, timeout=120,
         )
         if proc.returncode != 0:
@@ -289,31 +427,75 @@ def _compute_category_pass(notes_compared, cat_note_fail):
     return out
 
 
-def _eval_one(corpus_dir, image_path, gt_path, base, use_oemer, f3_geometric=False):
-    """评测单个 ``(image, gt)`` 对，返回 per-file 报告 dict。"""
+def _eval_one(corpus_dir, image_path, gt_path, base, use_oemer,
+              f3_geometric=False,
+              *,
+              oemer_opts=None,
+              project_opts=None,
+              reuse_pred=False):
+    """评测单个 ``(image, gt)`` 对，返回 per-file 报告 dict。
+
+    Args:
+        corpus_dir: 语料目录（pred 产物落此，harness 不变量）。
+        image_path: 图片路径（``--no-oemr`` 自验时可为 None）。
+        gt_path: ground-truth MusicXML 路径。
+        base: 当前页 stem（SK-3：跨 cell 必须保持一致）。
+        use_oemer: 是否走 oemer 识别路径。
+        f3_geometric: 透传 ``--f3-geometric``（历史参数，保留）。
+        oemer_opts: :class:`OemerOpts` 或 None（None ⇒ 现行为）。
+        project_opts: :class:`ProjectOpts` 或 None（None ⇒ 现行为）。
+        reuse_pred: 跳过 oemer，直接复用磁盘上已有的 ``<base>.pred.musicxml``
+            （P1-2 Stage-2 投影打分：后处理 A/B 完全不需要重跑 oemer）。
+
+    Returns:
+        Tuple[dict, list]: ``(per-file 报告, 逐音符 diff 账本)``。
+    """
     rep = _new_rep(base, image_path, gt_path)
     note_index = 0        # (C) 全局对齐序号，跨文件递增
     note_ledger = []      # (C) 逐音符 diff 账本，评测后写出 omr_eval_note_diffs.json
+    oemer_opts = oemer_opts or OemerOpts()
+    project_opts = project_opts or ProjectOpts()
 
     # —— 步骤 1：oemer 识别（或 --no-oemr 自验取 gt 自身） ——
     if use_oemer:
         pred_musicxml = os.path.join(corpus_dir, base + ".pred.musicxml")
-        # 注入 gt 路径（同名约定：与 image 同 base 的 .gt.musicxml），
-        # 由 omr_oemer.py 做方案A调号后处理重推断，自动受益。
-        # f3_geometric 透传（开启 F3 几何音高校正，仅影响 oemer 识别路径，
-        # 不改比对内核 compare_jianpu_note / _merge_align）。
-        if not run_oemer(image_path, pred_musicxml, gt_path=gt_path,
-                         f3_geometric=f3_geometric):
-            rep["fatal"] = "oemer 识别失败"
-            rep["pred_musicxml"] = image_path
-            return rep, []
+        if reuse_pred:
+            # P1-2 Stage-2：pred 已在 cell 工作区就位（由驱动从 cache 链接进来），
+            # 直接复用，不跑 oemer（≈65s/页 -> 0s）。缺失即 fatal，绝不静默回退
+            # 去跑 oemer——那会让"廉价重跑"悄悄变成"昂贵重跑"。
+            if (not os.path.isfile(pred_musicxml)
+                    or os.path.getsize(pred_musicxml) == 0):
+                rep["fatal"] = f"reuse_pred 指定但 pred 缺失/为空: {pred_musicxml}"
+                rep["pred_musicxml"] = pred_musicxml
+                return rep, []
+            print(f"[oemer] reuse-pred 命中，跳过识别 -> {pred_musicxml}")
+        else:
+            # 注入 gt 路径（同名约定：与 image 同 base 的 .gt.musicxml），
+            # 由 omr_oemer.py 做方案A调号后处理重推断，自动受益。
+            # f3_geometric 透传（开启 F3 几何音高校正，仅影响 oemer 识别路径，
+            # 不改比对内核 compare_jianpu_note / _merge_align）。
+            if not run_oemer(
+                    image_path, pred_musicxml, gt_path=gt_path,
+                    f3_geometric=f3_geometric or oemer_opts.f3_geometric,
+                    preprocess=oemer_opts.preprocess,
+                    preprocess_config=oemer_opts.preprocess_config,
+                    preprocess_metrics=_expand_base(
+                        oemer_opts.preprocess_metrics, base)):
+                rep["fatal"] = "oemer 识别失败"
+                rep["pred_musicxml"] = image_path
+                return rep, []
     else:
         pred_musicxml = gt_path  # 自验：pred 与 gt 同源 -> 零差异
     rep["pred_musicxml"] = pred_musicxml
 
     # —— 步骤 2/3：Pudu 投影 ——
+    # 🔴 SK-4：gt 侧**永不**加 --apply-postcorrect（参照系不可被修正）。
     try:
-        pred_doc = pudu_jianpu_json(pred_musicxml)
+        pred_doc = pudu_jianpu_json(
+            pred_musicxml,
+            postcorrect=project_opts.postcorrect_pred,
+            postcorrect_report=_expand_base(
+                project_opts.postcorrect_report, base))
     except Exception as e:  # noqa: BLE001
         rep["fatal"] = f"Pudu 处理 pred 失败: {e}"
         return rep, []
@@ -438,7 +620,11 @@ def _eval_one(corpus_dir, image_path, gt_path, base, use_oemer, f3_geometric=Fal
 # 语料评测（主入口）
 # ----------------------------------------------------------------------
 
-def eval_corpus(corpus_dir, use_oemer=True, f3_geometric=False):
+def eval_corpus(corpus_dir, use_oemer=True, f3_geometric=False,
+                *,
+                oemer_opts=None,
+                project_opts=None,
+                reuse_pred=False):
     """遍历 corpus_dir 下 ``(image, gt_musicxml)`` 对，量化 oemer→简谱 误差分布。
 
     Args:
@@ -446,16 +632,32 @@ def eval_corpus(corpus_dir, use_oemer=True, f3_geometric=False):
         use_oemer: 是否运行 oemer（False 为 --no-oemr 自验）。
         f3_geometric: 是否透传 ``--f3-geometric`` 给 oemer（开启 F3 几何校正）。
             仅影响 oemer 识别路径；--no-oemr 自验时该参数无效。
+        oemer_opts: :class:`OemerOpts` 或 None（P1-2 接线，默认 None = 现行为）。
+        project_opts: :class:`ProjectOpts` 或 None（同上）。
+        reuse_pred: 复用磁盘上已有 pred，跳过 oemer（P1-2 Stage-2）。
 
     Returns:
         dict: ``{summary:{note_pass_rate, field_pass_rate, category_distribution,
                           files_total, files_ok, notes_compared, notes_correct,
-                          field_checked, field_failed, edge_case},
+                          field_checked, field_failed, edge_case, experiment},
                 per_file:[...], flagged_for_postcorrect:[...]}``
+
+    Raises:
+        FileNotFoundError: 语料目录不存在。
+        RuntimeError: 未发现任何 ``(image, gt)`` 对。
+        AssertionError: SK-4 红线被违反（``project_opts.postcorrect_gt`` 为真）。
     """
     corpus_dir = os.path.abspath(corpus_dir)
     if not os.path.isdir(corpus_dir):
         raise FileNotFoundError(f"语料目录不存在: {corpus_dir}")
+
+    oemer_opts = oemer_opts or OemerOpts()
+    project_opts = project_opts or ProjectOpts()
+    # 🔴 SK-4 硬断言：gt 是参照系，对参照系施加后处理 = 移动靶心，
+    #    会让 12 个 cell 的 Δ 全部失真且错误方向不可预测。此处宁可崩溃也不放行。
+    assert not project_opts.postcorrect_gt, (
+        "SK-4 红线：ProjectOpts.postcorrect_gt 必须恒为 False —— "
+        "ground-truth 侧投影永远不得施加 --apply-postcorrect")
 
     pairs = discover_pairs(corpus_dir, use_oemer)
     if not pairs:
@@ -472,7 +674,10 @@ def eval_corpus(corpus_dir, use_oemer=True, f3_geometric=False):
         else:
             print(f"[info] {base}: image={os.path.basename(image_path)}")
         rep, ledger = _eval_one(corpus_dir, image_path, gt_path, base,
-                                use_oemer, f3_geometric=f3_geometric)
+                                use_oemer, f3_geometric=f3_geometric,
+                                oemer_opts=oemer_opts,
+                                project_opts=project_opts,
+                                reuse_pred=reuse_pred)
         file_reps.append(rep)
         note_ledger_all.extend(ledger)
         if rep.get("fatal"):
@@ -527,6 +732,18 @@ def eval_corpus(corpus_dir, use_oemer=True, f3_geometric=False):
         "category_pass": category_pass,
         "edge_case": edge,
         "fatal_files": [r["file"] for r in file_reps if r.get("fatal")],
+        # —— P1-2 接线点 ④：本次 arm 配置自描述回写（R4 可复现性）——
+        # 纯新增键，不改动任何既有键的取值/口径（SK-7）。
+        "experiment": {
+            "preprocess": oemer_opts.preprocess,
+            "preprocess_config": oemer_opts.preprocess_config,
+            "preprocess_metrics": oemer_opts.preprocess_metrics,
+            "f3_geometric": bool(f3_geometric or oemer_opts.f3_geometric),
+            "postcorrect_pred": bool(project_opts.postcorrect_pred),
+            "postcorrect_gt": bool(project_opts.postcorrect_gt),
+            "postcorrect_report": project_opts.postcorrect_report,
+            "reuse_pred": bool(reuse_pred),
+        },
     }
     # —— (C) 写出逐音符 diff 账本（omr_eval_note_diffs.json / .csv） ——
     note_diffs_path = _write_note_diffs(corpus_dir, note_ledger_all, use_oemer)
@@ -666,13 +883,60 @@ def main(argv=None):
                         help="透传 --f3-geometric 给 oemer 运行器（开启 F3 几何"
                              "音高校正）；也可经环境变量 PUDU_F3_GEOMETRIC=1 启用。"
                              "仅影响 oemer 识别路径，不改比对内核。")
-    parser.set_defaults(use_oemer=True, f3_geometric=False)
+    # —— P1-2 接线点 ④：A/B 实验 opt-in flag（命名与 P0-2 omr_pipeline 一致，C6）——
+    pre = parser.add_mutually_exclusive_group()
+    pre.add_argument("--preprocess-preset", "--omr-preprocess-preset",
+                     dest="preprocess_preset", default=None, metavar="NAME",
+                     help="经 tools/omr_pipeline.py 代理跑预处理，档位名如 "
+                          "default/scan/photo/low_contrast（P0-2 preset）。"
+                          "不指定则直调 omr_oemer.py（历史口径，逐字节不变）。")
+    pre.add_argument("--no-preprocess", dest="no_preprocess",
+                     action="store_true",
+                     help="经 tools/omr_pipeline.py 代理但显式关闭预处理"
+                          "（透明性 sanity arm：产出应与直调完全一致）。")
+    parser.add_argument("--preprocess-config", dest="preprocess_config",
+                        default=None, metavar="PATH",
+                        help="透传 --preprocess-config 给 omr_pipeline.py"
+                             "（须同时指定 --preprocess-preset/--no-preprocess）。")
+    parser.add_argument("--preprocess-metrics", dest="preprocess_metrics",
+                        default=None, metavar="PATH",
+                        help="透传 --preprocess-metrics 给 omr_pipeline.py；"
+                             "支持 {base} 占位符逐页展开（SK-5 降级可观测）。")
+    parser.add_argument("--apply-postcorrect", dest="apply_postcorrect",
+                        action="store_true",
+                        help="pred 侧投影加 --apply-postcorrect（P1-1 后处理"
+                             "规则引擎）。gt 侧永不加（SK-4 红线）。")
+    parser.add_argument("--postcorrect-report", dest="postcorrect_report",
+                        default=None, metavar="PATH",
+                        help="pred 侧后处理审计报告落点；支持 {base} 占位符。")
+    parser.add_argument("--reuse-pred", dest="reuse_pred", action="store_true",
+                        help="跳过 oemer，直接复用语料目录内已有的 "
+                             "<base>.pred.musicxml（P1-2 Stage-2 投影打分）。")
+    parser.set_defaults(use_oemer=True, f3_geometric=False,
+                        no_preprocess=False, apply_postcorrect=False,
+                        reuse_pred=False)
     args = parser.parse_args(argv)
+
+    preprocess = "off" if args.no_preprocess else args.preprocess_preset
+    oemer_opts = OemerOpts(
+        preprocess=preprocess,
+        preprocess_config=args.preprocess_config,
+        preprocess_metrics=args.preprocess_metrics,
+        f3_geometric=args.f3_geometric,
+    )
+    project_opts = ProjectOpts(
+        postcorrect_pred=args.apply_postcorrect,
+        postcorrect_gt=False,          # SK-4：CLI 不提供任何打开它的途径
+        postcorrect_report=args.postcorrect_report,
+    )
 
     try:
         result = eval_corpus(args.corpus_dir, args.use_oemer,
-                             f3_geometric=args.f3_geometric)
-    except (FileNotFoundError, RuntimeError) as e:
+                             f3_geometric=args.f3_geometric,
+                             oemer_opts=oemer_opts,
+                             project_opts=project_opts,
+                             reuse_pred=args.reuse_pred)
+    except (FileNotFoundError, RuntimeError, ValueError) as e:
         print(f"[错误] {e}", file=sys.stderr)
         return 2
 

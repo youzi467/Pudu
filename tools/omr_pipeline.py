@@ -104,6 +104,14 @@ PRIVATE_BOOL_FLAGS: Dict[str, str] = {
 #: （否则 ``--gt path`` 里的 path 会被误当成位置参数），本身原样转发。
 DOWNSTREAM_VALUE_FLAGS = frozenset({"--gt"})
 
+#: fix (b) fail-open 兜底的两个机器可读 degrade_reason 值：
+#:   - 增强图 oemer 失败、自动回退到原图且原图成功 → "降级但识别成功"；
+#:   - 增强图失败、原图也失败 → 标记 fatal（不再二次重跑）。
+_DEGRADE_ENHANCED_FAILED_FALLBACK: str = (
+    "oemer_failed_on_enhanced→fell_back_to_raw")
+_DEGRADE_ENHANCED_FAILED_RAW_ALSO: str = (
+    "oemer_failed_on_enhanced→fell_back_to_raw→raw_also_failed")
+
 _USAGE = (
     "用法: python omr_pipeline.py <input> [<output.musicxml>]\n"
     "      [--preprocess-config <path>] [--preprocess-preset <name>]\n"
@@ -515,6 +523,7 @@ def run(argv: Sequence[str],
 
     temp_dir: Optional[str] = None
     enhanced_stem: Optional[str] = None
+    enhanced: Optional[str] = None
     downstream_in = in_path
     metrics: Dict[str, Any]
 
@@ -574,6 +583,13 @@ def run(argv: Sequence[str],
             if message not in cfg_warnings:
                 _warn(message)
 
+        # 本次是否真的把"增强图"喂给了下游 oemer？
+        # 只有这道路径（带 --preprocess-* 且预处理成功产出增强图）才可能在
+        # fail-open 兜底里触发"回退原图重跑"。off / --no-preprocess / 预处理已
+        # 降级到原图 的路径里 downstream_in 恒等于 in_path，used_enhanced 为
+        # False，绝不二次重跑（见 fix (b) 约束 2）。
+        used_enhanced = (enhanced is not None and downstream_in == enhanced)
+
         # ---- 5. 转发下游（永远显式 2 个位置参数） ----
         cmd = build_downstream_cmd(sys.executable, downstream_script_path(),
                                    downstream_in, out_path, passthrough)
@@ -584,6 +600,50 @@ def run(argv: Sequence[str],
             sys.stdout.write(stdout_text)
         if stderr_text:
             sys.stderr.write(stderr_text)
+
+        # ---- 5b. fail-open 兜底（fix (b)）----
+        # 仅当"本进程确实吃了增强图"（used_enhanced）且下游 oemer 非零退出时兜底：
+        # 自动对**原图**重跑一次 oemer，并把该 cell/page 标记为
+        #   degraded = "oemer_failed_on_enhanced→fell_back_to_raw"
+        # 原始失败 trace（rc/stderr）保留进 metrics，绝不静默吞掉。
+        #
+        # 关键边界（不能破坏）：
+        #   * off / --no-preprocess / 预处理已降级到原图：used_enhanced=False
+        #     → 绝不二次重跑，rc 原样透传。
+        #   * 原图重跑仍失败：不再二次重跑（无死循环），标记 fatal 并透传原图 rc。
+        if used_enhanced and returncode != 0:
+            enhanced_rc = int(returncode)
+            enhanced_err = stderr_text or ""
+            _warn(
+                f"增强图 oemer 识别失败（rc={enhanced_rc}），"
+                f"按 fail-open 兜底改用原图重跑一次: {in_path}")
+
+            fallback_cmd = build_downstream_cmd(
+                sys.executable, downstream_script_path(),
+                in_path, out_path, passthrough)
+            _info("兜底转发下游（原图）: " + " ".join(fallback_cmd))
+            rc2, out2, err2 = execute(fallback_cmd)
+            if out2:
+                sys.stdout.write(out2)
+            if err2:
+                sys.stderr.write(err2)
+
+            metrics["degraded"] = True
+            metrics["fell_back_to_raw"] = True
+            metrics["enhanced_oemer_rc"] = enhanced_rc
+            metrics["enhanced_oemer_stderr"] = enhanced_err
+            metrics["raw_oemer_rc"] = int(rc2)
+            metrics["raw_oemer_stderr"] = err2 or ""
+            if rc2 != 0:
+                # 原图也失败：不再二次重跑，标记 fatal，透传原图 rc
+                metrics["degrade_reason"] = _DEGRADE_ENHANCED_FAILED_RAW_ALSO
+                returncode = rc2
+                _warn(f"兜底原图 oemer 仍失败（rc={rc2}），记录 fatal 不再重跑")
+            else:
+                # 增强失败但原图成功 → fail-open 视为成功
+                metrics["degrade_reason"] = _DEGRADE_ENHANCED_FAILED_FALLBACK
+                returncode = 0
+                _info("兜底原图 oemer 成功（fail-open）")
 
         # ---- 6. metrics sidecar ----
         # P3-2：CLI 显式 --preprocess-metrics 压过配置里的 emit_metrics_sidecar。

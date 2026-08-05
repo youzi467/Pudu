@@ -64,11 +64,15 @@ __all__ = [
     "build_metrics",
     "is_supported_input",
     "is_noop_config",
+    "safe_denoise_strength",
+    "staffline_retention",
+    "is_over_processed",
     "preprocess_for_omr",
 ]
 
 # 工具版本号（写入 metrics，便于回溯是哪一版预处理产生的产物）
-TOOL_VERSION: str = "p0-2.1"
+# p0-2.2: Bug C 修复——五线线宽感知的去噪钳制 + 五线留存自检。
+TOOL_VERSION: str = "p0-2.2"
 
 # metrics sidecar 的 schema 标识（与 .geometry.json 同命名族的独立 schema）
 METRICS_SCHEMA: str = "pudu.omr.preprocess.metrics/v1"
@@ -88,6 +92,7 @@ DEFAULT_CONFIG_FILENAME: str = "omr_preprocess_config.json"
 TIMING_STEPS: Tuple[str, ...] = (
     "read",
     "gray",
+    "staffline",
     "shadow",
     "contrast",
     "denoise",
@@ -102,6 +107,46 @@ TIMING_STEPS: Tuple[str, ...] = (
 # 二值化后墨迹占比的合理区间；越界仅告警（写入 metrics.warnings），不阻断。
 INK_RATIO_WARN_MIN: float = 0.002
 INK_RATIO_WARN_MAX: float = 0.450
+
+# ---------------------------------------------------------------------------
+# Bug C（过度预处理）防线常量
+# ---------------------------------------------------------------------------
+#
+# 背景：railA 实验中 5 个 preset 的 6 页 100% 触发
+# ``StafflineException: align_staffs received an empty staff list``。
+# 逐步骤二分（探针见交付说明）证据：
+#
+#   combo                     staff_pred 占比   oemer 分区 staff 列数
+#   raw / identity            0.0225            8   ✅
+#   clahe_only                0.0219            8   ✅
+#   shadow_only               0.0225            8   ✅
+#   adaptive 二值化 only      0.0278            8   ✅
+#   otsu 二值化 only          0.0281            7   ✅
+#   **denoise(medianBlur 3)** 0.00067           0   ❌
+#   **denoise(medianBlur 5)** 0.00020           0   ❌
+#
+# 即：**二值化无罪，中值滤波才是元凶**。concerto 语料 6 页实测五线线宽
+# 恒为 **1 px**，而 k×k 中值滤波会抹掉厚度 t < k/2 的暗线 —— 1px 五线被
+# medianBlur(3) 整条抹平，oemer 的 unet 因此在整页找不到任何五线栏列。
+
+#: 游程统计时忽略超长暗游程（符干/小节线/实心符头），单位 px。
+STAFFLINE_MAX_RUN_PX: int = 50
+
+#: 五线能量探测：形态学开运算的水平核长 = ``width // 该除数``（下限见后）。
+#: 选 60 而非 30 是为了抗旋转——实测 div30 在 2° 倾斜下留存率跌到 0.49
+#: （会把 ``pre_photo`` 的合法纠偏误判成过度预处理），div60 在 3° 下仍 ≥1.05。
+STAFFLINE_KERNEL_DIVISOR: int = 60
+
+#: 水平核长下限（窄图兜底）。
+STAFFLINE_MIN_KERNEL_PX: int = 15
+
+#: 五线留存率下限。低于此值判定"过度预处理"，走 fail-open 回退原图。
+#: 标定（concerto p1）：健康增强 0.97~1.01（含 3° 旋转 1.05），
+#: 被中值滤波打坏的 0.49~0.55 —— 阈值 0.60 落在 2 倍间隔中间。
+STAFFLINE_RETENTION_MIN: float = 0.60
+
+#: 过度预处理的机器可读 degrade_reason 前缀。
+OVER_PROCESSED_REASON_PREFIX: str = "over_processed:staffline_retention="
 
 # ---------------------------------------------------------------------------
 # 配置单一真源
@@ -687,6 +732,14 @@ def _as_opt_float(value: Any) -> Optional[float]:
     return result
 
 
+def _as_int_or_zero(value: Any) -> int:
+    """把任意值转成 int；不可转时返回 0（metrics 里该字段恒为 int）。"""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def build_metrics(*,
                   ok: bool = True,
                   degraded: bool = False,
@@ -705,12 +758,25 @@ def build_metrics(*,
                   binarize_method: str = "none",
                   bin_thresh: Any = None,
                   ink_ratio_out: Any = None,
+                  # Bug C 诊断字段：五线保真度。None 表示未测量/测不出。
+                  staffline_thickness_px: Any = None,
+                  denoise_strength_applied: Any = 0,
+                  staffline_energy_in: Any = None,
+                  staffline_energy_out: Any = None,
+                  staffline_retention_ratio: Any = None,
                   deskew_angle_est_deg: Any = None,
                   deskew_applied_deg: Any = 0.0,
                   deskew_decision: str = "disabled",
                   steps_timing_ms: Optional[Dict[str, Any]] = None,
                   total_ms: Any = 0.0,
                   warnings: Optional[List[str]] = None,
+                  # fix (b) fail-open 兜底追踪字段：默认空，仅在"增强图 oemer 失败、
+                  # 自动回退原图"时被填充，用于诊断且不静默吞掉原始失败 trace。
+                  fell_back_to_raw: bool = False,
+                  enhanced_oemer_rc: Optional[int] = None,
+                  enhanced_oemer_stderr: str = "",
+                  raw_oemer_rc: Optional[int] = None,
+                  raw_oemer_stderr: str = "",
                   tool_version: str = TOOL_VERSION) -> Dict[str, Any]:
     """构建 metrics sidecar 字典（**纯函数，不依赖 cv2/numpy**）。
 
@@ -759,12 +825,22 @@ def build_metrics(*,
         "binarize_method": str(binarize_method or "none"),
         "bin_thresh": _as_opt_float(bin_thresh),
         "ink_ratio_out": ink,
+        "staffline_thickness_px": _as_opt_float(staffline_thickness_px),
+        "denoise_strength_applied": _as_int_or_zero(denoise_strength_applied),
+        "staffline_energy_in": _as_opt_float(staffline_energy_in),
+        "staffline_energy_out": _as_opt_float(staffline_energy_out),
+        "staffline_retention": _as_opt_float(staffline_retention_ratio),
         "deskew_angle_est_deg": _as_opt_float(deskew_angle_est_deg),
         "deskew_applied_deg": 0.0 if applied is None else applied,
         "deskew_decision": str(deskew_decision or "disabled"),
         "steps_timing_ms": timing,
         "total_ms": round(_as_opt_float(total_ms) or 0.0, 3),
         "warnings": warn_list,
+        "fell_back_to_raw": bool(fell_back_to_raw),
+        "enhanced_oemer_rc": int(enhanced_oemer_rc) if enhanced_oemer_rc is not None else None,
+        "enhanced_oemer_stderr": str(enhanced_oemer_stderr or ""),
+        "raw_oemer_rc": int(raw_oemer_rc) if raw_oemer_rc is not None else None,
+        "raw_oemer_stderr": str(raw_oemer_stderr or ""),
         "tool_version": str(tool_version or TOOL_VERSION),
     }
 
@@ -778,6 +854,80 @@ def is_supported_input(path: Optional[str]) -> bool:
     if not path:
         return False
     return os.path.splitext(str(path))[1].lower() in IMAGE_EXTENSIONS
+
+
+def safe_denoise_strength(requested: Any, staffline_px: Any) -> int:
+    """在不抹掉五线的前提下，返回可安全使用的中值滤波核大小（**纯函数**）。
+
+    推导：``cv2.medianBlur(k)`` 用 ``k×k`` 窗口取中位数。对一条厚度 ``t`` px、
+    背景为白的暗横线，窗口正中压在线上时暗像素数为 ``t*k``；只有
+    ``t*k > k²/2`` 即 ``t > k/2`` 时中位数才仍是暗色。故**安全条件为
+    ``k <= 2t - 1``**。concerto 语料 ``t=1`` -> 允许的最大核为 1（等于不滤波），
+    这正是 railA 五个 preset 全军覆没的算术原因。
+
+    Args:
+        requested: 配置请求的核大小（``cfg.denoise_strength``，0 表示关闭）。
+        staffline_px: 实测五线线宽（px）。None / <=0 表示测不出。
+
+    Returns:
+        实际可用的核大小：奇数且 ``>= 3``，否则返回 0（表示不做去噪）。
+        **测不出线宽时保守返回 0**——保住五线远比去噪重要。
+    """
+    try:
+        want = int(requested)
+    except (TypeError, ValueError):
+        return 0
+    if want < 3:
+        return 0
+
+    try:
+        thickness = float(staffline_px)
+    except (TypeError, ValueError):
+        return 0
+    if not (thickness > 0.0) or thickness != thickness:      # None / 0 / NaN
+        return 0
+
+    limit = 2 * int(thickness) - 1
+    allowed = min(want, limit)
+    if allowed % 2 == 0:                 # 中值滤波核必须为奇数，向下取奇
+        allowed -= 1
+    return allowed if allowed >= 3 else 0
+
+
+def staffline_retention(energy_in: Any, energy_out: Any) -> Optional[float]:
+    """五线能量留存率 = ``energy_out / energy_in``（**纯函数**）。
+
+    Args:
+        energy_in: 增强前的"长横向暗结构"像素占比。
+        energy_out: 增强后的同一指标。
+
+    Returns:
+        留存率；输入无效或 ``energy_in <= 0``（原图本就没有五线）时返回 None，
+        表示**无法判定**——此时不得据此降级。
+    """
+    src = _as_opt_float(energy_in)
+    dst = _as_opt_float(energy_out)
+    if src is None or dst is None or src <= 0.0:
+        return None
+    return dst / src
+
+
+def is_over_processed(retention: Any,
+                      min_retention: float = STAFFLINE_RETENTION_MIN) -> bool:
+    """判定增强是否把五线打坏到 oemer 无法消费（**纯函数**）。
+
+    Args:
+        retention: :func:`staffline_retention` 的结果；None 表示无法判定。
+        min_retention: 留存率下限，默认 :data:`STAFFLINE_RETENTION_MIN`。
+
+    Returns:
+        True 表示过度预处理，调用方应回退原图。**无法判定时返回 False**
+        （宁可放行、由下游 oemer 失败后的 fail-open 兜底，也不误伤好图）。
+    """
+    value = _as_opt_float(retention)
+    if value is None:
+        return False
+    return value < float(min_retention)
 
 
 def is_noop_config(cfg: PreprocessConfig) -> bool:
@@ -904,6 +1054,62 @@ def _gray_stats(gray) -> Tuple[float, float]:
     return float(gray.mean()), float(gray.std())
 
 
+def _ink_mask(cv2, gray):
+    """Otsu 反二值化：墨迹为 255、纸面为 0（仅用于测量，不进主链）。"""
+    _thresh, mask = cv2.threshold(
+        gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    return mask
+
+
+def _estimate_staffline_thickness_px(cv2, numpy, gray) -> float:
+    """估计五线线宽（px）：竖直方向暗游程长度的**众数**。
+
+    这是 OMR 里的经典 staffline-height 估计法：一页乐谱里最常见的竖直暗游程
+    就是五线本身（符头/符干是少数派且更长）。
+
+    实现要点：把掩码**按列展平**（列尾补 0 隔断），再用一维差分定位游程起止，
+    这样起止是按 1D 顺序天然配对的；直接对二维 ``argwhere`` 做行优先配对会
+    在跨列时错配（长短游程互串），是个隐蔽的坑。
+
+    Returns:
+        线宽（px）；测不出时返回 0.0（调用方据此保守关掉去噪）。
+    """
+    mask = (_ink_mask(cv2, gray) > 0).astype(numpy.int8)
+    height, width = mask.shape[:2]
+    if height == 0 or width == 0:
+        return 0.0
+
+    # 列优先展平：padded[c] = 第 c 列的全部像素 + 1 个 0（隔断相邻列）
+    padded = numpy.zeros((width, height + 1), dtype=numpy.int8)
+    padded[:, :height] = mask.T
+    flat = numpy.concatenate((numpy.zeros(1, dtype=numpy.int8), padded.ravel()))
+    diff = numpy.diff(flat.astype(numpy.int16))
+    starts = numpy.flatnonzero(diff == 1)
+    ends = numpy.flatnonzero(diff == -1)
+    if starts.size == 0 or starts.size != ends.size:
+        return 0.0
+
+    lengths = ends - starts
+    lengths = lengths[(lengths > 0) & (lengths <= STAFFLINE_MAX_RUN_PX)]
+    if lengths.size == 0:
+        return 0.0
+    return float(int(numpy.argmax(numpy.bincount(lengths))))
+
+
+def _staffline_energy(cv2, gray) -> float:
+    """"长横向暗结构"像素占比——五线是否还在的直接度量。
+
+    用水平长条核做形态学开运算：只有横跨 ``width/60`` 以上的连续暗像素
+    （即五线）能存活，符头/符干/文字全被滤掉。
+    """
+    mask = _ink_mask(cv2, gray)
+    width = int(mask.shape[1])
+    kernel_len = max(STAFFLINE_MIN_KERNEL_PX, width // STAFFLINE_KERNEL_DIVISOR)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_len, 1))
+    lines = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    return float((lines > 0).sum()) / float(max(1, lines.size))
+
+
 def preprocess_for_omr(src: str, dst: str,
                        cfg: Optional[PreprocessConfig] = None
                        ) -> Dict[str, Any]:
@@ -913,9 +1119,18 @@ def preprocess_for_omr(src: str, dst: str,
 
     固定处理顺序（顺序本身即契约，改动需同步改设计文档）::
 
-        读图 -> 灰度 -> 阴影抑制 -> 对比度归一(CLAHE) -> 去噪(中值)
-             -> 测角 -> decide_deskew -> 旋转(borderValue=255)
-             -> 边框裁切 -> 二值化 -> 缩放 -> GRAY2BGR -> 写 PNG
+        读图 -> 灰度 -> 五线测量(线宽/能量) -> 阴影抑制 -> 对比度归一(CLAHE)
+             -> 去噪(中值·线宽感知钳制) -> 测角 -> decide_deskew
+             -> 旋转(borderValue=255) -> 边框裁切 -> 二值化 -> 缩放
+             -> 五线留存自检 -> GRAY2BGR -> 写 PNG
+
+    Bug C 两道防线（见模块常量处的实证表）：
+
+    1. **去噪钳制**：中值滤波核按实测五线线宽钳到 ``k <= 2t-1``，
+       线宽 1px 时直接关闭去噪——否则 1px 五线会被整条抹平。
+    2. **留存自检**：写盘前比较增强前后的"长横向暗结构"占比，
+       跌破 :data:`STAFFLINE_RETENTION_MIN` 即判过度预处理，**不写增强图**、
+       返回 ``ok=False`` 让上游回退原图（省掉一次注定失败的 oemer 运行）。
 
     Args:
         src: 输入图片路径。
@@ -929,6 +1144,8 @@ def preprocess_for_omr(src: str, dst: str,
 
     Raises:
         Exception: 仅当 ``cfg.fail_open`` 为 False 时向上抛出原始异常。
+        注意留存自检（防线②）是**质量闸门而非异常**，即便
+        ``fail_open=False`` 也只返回 ``ok=False``、不抛出。
     """
     cfg = cfg or PreprocessConfig()
     warnings: List[str] = []
@@ -941,6 +1158,11 @@ def preprocess_for_omr(src: str, dst: str,
     angle_est: Optional[float] = None
     decision = DeskewDecision(False, 0.0, "disabled")
     bin_thresh: Optional[float] = None
+    thickness: Optional[float] = None
+    energy_in: Optional[float] = None
+    energy_out: Optional[float] = None
+    retention: Optional[float] = None
+    denoise_applied: int = 0
 
     def _fail(reason: str) -> Dict[str, Any]:
         """构造降级 metrics（保留已采集到的输入侧统计）。"""
@@ -951,6 +1173,11 @@ def preprocess_for_omr(src: str, dst: str,
             size_in=size_in, size_out=[0, 0],
             mean_intensity_in=mean_in, mean_contrast_in=contrast_in,
             binarize_method=cfg.binarize_method,
+            staffline_thickness_px=thickness,
+            denoise_strength_applied=denoise_applied,
+            staffline_energy_in=energy_in,
+            staffline_energy_out=energy_out,
+            staffline_retention_ratio=retention,
             deskew_angle_est_deg=angle_est,
             deskew_applied_deg=0.0, deskew_decision=decision.reason,
             steps_timing_ms=timing,
@@ -977,6 +1204,19 @@ def preprocess_for_omr(src: str, dst: str,
         timing["gray"] = (time.perf_counter() - step_started) * 1000.0
         mean_in, contrast_in = _gray_stats(gray)
 
+        # --- 2b. 五线基线测量（Bug C 防线的输入侧快照） ---
+        # 测量失败绝不致命：thickness=None -> 去噪保守关闭；
+        # energy_in=None -> 留存自检自动失效（不误伤）。
+        step_started = time.perf_counter()
+        try:
+            thickness = _estimate_staffline_thickness_px(cv2, numpy, gray)
+            energy_in = _staffline_energy(cv2, gray)
+        except Exception as exc:  # noqa: BLE001 - 测量失败不阻断主流程
+            thickness, energy_in = None, None
+            warnings.append(f"五线基线测量失败（去噪将保守关闭）: "
+                            f"{type(exc).__name__}: {exc}")
+        timing["staffline"] = (time.perf_counter() - step_started) * 1000.0
+
         # --- 3. 阴影抑制：闭运算估背景后相除，压掉不均匀光照 ---
         if cfg.enable_shadow_suppress:
             step_started = time.perf_counter()
@@ -996,10 +1236,17 @@ def preprocess_for_omr(src: str, dst: str,
             gray = clahe.apply(gray)
             timing["contrast"] = (time.perf_counter() - step_started) * 1000.0
 
-        # --- 5. 去噪（中值滤波，对椒盐噪声友好且保边） ---
-        if cfg.denoise_strength > 0:
+        # --- 5. 去噪（中值滤波）—— Bug C 防线①：线宽感知钳制 ---
+        # 中值滤波会把窄于 k//2 的暗线整条抹平。concerto 语料五线仅 1px，
+        # 原先固定 k=3 直接删掉全部五线，oemer 因而 100% 抛 empty staff list。
+        denoise_applied = safe_denoise_strength(cfg.denoise_strength, thickness)
+        if denoise_applied != int(cfg.denoise_strength or 0):
+            warnings.append(
+                f"去噪核按五线线宽钳制: {cfg.denoise_strength} -> {denoise_applied}"
+                f"（staffline_thickness_px={thickness}）")
+        if denoise_applied >= 3:
             step_started = time.perf_counter()
-            gray = cv2.medianBlur(gray, int(cfg.denoise_strength))
+            gray = cv2.medianBlur(gray, denoise_applied)
             timing["denoise"] = (time.perf_counter() - step_started) * 1000.0
 
         # --- 6. 测角 + 7. 纠偏决策 + 8. 旋转 ---
@@ -1086,6 +1333,23 @@ def preprocess_for_omr(src: str, dst: str,
         ink_ratio = float((gray < 128).sum()) / float(max(1, gray.size))
         size_out = [int(gray.shape[1]), int(gray.shape[0])]
 
+        # --- 11b. 五线留存自检 —— Bug C 防线②：过度预处理熔断 ---
+        # 只要增强链（任意环节）把长横向暗结构打掉过半，这张增强图对 oemer
+        # 就必然是废图。此时**不写增强图**、直接返回降级，让上游回退原图，
+        # 省掉一次注定 StafflineException 的 oemer 运行。
+        step_started = time.perf_counter()
+        try:
+            energy_out = _staffline_energy(cv2, gray)
+            retention = staffline_retention(energy_in, energy_out)
+        except Exception as exc:  # noqa: BLE001 - 自检失败不阻断主流程
+            energy_out, retention = None, None
+            warnings.append(f"五线留存自检失败（跳过熔断）: "
+                            f"{type(exc).__name__}: {exc}")
+        timing["staffline"] += (time.perf_counter() - step_started) * 1000.0
+        if is_over_processed(retention):
+            return _fail(OVER_PROCESSED_REASON_PREFIX
+                         + f"{float(retention):.3f}")
+
         # --- 12. GRAY2BGR + 写 PNG（oemer 期望三通道输入） ---
         step_started = time.perf_counter()
         output = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
@@ -1105,6 +1369,11 @@ def preprocess_for_omr(src: str, dst: str,
             mean_contrast_in=contrast_in, mean_contrast_out=contrast_out,
             binarize_method=cfg.binarize_method, bin_thresh=bin_thresh,
             ink_ratio_out=ink_ratio,
+            staffline_thickness_px=thickness,
+            denoise_strength_applied=denoise_applied,
+            staffline_energy_in=energy_in,
+            staffline_energy_out=energy_out,
+            staffline_retention_ratio=retention,
             deskew_angle_est_deg=angle_est,
             deskew_applied_deg=decision.angle_deg if decision.apply else 0.0,
             deskew_decision=decision.reason,

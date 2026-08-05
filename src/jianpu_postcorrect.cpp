@@ -156,6 +156,14 @@ double measureTargetQl(const JianpuDoc& doc, const JianpuMeasure& m) {
     return static_cast<double>(beats) * 4.0 / static_cast<double>(beatType);
 }
 
+// —— P1-2 Bug B：拍号可信度自证（meter corroboration）的裁决门限 ——
+//   kMeterAuditMinMeasures：一个拍号段至少要有这么多"可统计小节"才敢裁决拍号
+//     （样本太少时任何结论都是噪声；也保证既有 1~3 小节的单元测试行为不变）。
+//   kMeterAuditMinAgree   ：替代占拍值至少要有这么多小节【一致】才算"共识"
+//     （孤立一处偏差只是普通记谱错误，不足以否证拍号）。
+constexpr int kMeterAuditMinMeasures = 4;
+constexpr int kMeterAuditMinAgree    = 2;
+
 // ======================================================================
 // 1. 文本工具
 // ======================================================================
@@ -301,6 +309,118 @@ void applyFix(EngineState& st, Correction c, int lineIdx, int measureIdx) {
 //
 // 说明：onset 字段不做重排。onset 是"从声部起点算起"的累计时间轴，改一个小节
 //   会级联影响其后所有小节；后处理只修记谱时值，时间轴留给下游按需重算。
+// ----------------------------------------------------------------------
+// P1-2 Bug B 修复：拍号可信度自证（meter corroboration）
+//
+// 背景（红线被破的实证）：
+//   P1-2 railA Stage-3 在干净 GT `concerto-...-vivaldi_p5/p6.gt.musicxml` 上
+//   出现 applied=7/4。根因不在小节，而在【拍号】——原谱 m96 处由 4/4 变为
+//   2/4，而分页切片只继承了曲首的 4/4，于是 p5(m117-166)/p6(m167-240) 整页
+//   声明 4/4、实际每小节 2.0 拍。BeatReconcile 逐小节判"不足 2.0 拍"，其中
+//   恰好能被"单音一步"精确归零的 7/4 处被静默自修 → 干净输入 applied>0。
+//
+// 判据（只用小节自身证据，不引入外部启发式）：
+//   BeatReconcile 的全部结论都以"target 正确"为前提。若在同一拍号段内，
+//   存在某个【非 target 的占拍值】被比 target 更多的小节一致认同，那么更合理
+//   的解释是"声明的拍号错了"而非"这么多小节同时错成一模一样"。此时 target
+//   不可信，本段整体退出对账。
+//
+// 保守性（为什么不会引入新的误判）：
+//   本门只做"跳过"，不新增/不改写任何修正 —— 对任意输入，输出集合都是原先的
+//   子集。因此它只可能减少误报，不可能制造新的红线破坏。
+//   （更激进的"反推真实拍号并按推断值对账"被刻意放弃：一旦 OMR 系统性错到
+//     一致，反推会把正确小节判成错误，属于极性反转风险。）
+//
+// 返回 trusted[mi]：0 表示第 mi 小节所属拍号段的 target 已被否证。
+std::vector<char> auditMeterTrust(const JianpuDoc& doc, const JianpuLine& line) {
+    const size_t n = line.measures.size();
+    std::vector<char> trusted(n, 1);
+    if (n == 0) return trusted;
+
+    // 每小节的节拍快照。countable=false 的小节不作为拍号证据（也不被它影响）。
+    struct BeatStat {
+        bool countable = false;
+        double sum = 0.0;
+        double target = 0.0;
+    };
+    std::vector<BeatStat> stats(n);
+
+    for (size_t mi = 0; mi < n; ++mi) {
+        const JianpuMeasure& m = line.measures[mi];
+        BeatStat& s = stats[mi];
+        s.target = measureTargetQl(doc, m);
+
+        // 与主循环完全一致的"无归责对象"过滤，保证统计口径与对账口径同源。
+        if (m.notes.empty() || m.implicit) continue;
+
+        double sum = 0.0;
+        bool anyUnresolvable = false;
+        bool anyTuplet = false;
+        bool anyTupletMissingNormal = false;
+        for (const auto& nt : m.notes) {
+            sum += noteQuarterLength(nt);
+            if (nt.rhythmUnresolvable) anyUnresolvable = true;
+            if (nt.tuplet > 0) {
+                anyTuplet = true;
+                if (nt.tupletNormal <= 0) anyTupletMissingNormal = true;
+            }
+        }
+        if (anyUnresolvable) continue;                        // 时值没解出来，占拍不可信
+        if (anyTuplet && anyTupletMissingNormal) continue;    // 连音比未知，占拍不可信
+
+        // 记谱惯例允许"合法不足拍"的小节（弱起 / 段落边界）不得作为否证拍号的证据，
+        // 否则一首正常曲子的首小节 + 若干反复段末尾就可能凑出假共识。
+        if (sum - s.target < -kEps && (mi == 0 || m.sectionEnd)) continue;
+
+        s.countable = true;
+        s.sum = sum;
+    }
+
+    // 按 target 变化点切分拍号段（真实变拍号天然分段，各段独立裁决）。
+    size_t runStart = 0;
+    while (runStart < n) {
+        size_t runEnd = runStart + 1;
+        while (runEnd < n &&
+               std::fabs(stats[runEnd].target - stats[runStart].target) < kEps) {
+            ++runEnd;
+        }
+
+        const double target = stats[runStart].target;
+        int countable = 0;
+        int onTarget = 0;
+        std::vector<double> offTarget;
+        for (size_t mi = runStart; mi < runEnd; ++mi) {
+            if (!stats[mi].countable) continue;
+            ++countable;
+            if (std::fabs(stats[mi].sum - target) < kEps) ++onTarget;
+            else offTarget.push_back(stats[mi].sum);
+        }
+
+        // 最大"一致替代占拍值"的支持小节数（按 kEps 容差分组，排序后线性扫描）。
+        std::sort(offTarget.begin(), offTarget.end());
+        int bestAlt = 0;
+        for (size_t i = 0; i < offTarget.size();) {
+            size_t j = i + 1;
+            while (j < offTarget.size() &&
+                   std::fabs(offTarget[j] - offTarget[i]) < kEps) {
+                ++j;
+            }
+            const int groupSize = static_cast<int>(j - i);
+            if (groupSize > bestAlt) bestAlt = groupSize;
+            i = j;
+        }
+
+        // 否证成立：样本足够 + 替代值成共识 + 替代值支持数严格多于 target 支持数。
+        if (countable >= kMeterAuditMinMeasures &&
+            bestAlt >= kMeterAuditMinAgree &&
+            bestAlt > onTarget) {
+            for (size_t mi = runStart; mi < runEnd; ++mi) trusted[mi] = 0;
+        }
+        runStart = runEnd;
+    }
+    return trusted;
+}
+
 void ruleBeatReconcile(EngineState& st, const PostCorrectConfig& cfg,
                        JianpuDoc& doc) {
     // P1-1 返工·安全门：多声部（多行）稀疏声部的小节 target 不可信
@@ -318,6 +438,14 @@ void ruleBeatReconcile(EngineState& st, const PostCorrectConfig& cfg,
 
     for (size_t li = 0; li < doc.lines.size(); ++li) {
         JianpuLine& line = doc.lines[li];
+
+        // P1-2 Bug B：先在【未改写】的原始状态上完成拍号可信度自证，
+        // 得到逐小节的 trusted 标志（自修会改变占拍，必须先算后改）。
+        const std::vector<char> meterTrusted =
+            cfg.requireMeterCorroboration
+                ? auditMeterTrust(doc, line)
+                : std::vector<char>(line.measures.size(), 1);
+
         for (size_t mi = 0; mi < line.measures.size(); ++mi) {
             JianpuMeasure& m = line.measures[mi];
             if (m.notes.empty()) continue;   // 空小节：无归责对象
@@ -325,6 +453,10 @@ void ruleBeatReconcile(EngineState& st, const PostCorrectConfig& cfg,
             // P1-1 返工：不完全小节(implicit)——记谱上的补白/弱起段，target 不适用，
             // 既不改也不标（比"行首弱起"更彻底：任意位置的 implicit 小节都跳过）。
             if (m.implicit) continue;
+
+            // P1-2 Bug B：本小节所属拍号段的 target 已被段内多数小节否证 ->
+            // 对账前提不成立，整段跳过（既不自修也不标记，pendingRestFill 也不进）。
+            if (!meterTrusted[mi]) continue;
 
             // P1-1 返工：逐小节目标拍值（小节自身拍号优先，否则回退文档全局）
             const double target = measureTargetQl(doc, m);

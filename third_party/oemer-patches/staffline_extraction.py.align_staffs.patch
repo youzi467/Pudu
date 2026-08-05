@@ -1,0 +1,23 @@
+--- a/staffline_extraction.py
++++ b/staffline_extraction.py
+@@ -524,6 +524,20 @@
+     if len(len_types) == 1:
+         # All columns contains the same amount of sub-staffs
+         return np.array(staffs)
++
++    # [Pudu patch #7] Guard against an empty staff list. When no zone produced a
++    # staff column (blank page, or an over-processed / over-binarized input),
++    # `len_types` is an empty set and `max(len_types)` below raises the opaque
++    # `ValueError: max() iterable argument is empty`. Returning an empty grid
++    # would only relocate the crash (`further_infer_track_nums` indexes
++    # `staffs.shape[1]`), so raise oemer's own typed StafflineException instead:
++    # explicit, catchable by type, and already handled by the callers
++    # (Pudu: omr_oemer.py -> rc != 0 -> omr_pipeline.py retries the raw image).
++    if not len_types:
++        raise E.StafflineException(
++            "align_staffs received an empty staff list: no staff line column "
++            "was detected on this page (blank page or over-processed input)."
++        )
+ 
+     # Fill sub-staffs into the grid
+     max_len = max(len_types)

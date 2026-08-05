@@ -44,6 +44,8 @@ BBOX_ORIG_LF = "ff72f4b07889c33b63c8978a9abc7145392012396eca86da07b01de8a0e520e3
 BBOX_PATCHED_LF = "126630fbb29a404bb74c8022257ae6ad47ab87ef2762610d7274d14c9f88482f"
 STAFFLINE_ORIG_LF = "ba60d544d0ccd737db11a982a3addf94b31ff433f7572c192b501bd812ad7d9d"
 STAFFLINE_PATCHED_LF = "4717828270d0d9cf826998e25c798048af9cb3a15c922067afe73cafb6fce6bd"
+# 7 点补丁终态（v2 链尾）sha：在 6 点态（471782）之上再补第 7 点守卫
+STAFFLINE_STAGE7_LF = "a37032e2febb01949497a5e8512aba0b82ee8ddce659ff333bfb6005b6712f19"
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PATCHES_DIR = REPO_ROOT / "third_party" / "oemer-patches"
@@ -135,7 +137,7 @@ class TestDecideState(unittest.TestCase):
         sha = lf_normalized_sha256(target)
         spec = _make_patch_spec("test.py", sha, "bbb")
         state = decide_state(spec, self.pkg)
-        self.assertEqual(state, FileState.CLEAN)
+        self.assertEqual(state.state, FileState.CLEAN)
 
     def test_patched_state(self):
         """补丁后文件 → ALREADY_PATCHED。"""
@@ -145,7 +147,7 @@ class TestDecideState(unittest.TestCase):
         sha = lf_normalized_sha256(target)
         spec = _make_patch_spec("test.py", "aaa", sha)
         state = decide_state(spec, self.pkg)
-        self.assertEqual(state, FileState.ALREADY_PATCHED)
+        self.assertEqual(state.state, FileState.ALREADY_PATCHED)
 
     def test_drift_state(self):
         """sha 不匹配任何已知值 → DRIFT。"""
@@ -153,13 +155,13 @@ class TestDecideState(unittest.TestCase):
         target = self.pkg / "test.py"
         target.write_bytes(b"some other content\n")
         state = decide_state(spec, self.pkg)
-        self.assertEqual(state, FileState.DRIFT)
+        self.assertEqual(state.state, FileState.DRIFT)
 
     def test_missing_file_drift(self):
         """文件不存在 → DRIFT。"""
         spec = _make_patch_spec("nonexistent.py", "aaa", "bbb")
         state = decide_state(spec, self.pkg)
-        self.assertEqual(state, FileState.DRIFT)
+        self.assertEqual(state.state, FileState.DRIFT)
 
     def test_crlf_patched_detected_as_patched(self):
         """CRLF 版补丁文件也能被正确识别为 ALREADY_PATCHED（行尾铁律）。"""
@@ -170,7 +172,7 @@ class TestDecideState(unittest.TestCase):
         sha = lf_normalized_sha256(target)
         spec = _make_patch_spec("test.py", "aaa", sha)
         state = decide_state(spec, self.pkg)
-        self.assertEqual(state, FileState.ALREADY_PATCHED)
+        self.assertEqual(state.state, FileState.ALREADY_PATCHED)
 
 
 class TestApplyPatchRealFiles(unittest.TestCase):
@@ -223,6 +225,19 @@ class TestApplyPatchRealFiles(unittest.TestCase):
                          f"Expected APPLIED, got {result.outcome}: {result.message}")
         sha = lf_normalized_sha256(self.pkg / "staffline_extraction.py")
         self.assertEqual(sha, STAFFLINE_PATCHED_LF)
+
+    def test_staffline_staged_to_7point_via_manifest_spec(self):
+        """CLEAN → APPLY（v2 链）：从 manifest 的 staffline spec（含 2 级链）
+        连续 apply 两级，终态 sha == 7 点补丁态（STAFFLINE_STAGE7_LF）。
+        """
+        self._copy_original("staffline_extraction.py")
+        _, specs = load_manifest(REPO_ROOT)
+        spec = next(s for s in specs if s.file == "staffline_extraction.py")
+        result = apply_patch(spec, self.pkg, PATCHES_DIR)
+        self.assertEqual(result.outcome, ApplyOutcome.APPLIED,
+                         f"Expected APPLIED, got {result.outcome}: {result.message}")
+        sha = lf_normalized_sha256(self.pkg / "staffline_extraction.py")
+        self.assertEqual(sha, STAFFLINE_STAGE7_LF)
 
     def test_patched_skip_idempotent(self):
         """PATCHED → SKIP：已打补丁的文件跳过（幂等）。"""
@@ -298,7 +313,13 @@ class TestLoadManifest(unittest.TestCase):
         self.assertEqual(files["bbox.py"].original_sha256_lf, BBOX_ORIG_LF)
         self.assertEqual(files["bbox.py"].patched_sha256_lf, BBOX_PATCHED_LF)
         self.assertEqual(files["staffline_extraction.py"].original_sha256_lf, STAFFLINE_ORIG_LF)
-        self.assertEqual(files["staffline_extraction.py"].patched_sha256_lf, STAFFLINE_PATCHED_LF)
+        self.assertEqual(files["staffline_extraction.py"].patched_sha256_lf, STAFFLINE_STAGE7_LF)
+        # v2：staffline_extraction.py 应含 2 级增量补丁链，链尾 == patched
+        staffline = files["staffline_extraction.py"]
+        self.assertEqual(len(staffline.chain), 2, "应含 2 级增量补丁链")
+        self.assertEqual(staffline.chain[-1].to_sha256_lf, STAFFLINE_STAGE7_LF)
+        self.assertEqual(staffline.chain[0].from_sha256_lf, STAFFLINE_ORIG_LF)
+        self.assertEqual(staffline.chain[1].to_sha256_lf, STAFFLINE_STAGE7_LF)
 
     def test_patch_files_exist(self):
         """patch 文件实际存在。"""

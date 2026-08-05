@@ -1,0 +1,77 @@
+%% 谱渡 Pudu · P1-2 预处理 A/B + 后处理前后对比 · 时序图
+%% 抽取自 docs/p1-2-abtest-design.md §5
+%% 两阶段流水线：Stage-1 OMR sweep（贵、可缓存） / Stage-2 投影打分（廉价、可重跑）
+%% Stage-3 不变量守护 / Stage-4 聚合与统计 / Stage-5 决策与渲染
+sequenceDiagram
+    autonumber
+    actor Eng as 工程师/CI
+    participant Drv as omr_abtest_p1_2.AbtestDriver
+    participant Cfg as ExperimentConfig
+    participant FS as 工作区 _abtest/p1_2/{run_id}
+    participant H as omr_eval_groundtruth.eval_corpus
+    participant Pipe as omr_pipeline.py
+    participant Oem as omr_oemer.py (oemer)
+    participant Pudu as build/Pudu.exe
+    participant Lib as omr_abtest_lib (纯函数)
+
+    Eng->>Drv: run --corpus concerto_pages [--no-deskew-probe]
+    Drv->>Cfg: 构建 ExperimentConfig + EnvFingerprint(哈希 Pudu.exe/config/eval_lib)
+    Cfg-->>Drv: 12 个 CellPlan（6 arm × pc_off/pc_on）
+    Drv->>FS: 写 manifest.json（配置快照 + 阈值 + 指纹）
+
+    rect rgb(238,246,255)
+    note over Drv,Pudu: Stage-1 OMR sweep（6 个 pc_off cell，贵、可缓存）
+    loop 每个 arm（pre_off / pipe_noop / pre_default / pre_scan / pre_photo / pre_low_contrast [+ photo_nodeskew]）
+        Drv->>FS: prepare_workspace(cell) 硬链接 image + gt（同 stem，SK-3）
+        alt cache/{arm}/{base}.pred.musicxml 已存在且非空
+            Drv->>FS: 链接缓存 pred 进 cell 工作区，reuse_pred=True（跳过 oemer）
+        end
+        Drv->>H: eval_corpus(cell_dir, use_oemer=True, oemer_opts=arm.to_oemer_opts(),<br/>project_opts=ProjectOpts(pc_pred=False), reuse_pred=?)
+        loop 每页 (image, gt)
+            alt arm.preprocess is None（基线直调）
+                H->>Oem: omr_oemer.py img out.musicxml --gt gt
+            else 经预处理代理
+                H->>Pipe: omr_pipeline.py img out.musicxml --preprocess-preset P<br/>--preprocess-metrics M --gt gt
+                Pipe->>Pipe: preprocess_for_omr()（异常→fail-open 降级原图，rc 不变）
+                Pipe->>FS: 写 metrics sidecar M（degraded/degrade_reason/deskew_decision/ink_ratio）
+                Pipe->>Oem: omr_oemer.py {增强图或原图} out.musicxml --gt gt（显式 2 位置参数，C5）
+            end
+            Oem-->>H: pred.musicxml
+            H->>Pudu: pred.musicxml --to-jianpu-json（**不带** --apply-postcorrect）
+            H->>Pudu: gt.musicxml --to-jianpu-json（**永不带** postcorrect，SK-4）
+            H->>H: flatten → _merge_align → compare_jianpu_note（口径零改动）
+        end
+        H-->>Drv: harness report（note/field/category_pass/category_distribution）
+        Drv->>FS: pred + geometry + metrics 归档进 cache/{arm}/
+    end
+    end
+
+    rect rgb(240,255,240)
+    note over Drv,Pudu: Stage-2 投影打分（6 个 pc_on cell，廉价、可无限重跑，不碰 oemer）
+    loop 每个 arm
+        Drv->>FS: prepare_workspace(cell) + 从 cache 链接 pred
+        Drv->>H: eval_corpus(cell_dir, use_oemer=True, reuse_pred=True,<br/>project_opts=ProjectOpts(pc_pred=True, report=…))
+        H->>Pudu: pred.musicxml --to-jianpu-json --apply-postcorrect --postcorrect-report R
+        H->>Pudu: gt.musicxml --to-jianpu-json（仍**不带** postcorrect）
+        H-->>Drv: harness report + 后处理审计报告 R
+    end
+    end
+
+    rect rgb(255,246,238)
+    note over Drv,Pudu: Stage-3 不变量守护（红线）
+    loop 6 页 concerto GT + P1-1 的 8 份干净 GT
+        Drv->>Pudu: gt.musicxml --to-jianpu-json --apply-postcorrect --postcorrect-report I
+        Pudu-->>Drv: report I
+        Drv->>Drv: assert I.applied == 0（非 0 → blocking_findings，整轮判 FAIL）
+    end
+    end
+
+    Drv->>Lib: aggregate_cell × 12
+    Lib-->>Drv: CellResult × 12（通过率一律直取 harness summary，零重算）
+    Drv->>Lib: compute_delta(每 cell, baseline=pre_off__pc_off)
+    Lib->>Lib: sign_test_p（精确二项，stdlib）+ bootstrap_ci_by_page（按页重抽样，固定 seed）
+    Lib-->>Drv: DeltaResult × 11 + verdict
+    Drv->>Lib: make_decision(deltas, cells, invariant, thresholds)
+    Lib-->>Drv: Decision（含逐条判据留痕 criteria_trace）
+    Drv->>FS: 写 abtest_summary.json + abtest_report.md
+    Drv-->>Eng: 打印决策 + 报告路径 + 阻断性发现
