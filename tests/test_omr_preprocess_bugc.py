@@ -66,9 +66,16 @@ def setUpModule() -> None:
     global _PROBE, _PROBE_ERROR
     if not _HAS_CV2:
         return
+    # 子进程 stdout 是管道，其编码由**子进程自己的** locale 决定：Windows
+    # 中文环境下是 GBK，而父进程这里按 UTF-8 解码 —— 中文 warning 于是变成
+    # 乱码，任何"断言中文子串"的用例都必然落空。显式把子进程的 IO 编码钉死
+    # 成 UTF-8，与下面的 decode 对齐，让本测试不依赖宿主机的控制台代码页。
+    child_env = dict(os.environ)
+    child_env["PYTHONIOENCODING"] = "utf-8"
     completed = subprocess.run(
         [sys.executable, os.path.abspath(__file__), "--worker"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace")
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        env=child_env)
     stdout = completed.stdout or ""
     if _MARKER not in stdout:
         _PROBE_ERROR = (f"子进程探测失败 rc={completed.returncode}\n"
@@ -411,7 +418,11 @@ def _worker_main() -> int:
         out["presets"] = presets
 
         sys.stdout.write(_MARKER + "\n")
-        sys.stdout.write(json.dumps(out, ensure_ascii=False))
+        # ensure_ascii=True：把中文全部转义成 \uXXXX，载荷是纯 ASCII，
+        # 无论管道用 UTF-8 / GBK / cp1252 都能无损穿过；父进程 json.loads
+        # 会还原成原本的中文。这是与控制台代码页解耦的第二道保险，
+        # 即便上面的 PYTHONIOENCODING 被外部环境覆盖也依然成立。
+        sys.stdout.write(json.dumps(out, ensure_ascii=True))
         sys.stdout.write("\n")
         return 0
     finally:
