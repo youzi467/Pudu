@@ -30,11 +30,14 @@ import os
 import sys
 import unittest
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(HERE)
 TOOLS = os.path.join(REPO_ROOT, "tools")
-for _p in (TOOLS, REPO_ROOT):
+for _p in (HERE, TOOLS, REPO_ROOT):
     if _p not in sys.path:
         sys.path.insert(0, _p)
+
+from _purity_probe import HEAVY_MODULES, assert_import_is_pure  # noqa: E402
 
 import omr_abtest_lib as L  # noqa: E402
 from omr_abtest_lib import (  # noqa: E402
@@ -1245,6 +1248,46 @@ class TestMakeDecision(unittest.TestCase):
                                           gt_files_checked=INVARIANT_EXPECTED_GT))
         self.assertTrue(any("SK-10" in b for b in d.blocking_findings))
 
+    def test_fatal_blocking_note_lists_pages_as_plain_ascii_csv(self):
+        """SK-10 阻断性发现里的页名必须是**排序后的纯 ASCII 逗号分隔**串。
+
+        历史写法内插 ``list(...)`` 的 repr（``['p3.jpg', 'p1.jpg']``），中括号
+        与引号既是阅读噪声，也让日志在终端复制/转贴时更容易缺字。改用
+        ``_fmt_files`` 后：页名逐字可读、顺序稳定（可 diff、可快照断言）。
+        """
+        base_id = cell_id_of(BASELINE_ARM_ID, PC_OFF)
+        cells = {base_id: make_cell(base_id, BASELINE_ARM_ID,
+                                    fatal_files=("p3.jpg", "p1.jpg"))}
+        d = make_decision(cells, [],
+                          InvariantResult(passed=True,
+                                          gt_files_checked=INVARIANT_EXPECTED_GT))
+        note = next(b for b in d.blocking_findings if "SK-10" in b)
+        # 真实页名逐字出现，且按字典序、以 ", " 分隔
+        self.assertIn("p1.jpg, p3.jpg", note)
+        self.assertIn(base_id, note)
+        # 不再有 list repr 的中括号 / 引号噪声
+        for noise in ("[", "]", "'", '"'):
+            self.assertNotIn(noise, note,
+                             f"SK-10 阻断性发现不应出现 repr 噪声 {noise!r}：{note}")
+
+    def test_fatal_delta_note_lists_pages_as_plain_ascii_csv(self):
+        """``compute_delta`` 的 SK-10 说明同样走纯 ASCII 逗号分隔格式。"""
+        base_id = cell_id_of(BASELINE_ARM_ID, PC_OFF)
+        cell_id = cell_id_of("pre_scan", PC_OFF)
+        baseline = make_cell(base_id, BASELINE_ARM_ID)
+        cell = make_cell(cell_id, "pre_scan", fatal_files=("p9.jpg", "p4.jpg"))
+        d = compute_delta(cell, baseline)
+        note = next(n for n in d.notes if "SK-10" in n)
+        self.assertIn("p4.jpg, p9.jpg", note)
+        for noise in ("[", "]", "'"):
+            self.assertNotIn(noise, note,
+                             f"SK-10 Δ 说明不应出现 repr 噪声 {noise!r}：{note}")
+
+    def test_fmt_files_renders_empty_set_without_dangling_separator(self):
+        """空集合退化成 ``(none)``，避免日志出现悬空分隔符。"""
+        self.assertEqual(L._fmt_files(()), "(none)")
+        self.assertEqual(L._fmt_files(["b", "a"]), "a, b")
+
 
 class TestRenderMarkdown(unittest.TestCase):
 
@@ -1324,9 +1367,12 @@ class TestPurity(unittest.TestCase):
     """本模块必须保持"纯"：无第三方依赖、无 I/O、无子进程。"""
 
     def test_no_heavy_third_party_imports(self):
-        for banned in ("cv2", "numpy", "scipy", "pandas", "matplotlib"):
-            self.assertNotIn(banned, sys.modules,
-                             f"omr_abtest_lib 不应（间接）引入 {banned}")
+        """增量口径：只追究**导入 omr_abtest_lib 本身**拉进来的重型库。
+
+        全局快照式的 ``assertNotIn(banned, sys.modules)`` 会被同 session 的
+        前置用例污染（它们合法地用 cv2/numpy），属于测试隔离缺陷而非产品缺陷。
+        """
+        assert_import_is_pure(self, "omr_abtest_lib", HEAVY_MODULES)
 
     def test_no_io_or_subprocess_modules_referenced(self):
         source = open(L.__file__, encoding="utf-8").read()

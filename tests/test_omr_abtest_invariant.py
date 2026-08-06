@@ -28,11 +28,14 @@ import sys
 import tempfile
 import unittest
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(HERE)
 TOOLS = os.path.join(REPO_ROOT, "tools")
-for _p in (TOOLS, REPO_ROOT):
+for _p in (HERE, TOOLS, REPO_ROOT):
     if _p not in sys.path:
         sys.path.insert(0, _p)
+
+from _purity_probe import assert_import_is_pure  # noqa: E402
 
 import omr_abtest_lib as L  # noqa: E402
 import omr_abtest_p1_2 as D  # noqa: E402
@@ -395,9 +398,13 @@ class TestPurity(unittest.TestCase):
     """本文件不得 import cv2/numpy/scipy，且不得直接起子进程。"""
 
     def test_no_heavy_modules_loaded(self):
-        for mod in HEAVY:
-            self.assertNotIn(mod, sys.modules,
-                             "import 本测试后 %s 不应出现" % mod)
+        """增量口径：导入被测的 lib / driver 不得**新增**引入重型库。
+
+        原先断言「当前 sys.modules 里没有 numpy」，在全量 session 下会被前置
+        用例的合法 cv2/numpy 使用污染而误报——那是测试隔离缺陷，不是产品缺陷。
+        """
+        assert_import_is_pure(self, ("omr_abtest_lib", "omr_abtest_p1_2"),
+                              HEAVY)
 
     def test_no_heavy_imports_in_source(self):
         """纯函数层（lib）+ 编排层（driver）都不得 import 重依赖。

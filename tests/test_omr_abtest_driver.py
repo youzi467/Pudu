@@ -49,11 +49,14 @@ import sys
 import tempfile
 import unittest
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(HERE)
 TOOLS = os.path.join(REPO_ROOT, "tools")
-for _p in (TOOLS, REPO_ROOT):
+for _p in (HERE, TOOLS, REPO_ROOT):
     if _p not in sys.path:
         sys.path.insert(0, _p)
+
+from _purity_probe import assert_import_is_pure  # noqa: E402
 
 import omr_eval_groundtruth as G  # noqa: E402
 import omr_abtest_lib as L  # noqa: E402
@@ -1263,10 +1266,14 @@ class TestPurity(unittest.TestCase):
     HEAVY = ("cv2", "numpy", "scipy", "pandas", "matplotlib")
 
     def test_a_heavy_modules_not_loaded_at_import_time(self):
-        """命名带 ``a_`` 是为了排在同类其它用例之前（本用例检查全局副作用）。"""
-        for mod in self.HEAVY:
-            self.assertNotIn(mod, sys.modules,
-                             f"导入驱动后 {mod} 不应出现在 sys.modules")
+        """增量口径：导入 ``omr_abtest_p1_2`` 前后，新增模块中不得含重型库。
+
+        历史写法断言「当前 sys.modules 里没有 cv2/numpy」，依赖用例执行顺序：
+        单独跑能过，全量 ``pytest tests/`` 里被前置用例污染就误报。改成摘缓存
+        后重新真导一次、只看**本次导入**的增量，与执行顺序彻底解耦
+        （用例名保留 ``a_`` 前缀，不改变既有收集顺序约定）。
+        """
+        assert_import_is_pure(self, "omr_abtest_p1_2", self.HEAVY)
 
     def test_no_heavy_imports_in_source(self):
         with open(os.path.join(TOOLS, "omr_abtest_p1_2.py"), "r",

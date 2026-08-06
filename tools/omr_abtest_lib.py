@@ -44,7 +44,7 @@ import os
 import random
 from dataclasses import dataclass, field, replace
 from typing import (
-    Any, Dict, List, Mapping, Optional, Sequence, Tuple,
+    Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple,
 )
 
 # 复用 harness 的类别词汇表，避免口径二次定义（SK-1 的延伸）
@@ -117,6 +117,24 @@ def _r(value: float, digits: int = 4) -> float:
     """四舍五入到指定位数，顺带把 ``-0.0`` 归一成 ``0.0``。"""
     out = round(float(value), digits)
     return 0.0 if out == 0.0 else out
+
+
+def _fmt_files(files: Iterable[str]) -> str:
+    """把页名集合渲染成**纯 ASCII 逗号分隔**的稳定字符串（SK-10 日志用）。
+
+    原先直接内插 ``list(...)`` 的 repr，会带出 ``['a', 'b']`` 这样的中括号与
+    引号噪声：既不便阅读，也容易在终端复制/转贴环节被误当作噪声吞掉字符。
+    这里统一成 ``a, b``——排序保证同一批 fatal 页每次渲染逐字一致（便于 diff
+    与快照断言），空集合渲染成 ``(none)`` 而非空串，避免日志出现悬空的顿号。
+
+    Args:
+        files: 页名（stem）集合，顺序无关。
+
+    Returns:
+        形如 ``"p3, p5"`` 的字符串；输入为空时返回 ``"(none)"``。
+    """
+    names = sorted(str(name) for name in files)
+    return ", ".join(names) if names else "(none)"
 
 
 def cell_id_of(arm_id: str, score_suffix: str) -> str:
@@ -1067,11 +1085,11 @@ def compute_delta(cell: CellResult, baseline: CellResult,
         notes.append(f"⚠ 降级页 {len(degraded)} 个：{'/'.join(degraded)}"
                      f"（已出剔除降级页第二口径 Δ）")
     if not cell.comparable:
-        notes.append(f"⚠ SK-10：cell 有 fatal 页 {list(cell.fatal_files)}，"
+        notes.append(f"⚠ SK-10：cell 有 fatal 页 {_fmt_files(cell.fatal_files)}，"
                      f"分母漂移，Δ 不可比、不参与决策")
     if not baseline.comparable:
-        notes.append(f"⚠ SK-10：baseline 有 fatal 页 {list(baseline.fatal_files)}，"
-                     f"Δ 不可比")
+        notes.append(f"⚠ SK-10：baseline 有 fatal 页 "
+                     f"{_fmt_files(baseline.fatal_files)}，Δ 不可比")
 
     delta = DeltaResult(
         cell_id=cell.cell_id,
@@ -1383,8 +1401,8 @@ def decide_postcorrect(deltas: Sequence[DeltaResult],
 
     cell = cells.get(target_id)
     if cell is not None and not cell.comparable:
-        trace.append(f"SK-10：{target_id} 有 fatal 页 {list(cell.fatal_files)}，"
-                     f"Δ 不可比 ⇒ 取 off")
+        trace.append(f"SK-10：{target_id} 有 fatal 页 "
+                     f"{_fmt_files(cell.fatal_files)}，Δ 不可比 ⇒ 取 off")
         return (POSTCORRECT_DEFAULT_OFF, trace)
 
     relevant_sum = sum(v for k, v in pair.d_category_count.items()
@@ -1466,7 +1484,7 @@ def make_decision(cells: Mapping[str, CellResult],
         if not cell.comparable:
             blocking.append(
                 f"SK-10：cell {cell.cell_id} 存在 fatal 页 "
-                f"{list(cell.fatal_files)}，已排除出决策")
+                f"{_fmt_files(cell.fatal_files)}，已排除出决策")
 
     probe_note = diagnose_deskew(deltas)
     if probe_note:

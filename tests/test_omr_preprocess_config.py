@@ -19,11 +19,14 @@ import sys
 import tempfile
 import unittest
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(HERE)
 TOOLS = os.path.join(REPO_ROOT, "tools")
-for _p in (TOOLS, REPO_ROOT):
+for _p in (HERE, TOOLS, REPO_ROOT):
     if _p not in sys.path:
         sys.path.insert(0, _p)
+
+from _purity_probe import assert_import_is_pure  # noqa: E402
 
 import omr_preprocess  # noqa: E402
 from omr_preprocess import (  # noqa: E402
@@ -39,23 +42,31 @@ def _read_repo_config():
 
 
 class LazyImportTest(unittest.TestCase):
-    """R-P0-08：模块顶层不得 import cv2 / numpy。"""
+    """R-P0-08：模块顶层不得 import cv2 / numpy。
+
+    断言口径是**增量**而非全局快照：全量 ``pytest tests/`` 的同一 session 里，
+    前置用例（走 cv2 的集成测试）早就把 cv2/numpy 塞进了 ``sys.modules``，
+    直接断言「当前不存在」会与被测代码无关地误报。
+    :func:`_purity_probe.assert_import_is_pure` 摘掉缓存后重新真导一次，
+    只追究**本次导入**拉进来的重型库。
+    """
+
+    WATCHED = ("cv2", "numpy")
 
     def test_importing_omr_preprocess_does_not_pull_cv2(self):
         self.assertIn("omr_preprocess", sys.modules)
-        self.assertNotIn("cv2", sys.modules)
-        self.assertNotIn("numpy", sys.modules)
+        assert_import_is_pure(self, "omr_preprocess", self.WATCHED)
 
     def test_importing_omr_pipeline_does_not_pull_cv2(self):
         importlib.import_module("omr_pipeline")
-        self.assertNotIn("cv2", sys.modules)
-        self.assertNotIn("numpy", sys.modules)
+        assert_import_is_pure(self, "omr_pipeline", self.WATCHED)
 
     def test_importing_as_tools_package_does_not_pull_cv2(self):
         """以 ``tools.xxx`` 命名空间包形式导入同样不得触发 cv2。"""
         importlib.import_module("tools.omr_preprocess")
         importlib.import_module("tools.omr_pipeline")
-        self.assertNotIn("cv2", sys.modules)
+        assert_import_is_pure(
+            self, ("tools.omr_preprocess", "tools.omr_pipeline"), ("cv2",))
 
     def test_source_has_no_toplevel_cv2_import(self):
         """静态检查：源文件里 cv2/numpy 的 import 必须有缩进（在函数内）。"""
