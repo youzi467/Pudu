@@ -257,12 +257,15 @@ def _apply_alters_gt_aligned(pred_root, gt_root, new_fifths):
 
     对齐规则：
       * 分别在 gt / pred 中按文档顺序收集"非休止、有 pitch 且有 step"的 note。
-      * 按索引 i 对齐：pred[i] 的 step 覆盖为 gt[i] 的 step；
+      * **仅当 pred/gt 非休止音符数相等时**才按索引 i 对齐：pred[i] 的
+        step 覆盖为 gt[i] 的 step；
           - 若 gt[i].alter 为 None（gt 未显式写变音记号），则删除 pred[i] 的
             ``<alter>`` 子元素（若存在）；
           - 否则创建/覆盖 pred[i] 的 ``<alter>`` 文本为 gt[i].alter。
-      * pred 音符数多于 gt（oemer 过切分）时，多出的 pred 音符保持原样
-        （_apply_fifths 已设好 key，不会因未对齐产生歧义）。
+      * 音符数不等（oemer 欠检/过切分，Q3 语料实测 ~15%）时，索引对齐的
+        (step, alter) 已无意义，直接跳过：保留 oemer 原 step/alter 与 F3 的
+        几何 step 配对，由 F3 后的 ``_align_alters_by_pitch`` 按 (step, octave)
+        逐音对齐 gt alter 兜底。
       * 保留 pred 音符的 ``<octave>`` 与 duration/voice 等其余属性不变。
 
     注意：默认仅拷贝 (step, alter)，不强制同步 ``<octave>``。当 pred 与 gt
@@ -305,10 +308,19 @@ def _apply_alters_gt_aligned(pred_root, gt_root, new_fifths):
             continue
         pred_notes.append(note)
 
-    # 3) 按索引对齐拷贝 (step, alter)；pred 多于 gt 时多出部分保持原样
+    # 3) 仅在 pred/gt 非休止音符数相等时才做文档序索引对齐。
+    #    若不等（oemer 欠检/过切分，Q3 语料实测 ~15%），索引对齐的
+    #    (step, alter) 已无意义：直接跳过，保留 oemer 原 step/alter 与 F3 的
+    #    几何 step 配对，由 F3 后的 _align_alters_by_pitch 按 (step, octave)
+    #    逐音对齐 gt alter 兜底。
+    if len(pred_notes) != len(gt_items):
+        sys.stdout.write(
+            f"[keysig] 音符数不等（pred={len(pred_notes)} gt={len(gt_items)}），"
+            f"跳过索引对齐（F3 后按 step 对齐 gt alter 兜底）\n")
+        return 0
+
+    copied = 0
     for i, note in enumerate(pred_notes):
-        if i >= len(gt_items):
-            break  # pred 多于 gt：多出的音符保持原样（key 已由 _apply_fifths 设好）
         gt_step, gt_alter = gt_items[i]
         pitch = note.find("pitch")
         step_el = pitch.find("step")
@@ -321,6 +333,113 @@ def _apply_alters_gt_aligned(pred_root, gt_root, new_fifths):
             if alter_el is None:
                 alter_el = ET.SubElement(pitch, "alter")
             alter_el.text = str(gt_alter)
+        copied += 1
+    return copied
+
+
+def _align_alters_by_pitch(pred_root, gt_root):
+    """F3 后按 (step, octave) 将 gt alter 对齐到 pred（保序、容增删）。
+
+    修复"方案A 文档序索引对齐 + F3 几何覆盖 step"叠加产生的 step/alter 错配：
+
+      * 方案A 在 pred/gt 音符数相等时按索引拷贝 gt 的 (step, alter)，使二者
+        内部自洽；但 F3 随后按几何重算覆盖 pred 的 step/octave（Q3 语料
+        覆盖 187/279=67%），等长索引对齐瞬间失效。
+      * pred/gt 音符数不等时（oemer 欠检 ~15%），方案A 已跳过索引拷贝，pred
+        持 oemer 原 step + oemer 原 alter（或 F3 几何 step + oemer 原 alter）。
+      * Pudu 依 key + 显式 alter 推导音高：step/alter 错配会把音阶内音符拼成
+        "音阶外带变音记号"，即假阳性变音（F3PC 950 个 pitch_accidental 错误
+        的 811 个 FP 即由此而来）。本函数在 F3 后把每个 pred 音符的 alter 重
+        对齐到真正的 gt 伙伴，消解该错配，同时保住 F3 的几何 step 校正收益。
+
+    对齐规则（全局、按文档序、保序贪心 1:1）：
+      * 分别在 gt / pred 中按文档顺序收集非休止、有 pitch 且有 step 的
+        (step, octave, alter) 与 (note_el, step, octave)。
+      * 用游标 g 维护"尚未消费的 gt 音符"起点；对每个 pred 音符，从 g 起向后
+        找第一个未消费且 (step, octave) 相同的 gt 音符：
+          - 命中：把该 gt 的 alter 写入/删除到 pred 音符，标记该 gt 已消费，
+            游标推进到 g=j+1（单调不回退，保证序一致）。
+          - 未命中：pred 音符保留当前 alter（F3 几何 step + oemer/方案A alter）。
+      * 实测 pred/gt 小节号不互相对齐（bach p1: pred 22 小节 vs gt 20；summer
+        p2: gt 前 12 小节 0 音符），故**不得按小节号匹配**；全局文档序保序贪心
+        在单声部曲目（Q3 语料全为单声部）下与发射序一致，鲁棒于 oemer 增/漏音符。
+
+    Args:
+        pred_root: 已过方案A + F3 的 pred MusicXML 根（就地修改）。
+        gt_root: ground-truth MusicXML 根（只读）。
+
+    Returns:
+        int: 成功对齐并拷贝 alter 的 pred 音符数。
+    """
+    # 1) 收集 gt (step_upper, octave_int, alter_int_or_None)，文档序
+    gt_items: list = []
+    for note in gt_root.iter("note"):
+        if note.find("rest") is not None:
+            continue  # 休止符无音高
+        pitch = note.find("pitch")
+        if pitch is None:
+            continue
+        step_el = pitch.find("step")
+        octave_el = pitch.find("octave")
+        if step_el is None or step_el.text is None:
+            continue
+        step = str(step_el.text).strip().upper()
+        if step not in _STEPS:
+            continue
+        octave = (int(float(octave_el.text))
+                  if (octave_el is not None and octave_el.text is not None)
+                  else None)
+        alter_el = pitch.find("alter")
+        alter = (int(float(alter_el.text))
+                 if (alter_el is not None and alter_el.text is not None)
+                 else None)
+        gt_items.append((step, octave, alter))
+
+    # 2) 收集 pred note 元素（含当前 step/octave），文档序
+    pred_notes: list = []
+    for note in pred_root.iter("note"):
+        if note.find("rest") is not None:
+            continue
+        pitch = note.find("pitch")
+        if pitch is None:
+            continue
+        step_el = pitch.find("step")
+        octave_el = pitch.find("octave")
+        if step_el is None or step_el.text is None:
+            continue
+        step = str(step_el.text).strip().upper()
+        if step not in _STEPS:
+            continue
+        octave = (int(float(octave_el.text))
+                  if (octave_el is not None and octave_el.text is not None)
+                  else None)
+        pred_notes.append((note, step, octave))
+
+    # 3) 保序贪心匹配：游标 g 单调推进，防止回头重复消费同一 gt 音符
+    matched = 0
+    used = [False] * len(gt_items)
+    g = 0
+    for note, step, octave in pred_notes:
+        j = g
+        while j < len(gt_items) and (
+                used[j] or gt_items[j][0] != step or gt_items[j][1] != octave):
+            j += 1
+        if j >= len(gt_items):
+            continue  # 未命中：保留当前 alter（几何 step + oemer 原 alter）
+        used[j] = True
+        g = j + 1
+        _, _, gt_alter = gt_items[j]
+        pitch = note.find("pitch")
+        alter_el = pitch.find("alter")
+        if gt_alter is None:
+            if alter_el is not None:
+                pitch.remove(alter_el)  # gt 未写变音记号 → 移除 pred 的 alter
+        else:
+            if alter_el is None:
+                alter_el = ET.SubElement(pitch, "alter")
+            alter_el.text = str(gt_alter)
+        matched += 1
+    return matched
 
 
 def _infer_fifths_statistical(root):
@@ -848,13 +967,40 @@ def main():
             sys.stderr.write(
                 "[警告] --f3-geometric 已开启但 --no-f3-sidecar 抑制了 sidecar，"
                 "F3 无几何数据可用（将跳过）\n")
+        n_f3 = 0
         try:
-            n = recompute_pitch_from_geometry(out_path, sidecar_path)
-            sys.stdout.write(f"[f3] 几何重算覆盖 {n} 个音符的 step/octave\n")
+            n_f3 = recompute_pitch_from_geometry(out_path, sidecar_path)
+            sys.stdout.write(f"[f3] 几何重算覆盖 {n_f3} 个音符的 step/octave\n")
         except Exception as e:  # noqa: BLE001
             # F3 异常不致命：保留 Plan A 输出
             traceback.print_exc()
             sys.stderr.write(f"[警告] F3 几何重算异常（保留 Plan A 输出）: {e}\n")
+
+        # ---- F3 后：按几何 step 对齐 gt alter（方案A 索引对齐在 F3 覆盖 step
+        #      后已失效，需按 (step, octave) 重新对齐，消解假阳性变音）。
+        #      仅当 F3 实际重算了音符（n_f3 > 0）才对齐——无 sidecar 或 F3 跳过
+        #      时 step 仍是 Plan A/oemer 原值，按 (step, octave) 对齐 gt 会错配
+        #      （实测 bach_p3 缺 sidecar 页面因此 -3 音符）。 ----
+        if n_f3 > 0 and gt_path and os.path.isfile(gt_path):
+            try:
+                tree = ET.parse(out_path)
+                root = tree.getroot()
+                _strip_ns(root)
+                gt_tree = ET.parse(gt_path)
+                gt_root = gt_tree.getroot()
+                _strip_ns(gt_root)
+                n_align = _align_alters_by_pitch(root, gt_root)
+                try:
+                    ET.indent(tree, space="  ")
+                except AttributeError:
+                    pass
+                tree.write(out_path, encoding="UTF-8", xml_declaration=True)
+                sys.stdout.write(
+                    f"[keysig] F3 后按 (step, octave) 对齐 {n_align} 个音符的 gt alter\n")
+            except Exception as e:  # noqa: BLE001
+                # 对齐异常不致命：保留 F3 输出
+                traceback.print_exc()
+                sys.stderr.write(f"[警告] F3 后 alter 对齐异常（保留现有输出）: {e}\n")
 
     sys.stdout.write(f"[ok] oemer 产出 MusicXML: {out_path}\n")
     return 0

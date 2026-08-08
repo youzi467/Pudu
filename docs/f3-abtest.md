@@ -18,9 +18,18 @@
 > | `field_pass_rate` | 80.62% | 84.92% | +4.30pp |
 >
 > prelude 回归消除：p2 32→82（+50）、p1 净 −4（345/352 加线重算，方向对）。
-> `pitch_accidental` 失败 138→950 为**对齐暴露**的既有 oemer alter 错（NW 以音高为锚，
-> 修复八度后音符对到真正 gt 伙伴，暴露原本被错误八度掩盖的 alter 误差；F3 逐字节不碰
-> `<alter>`，已验证 0 改动）。F3 + postcorrect 无叠加（49.81%→49.81%）。
+>
+> ✅ **2026-08-08 二修（方案A↔F3 交互 bug，已落盘 omr_oemer.py）**：早期把
+> `pitch_accidental` 138→950 记为"对齐暴露的既有 oemer alter 错"并不完整——真正根因是
+> **方案A 文档序索引对齐 + F3 几何覆盖 step 叠加产生的 step/alter 错配**：F3 重算 step 后，
+> 方案A 按索引拷贝的 (step, alter) 不再是同一音符（pred/gt 音符数不等，oemer 欠检 ~15%），
+> Pudu 依 key+显式 alter 推导音高即产出"音阶内音符带变音记号"的假阳性变音。修复（A/B 最简）：
+> ① `_apply_alters_gt_aligned` 仅在 pred/gt 非休止音符数相等时走索引对齐，不等则跳过；
+> ② F3 后新增 `_align_alters_by_pitch` 按 (step, octave) 保序贪心 1:1 把 gt alter 对齐到
+> pred（全局文档序，容 pred/gt 小节号不对齐与增删音符）。**修复后全量 A/B（13 可评页，
+> 同一 harness）**：pitch_accidental 失败 950→**87**，note_pass **49.81%→71.7%**（见下表）。
+> bach_p3（缺 sidecar 后 oemer 2.3× 过切分，仅 19 可比音符）为已知坏页，修复不影响其余页。
+> F3 + postcorrect 无叠加（49.81%→49.81%，修复前基线）。
 
 ## 1. 开关语义（已落实）
 
@@ -67,7 +76,7 @@ F3 设计靶心是 `pitch_degree` / `pitch_octave`（修复后两者均大幅提
 |------|------|------|
 | `pitch_degree` | 音级（首调数字） | 失败 649→205（通过率 78.72%→93.44%） |
 | `pitch_octave` | 八度点 | 失败 868→59（通过率 71.54%→98.11%） |
-| `pitch_accidental` | 变音记号 | 失败 138→950：**对齐暴露**既有 oemer alter 错（F3 不碰 alter，验证 0 改动） |
+| `pitch_accidental` | 变音记号 | 失败 138→950（方案A↔F3 交互 bug，已修）→修复后 **87** |
 | `rhythm` / `rest` / `chord` / `tie` | 时值/休止/和弦/延音 | 基本不变（F3 不动这些字段） |
 | `note_pass_rate` | 联立通过率 | 35.70%→49.81%（+14.11pp） |
 
@@ -81,8 +90,9 @@ F3 设计靶心是 `pitch_degree` / `pitch_octave`（修复后两者均大幅提
 `act_step/act_octave/act_alter` 及 `failed_categories`。可按 `failed_categories`
 含 `pitch_degree` / `pitch_octave` 过滤，直接对照 A/B 两组的 `act_*` 变化：
 修复后 B 组的 `act_*` 覆盖全页音符的 step/octave（F3 重算），且 pitch_octave 失败数
-从 868 降到 59（见顶部结论）。`pitch_accidental` 失败多为 A/B 两组 `act_alter` **相同**
-但 `expected_alter` 不同——即对齐伙伴因八度修复而改变，暴露既有 alter 误差。
+从 868 降到 59（见顶部结论）。`pitch_accidental` 失败在方案A↔F3 交互 bug 修复后从 950
+降到 87（见顶部结论），残余多为 F3 几何 step/octave 尚未到位页面的连带误差
+（如 bach_p2/prelude_p2），非索引错位产物。
 
 ## 5. 已知约束 / 风险（与 system_design.md §9 一致）
 
