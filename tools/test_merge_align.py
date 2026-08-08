@@ -1,11 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-_merge_align fallback 单测
-==========================
+_merge_align 整 part 保序对齐单测（R1）
+====================================
 
-聚焦验证「同小节内音序对齐」fallback：oemer 时值漂移使 pred 的 onset 相对 gt 偏移
-超过 tol 时，同源音符不再被计为 event_count「未配对」，而是按同 (part, measure)
-内的序列顺序配对。
+R1 把旧的「按同 (part, measure) 同小节定位配对」fallback 替换为整 part
+Needleman–Wunsch 全局保序对齐：oemer 时值漂移 + 小节边界错位使 pred 的 onset 与
+小节号都相对 gt 不可信，同小节定位会把同源音符拆进不同小节组、配对退化为随机
+（旧 pitch_degree ≈ 1/7 随机基线）。新实现无视小节号，按 part 内 onset 序全局
+配对、容增删（漏检/误检仍以 event_count 暴露）。
+
+覆盖：
+  * 漂移音符经 NW 配对而非计为未配对（原 fallback 行为继承）
+  * 小节边界错位（R1 根因）回归
+  * NW 直接单测：中段插入/删除、休止↔音符不误配
 
 运行：
     python tools/test_merge_align.py
@@ -22,7 +29,7 @@ TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
 if TOOLS_DIR not in sys.path:
     sys.path.insert(0, TOOLS_DIR)
 
-from omr_eval_lib import _merge_align, _note_key  # noqa: E402
+from omr_eval_lib import _merge_align, _note_key, _nw_align  # noqa: E402
 
 
 def _note(degree, octave=0, accidental="none", is_rest=False):
@@ -85,21 +92,17 @@ class TestMergeAlignFallback(unittest.TestCase):
         self.assertEqual(event_unpaired, 0)   # 不再计为未配对
 
     def test_onset_aligned_multivoice_regression(self):
-        # 回归：onset 本就对齐的多声部音符仍留在原 onset 桶，并按 _note_key 配对。
+        # 回归：同 onset 多声部音符两侧同序（序列内 _note_key 定序），NW 正确 1:1 配对。
+        # degree1 与 degree5（八度更高 -> _note_key 排序在后）各配各，不交叉。
         n1 = _note(1, octave=0)
         n2 = _note(5, octave=1)  # 八度更高 -> _note_key 排序在后
         gt_b = {(0, 0.0): [(1, n1), (1, n2)]}
         pred_b = {(0, 0.0): [(1, n1), (1, n2)]}
         merged = _merge_align(pred_b, gt_b)
-        self.assertEqual(len(merged), 1)
-        key = next(iter(merged))
-        cn = sorted(merged[key]["c"], key=lambda x: _note_key(x[1]))
-        gn = sorted(merged[key]["g"], key=lambda x: _note_key(x[1]))
-        self.assertEqual(len(cn), 2)
-        self.assertEqual(len(gn), 2)
-        # 位置配对应按 _note_key：degree1 配 degree1，degree5 配 degree5
-        self.assertEqual(cn[0][1]["degree"], gn[0][1]["degree"])
-        self.assertEqual(cn[1][1]["degree"], gn[1][1]["degree"])
+        self.assertEqual(len(merged), 2)   # 2 个 NW 1:1 桶（n1、n2 各一）
+        for bucket in merged.values():
+            self.assertEqual(len(bucket["c"]), 1)
+            self.assertEqual(len(bucket["g"]), 1)
         notes_compared, event_unpaired = _simulate_consumer(merged)
         self.assertEqual(notes_compared, 2)
         self.assertEqual(event_unpaired, 0)
@@ -126,22 +129,46 @@ class TestMergeAlignFallback(unittest.TestCase):
         # （桶数量不一致 + "only in pred" 明细）
         self.assertEqual(event_unpaired, 2)
 
-    def test_no_cross_measure_pairing(self):
-        # fallback 仅限同 (part, measure)：measure1 的 gt 与 measure2 的 pred
-        # 不应配对（确属不同小节，可能本就是漏检/误检）。
-        gt_b = {(0, 0.0): [(1, _note(1))]}    # measure 1
-        pred_b = {(0, 0.5): [(2, _note(9))]}  # measure 2（不同 mnum）
+    def test_measure_shift_does_not_break_pairing(self):
+        # R1 回归：pred 小节边界相对 gt 错位（pred 的 m2 同时承载 gt 的 m2+m3
+        # 内容），且 onset 整体 +0.5 漂移（远超 tol）。
+        # 旧的「按同 (part, measure) 定位配对」会把同源音符拆进不同小节组、
+        # 配对退化为随机；新整 part 保序 NW 无视小节号，按音序全局配对 -> 全 1:1。
+        gt_b = {
+            (0, 0.0): [(1, _note(1))],
+            (0, 1.0): [(2, _note(2))],
+            (0, 2.0): [(3, _note(3))],
+        }
+        pred_b = {
+            (0, 0.5): [(1, _note(1))],
+            (0, 1.5): [(2, _note(2))],   # pred 的 m2 承载 gt 的 m2+m3
+            (0, 2.5): [(2, _note(3))],
+        }
         merged = _merge_align(pred_b, gt_b)
-        # 两个单边桶，互不配对
-        self.assertEqual(len(merged), 2)
+        self.assertEqual(len(merged), 3)   # 3 个 1:1 NW 桶
         for bucket in merged.values():
-            self.assertTrue(
-                (len(bucket["c"]) == 0) != (len(bucket["g"]) == 0)
-            )
+            self.assertEqual(len(bucket["c"]), 1)
+            self.assertEqual(len(bucket["g"]), 1)
         notes_compared, event_unpaired = _simulate_consumer(merged)
-        self.assertEqual(notes_compared, 0)   # 不跨小节误配
-        # 2 个单边桶（c-only / g-only）各计 2 次 event_count
-        self.assertEqual(event_unpaired, 4)
+        self.assertEqual(notes_compared, 3)   # 全部进入比较
+        self.assertEqual(event_unpaired, 0)   # 不再计为未配对
+
+    def test_lone_notes_pair_as_mismatch_not_unpaired(self):
+        # 新语义（整 part 全局对齐）文档化：同 part 下孤独音符不再因小节号不同而
+        # 拒绝配对。全局对齐的取舍——数量相等的两端必定配对（配对得分 ≥ 双 gap），
+        # 不同音高会在比对中如实记录为 pitch 不匹配，而非隐藏进 event_count。
+        # （旧 test_no_cross_measure_pairing 断言"不跨小节配对"，已被 R1 撤销：
+        #  小节号在漂移场景不可信，正是 R1 要修的根因。）
+        gt_b = {(0, 0.0): [(1, _note(1))]}
+        pred_b = {(0, 0.5): [(2, _note(9))]}
+        merged = _merge_align(pred_b, gt_b)
+        self.assertEqual(len(merged), 1)
+        bucket = next(iter(merged.values()))
+        self.assertEqual(len(bucket["c"]), 1)
+        self.assertEqual(len(bucket["g"]), 1)
+        notes_compared, event_unpaired = _simulate_consumer(merged)
+        self.assertEqual(notes_compared, 1)
+        self.assertEqual(event_unpaired, 0)
 
     def test_original_tolerance_merge_still_works(self):
         # 回归：极小偏移（< tol）仍由主路径合并为单桶。
@@ -152,6 +179,41 @@ class TestMergeAlignFallback(unittest.TestCase):
         key = next(iter(merged))
         self.assertEqual(len(merged[key]["c"]), 1)
         self.assertEqual(len(merged[key]["g"]), 1)
+
+
+class TestNwAlign(unittest.TestCase):
+    """_nw_align 直接单测：保序、容增删、休止处理（不经过 _merge_align 桶归并）。"""
+
+    def test_insertion_in_middle_is_leftover(self):
+        # pred 中间多一个音（误检）-> 该音落 c_leftover，前后正常保序配对。
+        c_items = [(1, _note(1)), (1, _note(2)), (1, _note(3))]
+        g_items = [(1, _note(1)), (1, _note(3))]
+        pairs, c_left, g_left = _nw_align(c_items, g_items)
+        self.assertEqual([p[0][1]["degree"] for p in pairs], [1, 3])
+        self.assertEqual([it[1]["degree"] for it in c_left], [2])
+        self.assertEqual(g_left, [])
+
+    def test_deletion_in_middle_is_leftover(self):
+        # gt 中间多一个音（pred 漏检）-> 该音落 g_leftover。
+        c_items = [(1, _note(1)), (1, _note(3))]
+        g_items = [(1, _note(1)), (1, _note(2)), (1, _note(3))]
+        pairs, c_left, g_left = _nw_align(c_items, g_items)
+        self.assertEqual([p[1][1]["degree"] for p in pairs], [1, 3])
+        self.assertEqual([it[1]["degree"] for it in g_left], [2])
+        self.assertEqual(c_left, [])
+
+    def test_rest_not_misaligned_to_note(self):
+        # pred 末尾多一个休止、gt 无对应 -> 休止应走 gap（c_leftover），
+        # 不得与前面的音符错配（休止↔音符 强负分 _ALIGN_REST_MISMATCH=-4，
+        # 远比 gap -2 差）。
+        c_items = [(1, _note(1)), (1, _note(1, is_rest=True))]
+        g_items = [(1, _note(1))]
+        pairs, c_left, g_left = _nw_align(c_items, g_items)
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(pairs[0][0][1]["degree"], 1)  # pred 音符配 gt 音符
+        self.assertEqual(len(c_left), 1)
+        self.assertTrue(c_left[0][1]["isRest"])
+        self.assertEqual(g_left, [])
 
 
 if __name__ == "__main__":

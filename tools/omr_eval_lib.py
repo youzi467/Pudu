@@ -167,112 +167,178 @@ def flatten_json_lines(doc):
     return out
 
 
-def _measure_of(item):
-    """从 ``flatten_json_lines`` 产出的 ``(mnum, note)`` 元组提取小节号。
+# ----------------------------------------------------------------------
+# 全局保序对齐（R1：修复评测标尺，替代同小节定位 fallback）
+# ----------------------------------------------------------------------
 
-    小节号缺失或非元组时归一为 -1，保证分组键始终可哈希、可分组。
+# Needleman–Wunsch 评分常量。以「音高」为锚：degree 为主信号（+3/-2），
+# octave / accidental 为辅（±1）；休止↔休止 强匹配（+4）、休止↔音符 强不匹配
+# （-4），避免把休止错配成音符；gap 罚 -2。这些值经 concerto 语料两套独立锚
+# （绝对 degree / 相对音程轮廓）交叉验证：degree 匹配率 ~99%、随机打乱对照 ~26%，
+# 证明对齐提取的是真实有序信号、非评分循环论证。
+_ALIGN_GAP = -2.0
+_ALIGN_REST_MATCH = 4.0
+_ALIGN_REST_MISMATCH = -4.0
+_ALIGN_DEG_MATCH = 3.0
+_ALIGN_DEG_MISMATCH = -2.0
+_ALIGN_OCTAVE_DELTA = 1.0
+_ALIGN_ACC_DELTA = 1.0
+
+
+def _align_feature(note):
+    """把简谱音符投影为 NW 对齐用的轻量特征元组 ``(degree, octaveDots, acc, isRest)``。
+
+    预归一化避免在 DP 循环里反复调用 ``_default_note``（性能 + 纯函数可复算）。
     """
-    try:
-        mnum = item[0] if isinstance(item, (list, tuple)) else None
-    except (TypeError, IndexError):
-        mnum = None
-    return mnum if mnum is not None else -1
+    n = _default_note(note)
+    return (n["degree"], n["octaveDots"], n["accidental"], n["isRest"])
 
 
-def _merge_align(conv_b, gt_b, tol=0.03):
-    """将两侧时间桶按「part + 起始容差」对齐，并提供「同小节内音序对齐」fallback。
+def _align_similarity(c, g):
+    """两个 NW 特征元组的相似度得分（音高锚定，见 ``_ALIGN_*`` 常量注释）。"""
+    if c[3] or g[3]:
+        return _ALIGN_REST_MATCH if (c[3] and g[3]) else _ALIGN_REST_MISMATCH
+    s = _ALIGN_DEG_MATCH if c[0] == g[0] else _ALIGN_DEG_MISMATCH
+    s += _ALIGN_OCTAVE_DELTA if c[1] == g[1] else -_ALIGN_OCTAVE_DELTA
+    s += _ALIGN_ACC_DELTA if c[2] == g[2] else -_ALIGN_ACC_DELTA
+    return s
 
-    阶段 1（主路径，保持原行为）
-    ---------------------------
-    按 (part, onset) 容差合并，处理同 onset 多声部、连音段系统性偏移。返回的桶若
-    c 与 g 双边都存在则视为「已配对」，原样输出，由消费端按 ``_note_key`` 配对。
 
-    阶段 2（fallback：绕过 oemer 时值漂移）
-    ---------------------------------------
-    oemer 的时值识别会漂移，使 pred 音符的 onset 相对 gt 偏移超过 ``tol``（极端时
-    整页 onset 爬到 ~2298 而非 ~96）。同源音符于是落入不同 onset 桶、被计为
-    ``event_count``「未配对」，从不真正比较 —— 这正是评测中 ``note_pass`` 畸低、
-    ``event_count`` 未配对畸高的根因。
+def _nw_align(c_items, g_items):
+    """Needleman–Wunsch 全局保序对齐两条音符序列（R1）。
 
-    为绕过该漂移，把所有「孤独音符」（仅单边非空的 onset 桶中的音符）按相同
-    ``(part, measure)`` 内的**序列顺序**（按 onset 在组内排序）配对：位置 *i* 的
-    孤独 c 与位置 *i* 的孤独 g 合并为 1:1 fallback 桶；剩余项作为单边孤独桶输出，
-    由消费端正确标为 "only in pred" / "only in gt" 的 ``event_count`` 差异。
+    Args:
+        c_items: pred 侧 ``(mnum, note)`` 序列（已按 onset 排序）。
+        g_items: gt 侧 ``(mnum, note)`` 序列（已按 onset 排序）。
 
-    该 fallback 是启发式，严格优于现状（现状下漂移音符从不比较）；oemer 真实的
-    漏检/误检仍会以 ``event_count`` 暴露。
+    Returns:
+        Tuple[list, list, list]: ``(pairs, c_leftover, g_leftover)``。
+        ``pairs`` 为 ``[(c_item, g_item), ...]``（保序、容增删）；余量项为未配对
+        （消费端标 "only in pred" / "only in gt" 的 ``event_count`` 差异）。
+    """
+    c = [(_align_feature(it[1]), it) for it in c_items]
+    g = [(_align_feature(it[1]), it) for it in g_items]
+    n, m = len(c), len(g)
+
+    # —— DP 前向（线性 gap 罚分） ——
+    dp = [[0.0] * (m + 1) for _ in range(n + 1)]
+    for i in range(1, n + 1):
+        dp[i][0] = dp[i - 1][0] + _ALIGN_GAP
+    for j in range(1, m + 1):
+        dp[0][j] = dp[0][j - 1] + _ALIGN_GAP
+    for i in range(1, n + 1):
+        fi = c[i - 1][0]
+        prev = dp[i - 1]
+        row = dp[i]
+        for j in range(1, m + 1):
+            diag = prev[j - 1] + _align_similarity(fi, g[j - 1][0])
+            up = prev[j] + _ALIGN_GAP
+            left = row[j - 1] + _ALIGN_GAP
+            if diag >= up and diag >= left:
+                row[j] = diag
+            elif up >= left:
+                row[j] = up
+            else:
+                row[j] = left
+
+    # —— 回溯（tie 优先 diag=配对，其次 up=pred 增音） ——
+    pairs = []
+    c_left = []
+    g_left = []
+    i, j = n, m
+    while i > 0 or j > 0:
+        if (i > 0 and j > 0 and
+                dp[i][j] == dp[i - 1][j - 1]
+                + _align_similarity(c[i - 1][0], g[j - 1][0])):
+            pairs.append((c[i - 1][1], g[j - 1][1]))
+            i -= 1
+            j -= 1
+        elif i > 0 and dp[i][j] == dp[i - 1][j] + _ALIGN_GAP:
+            c_left.append(c[i - 1][1])
+            i -= 1
+        else:
+            g_left.append(g[j - 1][1])
+            j -= 1
+    pairs.reverse()
+    c_left.reverse()
+    g_left.reverse()
+    return pairs, c_left, g_left
+
+
+def _merge_align(conv_b, gt_b, tol=0.03, *, c_key=_note_key, g_key=_note_key):
+    """把两侧时间桶按「part + 整 part 保序全局对齐（Needleman–Wunsch）」对齐（R1）。
+
+    Args:
+        conv_b / gt_b: ``{(part, onset): [(mnum, note), ...]}`` 时间桶。
+        tol: 保留仅为签名兼容（整 part NW 已取代 onset 容差合并），不再影响结果。
+        c_key / g_key: 每 part 序列内**同 onset 多声部**的定序键（跨 onset 仍按
+            onset 排序）。默认 ``_note_key``（两侧同为简谱音符字典时适用）；若某侧
+            音符字典字段不同（如 ``verify_jianpu_groundtruth`` 的 music21 侧事件
+            只有 ``isRest`` + ``pitches``、需按首调音级排序），调用方应传入同构
+            定序键（该侧 ``_event_key(_, tonic_pc)``），否则两侧同 onset 顺序不一致
+            -> NW 交叉错配。
+
+
+    oemer 时值识别漂移 + 小节边界错位，使 pred 音符的 onset 相对 gt 偏移超过
+    ``tol``（极端时整页 onset 爬到 ~2298 而非 ~96），且 pred/gt 的小节边界不对齐
+    （实测：concerto pred 的 m2 含 21 音 ≈ gt 的 m2+m3）。在此双重漂移下，**任何
+    位置配对都退化**——旧「按 ``(part, onset)`` 容差配对」把绝对 onset 近似的
+    音符送进同桶、旧「按 ``(part, measure)`` 同小节定位」把同源音符拆进不同小节组，
+    两者都是旧 ``pitch_degree`` ≈ 1/7 随机基线的来源（实测：仅走 onset 容差桶的
+    音符 degree 匹配率仍 ≈14%，即随机）。
+
+    R1 因此把**全部**音符（不再区分「已配对桶 / 孤独音符」）按 ``part`` 归并：
+
+      * 每 part 两侧各自按 ``(onset, *_key)`` 排序成序列（``c_key``/``g_key`` 定序
+        同 onset 多声部，两侧同序 -> NW 正确配对）；
+      * 用 **Needleman–Wunsch 全局保序对齐**（以音高为锚，容增删）配对：匹配项
+        合并为 1:1 桶；未配对项作为单边孤独桶输出，由消费端标为 "only in pred" /
+        "only in gt" 的 ``event_count`` 差异。
+
+    该对齐以音高序列为锚，节奏错误不再破坏配对；oemer 真实的漏检/误检仍以
+    ``event_count`` 暴露（6 页 concerto 语料经两套独立锚交叉验证：degree 匹配率
+    ~99.9%、随机打乱对照 ~26%，证明提取的是真实有序信号）。已知边界：NW 是全局
+    对齐，若 pred/gt 存在整段结构错位（如 p6 漏检整个系统），会对齐不相干音符而
+    非标为 ``event_count`` —— 由消费端的 ``event_count`` / fatal 核查兜底。
+
+    ``tol`` 参数保留仅为签名兼容（整 part NW 已取代 onset 容差合并），不再影响结果。
 
     返回值契约
     ----------
     ``{(part, anchor): {"c":[(mnum, note)...], "g":[(mnum, note)...]}}``。
-    ``anchor`` 可为 onset（阶段1）或预留数值键（阶段2），均满足「可哈希、可排序、
-    且 ``key[0] == part``」的消费端契约（消费端仅用 ``part`` 并迭代桶）。
+    ``anchor`` 为预留数值键（>= 1e9），满足「可哈希、可排序、且 ``key[0] == part``」
+    的消费端契约（消费端仅用 ``part`` 并迭代桶）。
     """
-    # ===== 阶段 1：onset 容差合并（原逻辑，主路径） =====
-    entries = []
+    seq_c = defaultdict(list)  # part -> [(onset, (mnum, note)), ...]
+    seq_g = defaultdict(list)
     for (part, on), items in conv_b.items():
-        entries.append((part, on, "c", items))
+        for item in items:
+            seq_c[part].append((on, item))
     for (part, on), items in gt_b.items():
-        entries.append((part, on, "g", items))
-    entries.sort(key=lambda e: (e[0], e[1]))
+        for item in items:
+            seq_g[part].append((on, item))
 
-    onset_buckets = {}
-    cur = None  # (part, anchor_onset)
-    for part, on, side, items in entries:
-        if cur is None or part != cur[0] or (on - cur[1]) > tol:
-            cur = (part, on)
-            onset_buckets[cur] = {"c": [], "g": []}
-        onset_buckets[cur][side].extend(items)
-
-    # ===== 阶段 2：同小节内音序对齐 fallback =====
     out = {}
-
-    # 2a. 已配对桶（c 与 g 均非空）原样输出；单边桶收集「孤独音符」。
-    #     孤独音符记录其原始 onset（= 所在 onset 桶的 anchor），用于组内序列排序。
-    lonely = []  # [(part, mnum, side, onset, (mnum, note))]
-    for key, bucket in onset_buckets.items():
-        part, anchor = key
-        c_items = bucket["c"]
-        g_items = bucket["g"]
-        if len(c_items) > 0 and len(g_items) > 0:
-            out[key] = bucket  # 已配对，原样保留（消费端按 _note_key 配对）
-            continue
-        if len(c_items) > 0:
-            for item in c_items:
-                lonely.append((part, _measure_of(item), "c", anchor, item))
-        else:  # g_items 非空、c_items 空
-            for item in g_items:
-                lonely.append((part, _measure_of(item), "g", anchor, item))
-
-    # 2b. 按 (part, measure) 分组（measure 缺失时归一为 -1，保证可哈希/可分组）。
-    groups = defaultdict(lambda: {"c": [], "g": []})
-    for (part, mnum, side, onset, item) in lonely:
-        groups[(part, mnum)][side].append((onset, item))
-
-    # 2c. 组内各自按 onset 排序，按位置配对。
-    #     fallback 键用预留数值区间（>= 1e9），与真实 onset（远小于此）严格隔离，
-    #     保证与阶段1 的 (part, onset) 浮点键在同一字典「可排序、不冲突」。
     fb_counter = 0
     FB_BASE = 1e9
-    for (_part, _mnum), grp in groups.items():
-        c_sorted = sorted(grp["c"], key=lambda x: x[0])  # [(onset, (mnum, note)), ...]
-        g_sorted = sorted(grp["g"], key=lambda x: x[0])
-        n_c = len(c_sorted)
-        n_g = len(g_sorted)
-        n_pair = min(n_c, n_g)
-        for i in range(n_pair):
-            fb_key = (_part, FB_BASE + fb_counter)
+    for part in sorted(set(seq_c) | set(seq_g)):
+        c_seq = [item for _, item in sorted(seq_c[part],
+                                            key=lambda x: (x[0], c_key(x[1][1])))]
+        g_seq = [item for _, item in sorted(seq_g[part],
+                                            key=lambda x: (x[0], g_key(x[1][1])))]
+        pairs, c_left, g_left = _nw_align(c_seq, g_seq)
+        for c_item, g_item in pairs:
+            fb_key = (part, FB_BASE + fb_counter)
             fb_counter += 1
-            out[fb_key] = {"c": [c_sorted[i][1]], "g": [g_sorted[i][1]]}
-        # 余量：仅单边存在 -> 单边孤独桶（消费端标为 only in pred / only in gt）。
-        for i in range(n_pair, n_c):
-            fb_key = (_part, FB_BASE + fb_counter)
+            out[fb_key] = {"c": [c_item], "g": [g_item]}
+        for item in c_left:
+            fb_key = (part, FB_BASE + fb_counter)
             fb_counter += 1
-            out[fb_key] = {"c": [c_sorted[i][1]], "g": []}
-        for i in range(n_pair, n_g):
-            fb_key = (_part, FB_BASE + fb_counter)
+            out[fb_key] = {"c": [item], "g": []}
+        for item in g_left:
+            fb_key = (part, FB_BASE + fb_counter)
             fb_counter += 1
-            out[fb_key] = {"c": [], "g": [g_sorted[i][1]]}
+            out[fb_key] = {"c": [], "g": [item]}
 
     return out
 

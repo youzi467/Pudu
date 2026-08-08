@@ -439,11 +439,15 @@ def validate_file(fn):
     _doc_check(rep, "mode", gt_mode, doc_mode)
     _doc_check(rep, "time_signature", (gt_num, gt_den), (doc_beats, doc_beat_type))
 
-    # 4) 逐 (part, 起始) 时间桶比对（含容差对齐）
+    # 4) 逐 (part, 起始) 时间桶比对（R1：整 part 保序全局对齐）
     #    music21 不保留 <voice>，两侧均按绝对时间轴归并到同一桶；
-    #    同桶内多声部音符按音高排序后 1:1 配对，解决「同 onset 多声部」对齐问题；
-    #    _merge_align 以 tol=0.03 合并连音段两侧 onset 系统性偏移（同音，非误并）。
-    aligned = _merge_align(conv_lines, gt_events)
+    #    同 onset 多声部音符按音高排序后 1:1 配对，解决「同 onset 多声部」对齐问题。
+    #    R1 后 _merge_align 对每 part 全序列做 NW 全局保序对齐；music21 侧事件
+    #    只有 isRest+pitches（无 octaveDots/degree 字段），必须传 g_key=_event_key
+    #    按其首调音级定序，否则 _note_key 对该侧全为 0 -> 文档序 -> 两侧同 onset
+    #    顺序不一致 -> NW 交叉错配（回归：90.4% vs 98.5%）。
+    aligned = _merge_align(conv_lines, gt_events,
+                           g_key=lambda it: _event_key(it[1], tonic_pc))
     for key in sorted(aligned):
         part, on = key
         conv_seq = aligned[key]["c"]
