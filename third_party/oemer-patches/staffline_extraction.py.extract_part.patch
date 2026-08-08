@@ -1,0 +1,42 @@
+--- a/staffline_extraction.py
++++ b/staffline_extraction.py
+@@ -391,17 +391,31 @@
+ 
+     staffs = []
+     line_buffer: Any = []
+-    for idx, line in enumerate(lines):
+-        lid = idx % 5
+-        assert line.label == LineLabel(lid), f"{line}, {lid}, {idx}"
++    cur_lid = 0
++    for line in lines:
++        lid = cur_lid
++        # [Pudu patch #8] 防御：稀疏页/页脚噪声使 extract_line 的组内标签与
++        # 全局 idx%5 错位时，旧 assert 直接崩溃导致整页识别失败。健康输入恒
++        # 满足 line.label == LineLabel(lid)，此分支不触发、行为与旧版一致。
++        if line.label != LineLabel(lid):
++            if len(line_buffer) == 5:
++                staff = Staff()
++                for l in line_buffer:
++                    staff.add_line(l)
++                staffs.append(staff)
++            line_buffer = []
++            lid = line.label.value if line.label is not None else 0
+         if lid == 0 and line_buffer:
+-            staff = Staff()
+-            assert len(line_buffer) == 5, len(line_buffer)
+-            for l in line_buffer:
+-                staff.add_line(l)
+-            staffs.append(staff)
++            if len(line_buffer) == 5:
++                staff = Staff()
++                for l in line_buffer:
++                    staff.add_line(l)
++                staffs.append(staff)
+             line_buffer = []
+         line_buffer.append(line)
++        cur_lid = lid + 1
++        if cur_lid >= 5:
++            cur_lid = 0
+ 
+     # Clear out line buffer
+     staff = Staff()
