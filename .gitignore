@@ -18,6 +18,8 @@ data/*.jpeg
 data/*.pdf
 data/*.xml
 data/*.musicxml
+# 2026_08_08 源谱语料（PDF + 对应 musicxml，本地测试数据不上传）
+data/2026_08_08_new/
 !data/.gitkeep
 
 # AI 协作工具的项目本地记忆（不纳入版本控制）
