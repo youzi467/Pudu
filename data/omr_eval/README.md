@@ -263,6 +263,9 @@ harness 经 Pudu 投影成简谱后逐音比对，因此 gt 至少需提供以�
 | `octave_jump` | 95.4% | 大八度级跳变较少 |
 | `pitch_accidental` | 82.7% | Plan A(gt 对齐) 修复后达标 |
 
+> [!IMPORTANT]
+> **评测标尺可信度警告（2026-08-06）**：上表 `pitch_degree` 14% 作为"oemer 真实音名准确率"**不可信**。它是 `tools/omr_eval_lib.py` 的 `_merge_align` 在节奏漂移（rhythm ~47%）导致 onset 失配时退化为"同小节位置 i 对 i"随机配对的结果（恰落到 ~1/7 随机基线）。据此设计的"off-by-one 几何偏置"根因已被证伪（816 失败音符音级偏移近似均匀分布）。**真实音名准确率当前不可认证**：换序列对齐独立复算 step 38.4% / step+octave 25.7%（另 LCS 估计 ~91.6% / ~55%），三法发散证明标尺已坏。须先把 `_merge_align` 改为 Needleman–Wunsch 全局对齐 + 替换罚分（R1, ~1 人日）才能采信任何维度的通过率数字。F3 零效果结论仍成立。详见 `docs/omr-engine-feasibility.md` 附录 A。本 README 其余口径（category_pass 定义、--no-oemr 自洽 100%）不受影响。
+
 > 整体 `note_pass_rate` 仍为个位数，主因是 `pitch_degree`/`rhythm` 极低（oemer 基础识别质量，与 octave run-to-run 波动无关——P1 波动排查已关闭、std=0 伪命题）；F3 几何校正器经全量 A/B 证实对 oemer 0.1.8 零效果（OFF==ON 逐字节相同），保留实验性基础设施、不作上线；下一步优先为 M2-opt-A2（Plan A 生产路径补全：无 gt 也正确推断 a 小调 alter），详见 `docs/jianpu-ocr-optimization-plan.md`。
 
 ### 6.4 自验证基线

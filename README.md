@@ -57,7 +57,7 @@
   - 每次运行旁写 `<out>.preprocess.json` 指标（schema `pudu.omr.preprocess.metrics/v1`：分步耗时、纠偏角与决策、墨迹占比、降级原因），便于 A/B 与调参。
   - 独立调参入口：`python tools/omr_preprocess.py <in> <out.png> [--preset photo]`，可脱离 C++ 直接查看增强效果。
 - **质量保障**：
-  - C++ 单元测试 **150 个用例（既有 117 + P1-1 后处理规则引擎新增 33，经 1 个 ctest 入口 `PuduTests` 运行）+ 41 个 F3 Python 单测**全绿（header-only 自研测试框架，零外部依赖）。
+  - C++ 单元测试 **161 个用例（ctest `PuduTests` 入口全绿；含 P1-1 后处理规则引擎 33 例，Bug B/C 等扩展后由早期 117 → 161）+ 41 个 F3 Python 单测**全绿（header-only 自研测试框架，零外部依赖）。
   - music21 跨语言 ground-truth 校验：8/8 样本、音符 **100.0%**（13492/13492）、字段 **100.0%**（79240/79240）、计入类差异 = 0。
 
 ## 前置依赖
@@ -192,6 +192,9 @@ Pudu/  (工作区当前磁盘名为 omr/，规划重命名为 Pudu/)
 
 - **阶段 3**：已完成（`jianpuToStaff` + `Score→MusicXML` 序列化 + round-trip 自测）。详见 `stage3_action_plan.md`。
 - **阶段 1 OMR**：已完成黑盒集成（oemer + fixture 引擎 + CLI `--from-omr`），并落地评测 harness（Plan A 调号后处理、H2 分维指标）。精度优化焦点：**F3 几何校正器已落地并经全量 A/B 证实对 oemer 0.1.8 零效果（OFF==ON 逐字节相同），保留为实验性基础设施、不作上线**；**下一步优先为 M2-opt-A2（Plan A 生产路径补全：无 gt 也正确推断 a 小调 alter）**，详见 `docs/jianpu-ocr-optimization-plan.md` 与 `docs/m2-real-run-guide.md`。
+
+> [!NOTE]
+> **准确性叙事更正（2026-08-06）**：本文此前若暗示"`pitch_degree`（音名）是 oemer 最弱短板、根因是 off-by-one 几何偏置"，该判断已被推翻。`pitch_degree` 13.6%（harness）是评测对齐在节奏漂移时退化为随机配对的**测量假象**，816 个失败音符音级偏移近似均匀分布（非 ±1 集中）；"off-by-one"归因不成立，F3 零效果正因此被解释。真实音名准确率**当前不可认证**（换序列对齐独立复算 step 38.4% / step+octave 25.7%，另 LCS 估计 ~91.6% / ~55%，三法发散证明标尺已坏）。须先修 `_merge_align` 为 Needleman–Wunsch 全局对齐（R1, ~1 人日）才能谈"80% 达标"。"真正短板是八度"属待证假设。详见 `docs/omr-engine-feasibility.md`。
 - **阶段 4/5**：AI/深度学习进阶、工程化与 GUI（待启动）。
 
 ## 常见问题

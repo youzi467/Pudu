@@ -383,6 +383,9 @@ graph TD
 `pitch_degree` 14.0%（最弱）/ `rhythm` 45.3% / `pitch_octave` 59.2% / `octave_jump` 95.4% / `pitch_accidental` 82.7%（Plan A gt 对齐修复后达标）。（07-20 最新评测，对齐后口径；旧 17.66%/36.98%/96.32% 为 pre-alignment 旧口径，已作废）
 整体 `note_pass_rate` 仍个位数，主因 `pitch_degree`/`rhythm` 极低（oemer 基础识别质量，与 octave run-to-run 波动无关——P1 波动排查已关闭、std=0 伪命题）；F3 全量 A/B 已证实零效果、保留实验性。**M2-opt-A2 已完成**（commit `997b3aa`：无 gt 真实管线 `correct_key_signature(out, None)` 保留 oemer 显式变化音、不再清零 a 小调 G#/C#；`tests/test_omr_oemer_altinfer.py` 8 passed）。下一真实增益来自 U4 真实拍摄样本 + oemer 基础质量提升（P2）。
 
+> [!NOTE]
+> **准确性叙事更正（2026-08-06）**：上段"`pitch_degree` 14% 最弱"作为"oemer 真实音名准确率 / 核心瓶颈"已不可信。它是评测 harness `_merge_align` 在节奏漂移（rhythm ~47%）时退化为"同小节位置 i 对 i"随机配对的测量假象（恰落到 ~1/7 随机基线）；据此设计的"off-by-one 几何偏置"根因已被证伪（816 失败音符音级偏移近似均匀分布）。**真实音名准确率当前不可认证**：换序列对齐独立复算 step 38.4% / step+octave 25.7%（另 LCS 估计 ~91.6% / ~55%），三法发散证明标尺已坏，须先修 `_merge_align` 为 Needleman–Wunsch 全局对齐（R1, ~1 人日）。"真正短板是八度"属待证假设。F3 零效果结论仍成立。详见 `docs/omr-engine-feasibility.md` 附录 A。
+
 ---
 
 > **附：方案对 6 方向的「一句话定性」**

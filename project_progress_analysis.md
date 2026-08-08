@@ -92,6 +92,9 @@
 | `pitch_accidental` | 82.7% | **Plan A(gt 对齐) 修复后**达标 |
 | `rest` | 97.0% | 健康 |
 
+> [!NOTE]
+> **准确性叙事更正（2026-08-06）**：本表 `pitch_degree` 14% 作为"最短板 / oemer 真实音名准确率"已不可信。它是评测 harness `_merge_align` 在节奏漂移（rhythm ~47%）时退化为"同小节位置 i 对 i"随机配对所致（恰落到 ~1/7 随机基线）；据此设计的"off-by-one 几何偏置"根因已被证伪（816 失败音符音级偏移近似均匀分布，非 ±1 集中）。**真实音名准确率当前不可认证**：换序列对齐独立复算 step 38.4% / step+octave 25.7%（另 LCS 估计 ~91.6% / ~55%），三法发散证明标尺已坏，须先修 `_merge_align` 为 Needleman–Wunsch 全局对齐（R1, ~1 人日）。"真正短板是八度"属待证假设；F3 零效果结论仍成立。详见 `docs/omr-engine-feasibility.md` 附录 A。
+
 > 注：旧版 5.1 的 17.66%/36.98%/96.32% 来自 pre-alignment/不同口径评测，已以上表 07-20 最新数据为准。`event_count` 未配对 1926（对齐前 2197）。
 
 ### 5.2 canon（D 大调，Plan A 验证对象）

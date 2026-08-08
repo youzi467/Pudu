@@ -82,7 +82,7 @@
 | **AC-5** | 默认 OFF 字节透明（R-P0-02） | 预处理默认关：同一样张「不加 `--omr-preprocess`」与「P0-2 前旧命令」产出 MusicXML **逐字节相同**、工作区零新增文件；关闭路径**不经** `omr_pipeline.py`（见 `p0-2-preprocess-design.md` D4 / R-P0-02）。 | P0 |
 | **AC-6** | 后处理干净 GT 零修正（P1-1 红线） | **13 份干净 GT**（6 页 concerto GT + 7 份 P1-1 语料，即 `INVARIANT_EXPECTED_GT = 13`）跑 `--apply-postcorrect`，`applied == 0`；Stage-3 不变量守护覆盖恰为 13 份、不被 `--limit` 截断静默绕过（真空为真漏洞已堵）。 | P0 |
 | **AC-7** | MVP 验证边界守住 | faith 验收仅用**单声部 / ≤2 升降号 / 印刷谱**；`concerto_pages` 两声部 demo 不计入 MVP 工程验收（oemer staffline 崩溃归 oemer 脆弱性）。 | P0 |
-| **AC-8** | 已知模型瓶颈不作为工程验收门槛 | oemer 基础识别质量（a 小调 concerto 语料 `pitch_degree`≈13.6% / `rhythm`≈46.7%）属**模型问题、非工程问题**；MVP 不要求达标，二者数字不计入工程验收；U4 真实拍摄样本不在 MVP 验收内。 | P0 |
+| **AC-8** | 已知模型瓶颈不作为工程验收门槛 | oemer 基础识别质量（a 小调 concerto 语料 `pitch_degree`≈13.6% / `rhythm`≈46.7%）属**模型问题、非工程问题**（注：该 `pitch_degree` 数字 2026-08-06 复核为**不可信**——是评测对齐退化为随机配对的假象，见 `docs/omr-engine-feasibility.md` 附录 A；但不影响本 AC 结论，因其本就不计入工程验收）；MVP 不要求达标；U4 真实拍摄样本不在 MVP 验收内。 | P0 |
 | **AC-9** | 默认 OFF 的 MusicXML→简谱 100% 不变 | 关闭所有增强（预处理 / 后处理 / 调参）时，MusicXML→简谱投影与基础内核**逐字节 / 逐字段一致**（红线契约，SK-7）。 | P1 |
 | **AC-10** | opt-in 增强可独立验证 | `--omr-preprocess` / `--apply-postcorrect` 各自有可构造输入样本 + 可判定断言；开启 / 关闭互不影响基础产物契约。 | P1 |
 

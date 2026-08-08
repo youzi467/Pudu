@@ -6,6 +6,9 @@
 > 关联：`docs/jianpu-ocr-optimization-plan.md` §3、`SESSION_SUMMARY_OMR_2026-07-17_18.md`、`tools/omr_oemer.py`、`tools/omr_eval_lib.py`、`tools/omr_eval_groundtruth.py`、`MEMORY.md`、`.workbuddy/memory/2026-07-20.md`
 > 根因基线（07-20 concerto a 小调真实评测）：`note_pass` 2.65%；`pitch_degree` **14.0%**（最短板，占失败音符 ~86%，无方向性 升329/降366；F3 几何校正器全量 A/B 已证实零效果，非靶心）；`pitch_octave` 59.2%（加线整八度误计）；`rhythm` 45.3%；`octave_jump` 95.4%；`pitch_accidental` 82.7%（Plan A 已修）；`rest` 97.0%。
 
+> [!NOTE]
+> **准确性叙事更正（2026-08-06）**：本块基线中"`pitch_degree` 14% 最短板"与 §1.1"off-by-one 几何偏置根因"**已被推翻**。实测 816 个失败音符的音级偏移近似均匀分布（非 ±1 集中），证明 `pitch_degree` 13.6%（harness）是 `_merge_align` 在节奏漂移时退化为"同小节位置 i 对 i"随机配对的**测量假象**，而非 oemer 真实音名准确率；"off-by-one"归因不成立。F3 全量 A/B"OFF==ON 零效果"结论仍成立，且正因此被解释（靶子本不存在）。**真实音名准确率当前不可认证**：换序列对齐后独立复算 step 38.4% / step+octave 25.7%（另一 LCS 估计 ~91.6% / ~55%），三法发散证明评测标尺已坏，须先修 `_merge_align` 为 Needleman–Wunsch 全局对齐（R1, ~1 人日）。"真正短板是八度"属待证假设。详见 `docs/omr-engine-feasibility.md`（含主理人独立核验附录 A）。
+
 ---
 
 ## 1. 实现方案 + 框架选型
