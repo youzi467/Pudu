@@ -122,7 +122,7 @@ class TestPosToStepOctave(unittest.TestCase):
         self.assertEqual(_pos_to_step_octave(7, "F"), ("F", 3))
 
     def test_boundaries(self):
-        # A0：F 谱号 pos=-12（底线 F2 为 pos0，下行 12 半音级到 A0）
+        # A0：F 谱号 pos=-12（底线 G2 为 pos1，下行 13 半音级到 A0）
         self.assertEqual(_pos_to_step_octave(-12, "F"), ("A", 0))
         # C8：G 谱号 pos=27
         self.assertEqual(_pos_to_step_octave(27, "G"), ("C", 8))
@@ -258,7 +258,7 @@ class TestRecomputeAlign(unittest.TestCase):
         g_staff = make_staff(0, 11.2, 256.0, 211.2, staff_id=0)
         f_staff = make_staff(1, 11.2, 256.0, 211.2, staff_id=1)
         # note0 在 G staff 底线（cy=256）-> pos1 -> E4
-        # note1 在 F staff 底线（cy=256）-> pos0 -> F2
+        # note1 在 F staff 底线（cy=256）-> pos1 -> G2（底线即 pos1，非 pos0）
         notes = [
             NoteGeometry(id=0, track=0, group=0,
                          bbox=(10.0, 250.0, 20.0, 262.0),
@@ -283,7 +283,7 @@ class TestRecomputeAlign(unittest.TestCase):
         self.assertEqual(n, 2)
         res = first_two_notes(mxl)
         self.assertEqual(res[0], ("E", "4", "0", "1", "quarter"))
-        self.assertEqual(res[1], ("F", "2", "0", "1", "quarter"))
+        self.assertEqual(res[1], ("G", "2", "0", "1", "quarter"))
 
     def test_lines_not_five_skipped(self):
         # 只有 4 条谱线的 staff -> 该音符跳过（保留原值）

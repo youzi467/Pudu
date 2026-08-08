@@ -113,8 +113,44 @@ class SidecarDoc:
         return {c.track: c for c in self.clefs}
 
     def staves_by_track(self) -> Dict[int, StaffGeometry]:
-        """{track: StaffGeometry}。"""
+        """{track: StaffGeometry}。
+
+        注意：oemer 里同一页所有谱表的 track 几乎总是 0（单轨语料），此 dict
+        会塌缩成 {0: 最后一个谱表}，**不能**用 track 作唯一键选谱表。谱表选择
+        必须用 _nearest_staff_by_y()（镜像 oemer find_closest_staffs 的 y 距离）。
+        """
         return {s.track: s for s in self.staves}
+
+    def _nearest_staff_by_y(self, cy: float, group: Optional[int] = None,
+                            track: Optional[int] = None) -> Optional[StaffGeometry]:
+        """按「note.track/group 归属 + y 距离最近」选谱表（镜像 oemer 语义）。
+
+        oemer 里 note.track / note.group 取自 ``st_master``（``find_closest_staffs``
+        选中的谱表），因此 **track+group 精确匹配即定位到原谱表**——比裸 y 距离更准
+        （同页同 y 的多谱表靠 track 区分；单轨语料 track 全 0 时退化为组内 y 最近，
+        组内重复谱表线位相同，任取其一几何一致）。
+
+        选择优先级：
+          1) 同 group 且同 track（oemer 主语义）；
+          2) 同 group（track 不匹配时的兜底）；
+          3) 全页 y 最近（group 缺失）。
+        """
+        staves = self.staves
+        if group is not None:
+            same_grp = [s for s in staves if s.group == group]
+            if track is not None:
+                same_track = [s for s in same_grp if s.track == track]
+                if same_track:
+                    return min(same_track, key=lambda s: abs(s.y_center - cy))
+            if same_grp:
+                return min(same_grp, key=lambda s: abs(s.y_center - cy))
+        if track is not None:
+            same_track = [s for s in staves if s.track == track]
+            if same_track:
+                return min(same_track, key=lambda s: abs(s.y_center - cy))
+        if not staves:
+            return None
+        return min(staves, key=lambda s: abs(s.y_center - cy))
 
     def to_dict(self) -> Dict[str, Any]:
         """序列化为可 json.dump 的 dict（tuple 自动变 list，符合 schema）。"""
@@ -185,10 +221,12 @@ F_CLEF_POS_TO_PITCH = ['F', 'G', 'A', 'B', 'C', 'D', 'E']
 
 # anchor：谱表底线音 ↔ staff_line_pos（与 decode_note 的 oct_offset/pitch_offset 对应）
 #   G 谱号：底线 pos=1 = E4（pos=0 为 D4）
-#   F 谱号：底线 pos=0 = F2
+#   F 谱号：底线 pos=1 = G2（pos=0 为 F2）—— F3 v2 修正：F 谱底线的正确
+#   diatonic pos 与 G 谱一样是 1（不是 0）。oemer decode_note F: pos=1 → G2，
+#   旧 anchor 写 bottom_pos=0 会把所有 F 谱音符系统性地压低一个音级。
 STAFF_ANCHOR = {
     "G": {"bottom_step": "E", "bottom_oct": 4, "bottom_pos": 1},
-    "F": {"bottom_step": "F", "bottom_oct": 2, "bottom_pos": 0},
+    "F": {"bottom_step": "G", "bottom_oct": 2, "bottom_pos": 1},
 }
 
 
@@ -333,7 +371,6 @@ def recompute_pitch_from_geometry(musicxml_path: str, sidecar_path: str,
     _strip_ns(root)
 
     clefs = doc.clefs_by_track()
-    staves = doc.staves_by_track()
     n_notes = len(doc.notes)
 
     count = 0
@@ -354,7 +391,11 @@ def recompute_pitch_from_geometry(musicxml_path: str, sidecar_path: str,
         ng = doc.notes[i]
         i += 1
 
-        staff = staves.get(ng.track)
+        # 谱表选择：按 y 距离最近（镜像 oemer find_closest_staffs）。不能按 track——
+        # 单轨语料所有谱表 track=0，staves_by_track() 会塌缩成最后一个谱表，
+        # 导致整页音符被拿同一个（错误）谱表几何重算（prelude -14 回归根因）。
+        cy0 = ng.ink_centroid[1] if use_ink_centroid else ng.center[1]
+        staff = doc._nearest_staff_by_y(cy0, group=ng.group, track=ng.track)
         # B 计划：谱线数≠5 或找不到谱表 → 跳过（保留原值）
         if staff is None or len(staff.lines) != 5:
             continue
@@ -364,10 +405,9 @@ def recompute_pitch_from_geometry(musicxml_path: str, sidecar_path: str,
         if clef_type not in STAFF_ANCHOR:
             continue
 
-        cy = ng.ink_centroid[1] if use_ink_centroid else ng.center[1]
         # B 计划：cy 可疑（几何 pos 相对 oemer 原猜偏差过大）→ 跳过
         try:
-            pos = _geometric_pos(staff, clef_type, cy, rounding)
+            pos = _geometric_pos(staff, clef_type, cy0, rounding)
         except Exception:  # noqa: BLE001
             continue
         if ng.staff_line_pos is not None and abs(pos - int(ng.staff_line_pos)) > 16:
