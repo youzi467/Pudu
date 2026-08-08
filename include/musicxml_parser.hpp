@@ -55,6 +55,12 @@ private:
     int currentBeats_ = 0;
     int currentBeatType_ = 0;
 
+    // 全局默认拍号是否已由"首 <time> 块"写入 part.attributes。
+    //   守卫不能依赖数值哨兵：ScoreAttributes::beats 默认 4，旧 `== 0` 判断永不
+    //   触发，导致非 4/4 谱（2/4、3/4、6/4…）的全局拍号恒错，BeatReconcile 的
+    //   逐小节目标全部落回 4/4。P1-1 返工：改为显式标志，首块写入后置位。
+    bool timeDefaultSeen_ = false;
+
     // 阶段 2 前置：本声部内的时间游标（单位 = quarterLength / 四分音符），跨小节连续推进；
     //   每遇非和弦 <note> 前进 duration/divisions，遇 <backup>/<forward> 按同换算回退/前进。
     //   每个 <note> 的 onset 即取当前游标值。每部谱开始时重置为 0。

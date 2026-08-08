@@ -137,6 +137,7 @@ void MusicXMLParser::parsePart(const pugi::xml_node& partNode, Score& out) {
     // P1-1：当前拍号随每个声部重新计时（首拍号将由首个含 <time> 的 <measure> 写入）
     currentBeats_ = 0;
     currentBeatType_ = 0;
+    timeDefaultSeen_ = false;
 
     for (pugi::xml_node measureNode : partNode.children("measure")) {
         parseMeasure(measureNode, part);
@@ -210,15 +211,16 @@ void MusicXMLParser::parseMeasure(const pugi::xml_node& measureNode, Part& part)
                 if (pugi::xml_node b = t.child("beats")) {
                     const int v = b.text().as_int(currentBeats_ > 0 ? currentBeats_ : 4);
                     currentBeats_ = v;
-                    if (part.attributes.beats == 0) part.attributes.beats = v;  // 首拍号作全局默认
+                    if (!timeDefaultSeen_) part.attributes.beats = v;  // 首拍号作全局默认
                     measure.beats = v;
                 }
                 if (pugi::xml_node bt = t.child("beat-type")) {
                     const int v = bt.text().as_int(currentBeatType_ > 0 ? currentBeatType_ : 4);
                     currentBeatType_ = v;
-                    if (part.attributes.beatType == 0) part.attributes.beatType = v;
+                    if (!timeDefaultSeen_) part.attributes.beatType = v;
                     measure.beatType = v;
                 }
+                timeDefaultSeen_ = true;  // 首 <time> 块已处理完，后续变拍号不再动全局默认
             }
 
         } else if (name == "note") {
