@@ -120,6 +120,62 @@ RHYTHM_BASE：(0.25,0,2)=16 分、(0.5,0,1)=8 分、(1.0,0,0)=4 分。R-geo 改�
 > 与 f623221 A/B 的 83.19% 一致；swan-lake/the-swan 锚点门控跳过（0 回归），
 > 总改写 844 音。
 
+### 终审：beam/flag 判别杠杆（2026-08-09，第三轮调查，已放弃）
+
+> 上文「需梁/旗结构识别（oemer 内部信息，sidecar 未导出）才能突破」的假设经第三轮
+> **量化否决**。独立图像级梁检测（新信号源）有效，但净上限仅 +21~+33 note-level
+> （≈1pp note_pass），且节奏**最大单块「读短」是几何+beam 双盲**。结论：beam/flag
+> 不可用于 R-geo round-2，节奏杠杆封账。
+
+**三条信号路径全核**：
+
+| 路径 | 结论 |
+|---|---|
+| pred MusicXML `<beam>` 元素 | ❌ oemer 不导出梁，无此信号 |
+| oemer duration == 梁数（`scan_beam_flag` 同源） | ❌ 事后不可恢复（早期已验证 0-13%） |
+| **独立图像梁检测**（`build/_beam_img_probe.py`） | ✅ 有效：13 页坐标拟合并 ink-hit 100%，**count≥2 ⇒ 16分+ 在活跃页 0 误判** |
+
+**信号特性：单侧 + 低 recall**。只能证「≥16分」，不能证「是8分」（漏检双梁16分
+== 单梁8分）；recall 仅 ~25%（593 个该缩 16 分仅检出 146）；count==0 大量为带旗/
+单音符组（bach/prelude 页，检测器只数梁）。
+
+**量化（beam-force = count≥2 强制缩，只缩，post≠gt 才计）**：
+
+| formulation | 净效果（note-level） |
+|---|---|
+| 笼统 gate（count≥2 才缩） | **Δ −246**（连净胜页修复一起杀） |
+| beam-force（补 R-geo 漏缩） | **+21**（活跃页 +33：canon_p1 +18、prelude_p2 +6 为主；误伤 16 集中门控页） |
+| 盈亏平衡所需 recall | 66%，实测 25%（差 2.6×） |
+
+**每页节奏残差账本（post vs gt，probe 口径 读短 196 + 读长 156）**：读短 = summer_p2 67
+（66 GT8→16）、canon_p1 62（27）、badinerie 44（37）、summer_p1 7、bach_p3 6；
+读长 = canon_p1 56、swan-lake 35（门控）、prelude_p2 17、badinerie 14、bach_p2 10。
+**读短残留几何+beam 双盲**（8分 1 梁 == 漏检 16分 1 梁），镜像伸 pass 已在 badinerie
+实测否决（0 修复 14 回归，间距压缩不可分）；读长残余为几何双盲或门控污染。
+
+**实施成本**：R-geo 调用面仅 `(musicxml, sidecar)`，sidecar 无像素/尺寸
+（`image_width_px=None`）；beam 检测需自行定位 PNG + stdlib 解码二值化 + 重估
+model→PNG 变换（每页 by∈{8,12,14}）——纯 stdlib 大工程，只为 canon_p1+prelude_p2。
+
+### 残余杠杆清单（83.2% 封账，2026-08-09）
+
+权威账本（`omr_eval_note_diffs.json`，3147 音符，pass 2618 / fail 529）：
+
+| 类别 | 实例 | 单类失败 | 处置 |
+|---|---|---|---|
+| `rhythm` | 380 | 348 | 读短 196 几何+beam 双盲封账；读长 156 中 swan 门控 35 校准同源污染（高风险）为唯一潜在剩余面 |
+| `pitch_accidental` | 88 | 59 | 残余多为 F3 几何 step/octave 未到位页面的连带误差（bach_p2/prelude_p2），未单独立杠杆 |
+| `pitch_degree` | 62 | 26 | 含 prelude_p2/bach_p3 模型失败页（不可修） |
+| `pitch_octave` | 49 | 11 | bach_p2 极音区补丁已知可行但 **note_pass 持平** |
+| `tie` | 20 | 14 | 未调研（量小） |
+| `octave_jump` | 20 | — | 预检子维度，随 pitch 修 |
+| `chord` / `grace` | 3 / 2 | — | 量级可忽略 |
+| `event_count` | 637 | — | 不进 note_pass |
+
+失败音符按页：canon_p1 129 / summer_p2 72 / badinerie 70 / bach_p2 58 / prelude_p2 52 /
+swan-lake 49 / the-swan 33 / bach_p3 17 / 其余 ≤14。**可行动面收敛为三**：① swan 门控
+（高风险低 ROI）；② bach_p2 极音区（note_pass 持平，已证）；③ tie 14（未调研）。
+
 ## 1. 开关语义（已落实）
 
 | 开关 | 默认 | 作用 |
