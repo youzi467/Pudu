@@ -34,7 +34,7 @@ import os
 import json
 import math
 from dataclasses import dataclass, field, asdict
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Sequence
 
 import xml.etree.ElementTree as ET
 
@@ -111,6 +111,20 @@ class SidecarDoc:
     def clefs_by_track(self) -> Dict[int, ClefGeometry]:
         """{track: ClefGeometry}。"""
         return {c.track: c for c in self.clefs}
+
+    @staticmethod
+    def _nearest_clef_by_y(clefs: Sequence["ClefGeometry"],
+                           staff_y: float) -> Optional["ClefGeometry"]:
+        """按 y 距离取距谱表最近的有效谱号（y_center 缺失的跳过）。
+
+        替代 per-track 塌缩：单轨语料所有谱表 track=0，``clefs_by_track()`` 会把
+        整页谱号折叠成最后一个，遇 F 谱（含假阳性）即整页错锚点。每个系统左缘恰好
+        一个谱号，取距该谱表 y 最近者即定位到该系统自身谱号。
+        """
+        cand = [c for c in clefs if c.y_center is not None]
+        if not cand:
+            return None
+        return min(cand, key=lambda c: abs(c.y_center - staff_y))
 
     def staves_by_track(self) -> Dict[int, StaffGeometry]:
         """{track: StaffGeometry}。
@@ -370,7 +384,6 @@ def recompute_pitch_from_geometry(musicxml_path: str, sidecar_path: str,
     root = tree.getroot()
     _strip_ns(root)
 
-    clefs = doc.clefs_by_track()
     n_notes = len(doc.notes)
 
     count = 0
@@ -399,7 +412,12 @@ def recompute_pitch_from_geometry(musicxml_path: str, sidecar_path: str,
         # B 计划：谱线数≠5 或找不到谱表 → 跳过（保留原值）
         if staff is None or len(staff.lines) != 5:
             continue
-        clef = clefs.get(ng.track)
+        # 谱号按「该谱表 y 最近的谱号」选，替代 per-track 全局塌缩。
+        # 单轨语料所有 clef.track=0，clefs_by_track() 塌缩成最后一个谱号；若页末
+        # 恰有 F 谱（含假阳性，实测 system-D 区检出 y=788 F 谱），整页都被 bass
+        # 锚点重算（统一低 2 个八度）。每系统左缘恰一个谱号，按 |y_center - staff.y_center|
+        # 取最近即定位到该系统谱号（G/F 同型时与旧行为一致）。
+        clef = doc._nearest_clef_by_y(doc.clefs, staff.y_center)
         clef_type = clef.type if (clef is not None) else 'G'
         # B 计划：非 G/F 谱号（C/percussion）→ 跳过（保留原值）
         if clef_type not in STAFF_ANCHOR:
