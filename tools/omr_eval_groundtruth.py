@@ -251,6 +251,8 @@ def run_oemer(image_path, out_musicxml, gt_path=None, venv_python=VENV_PYTHON,
         cmd += ["--gt", gt_path]
     if f3_geometric:
         cmd += ["--f3-geometric"]
+    if rhythm_geometric:
+        cmd += ["--rhythm-geometric"]
     try:
         proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, timeout=600)
     except Exception as e:  # noqa: BLE001

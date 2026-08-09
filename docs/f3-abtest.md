@@ -100,6 +100,26 @@ RHYTHM_BASE：(0.25,0,2)=16 分、(0.5,0,1)=8 分、(1.0,0,0)=4 分。R-geo 改�
   如前述归档。残余 380 个 rhythm 失败中此类占比最大，属几何信号天花板，
   需梁/旗结构识别（oemer 内部信息，sidecar 未导出）才能突破。
 
+### 勘误：harness 透传 bug + 语料回滚恢复（2026-08-09）
+
+> **R-geo 已落地但 `--rhythm-geometric` 走不到 oemer**：f623221 把该 flag 接进
+> `OemerOpts` / `run_oemer` 签名 / docstring / CLI / `main` / `_eval_one` 调用，
+> **唯独实际 cmd 构建（`run_oemer` 内）漏了 `cmd += ["--rhythm-geometric"]`**——
+> docstring 里 P1-2 接线点示例声称会加，代码没实现。当时 A/B 靠环境变量
+> `PUDU_RHYTHM_GEOMETRIC=1`（`omr_oemer.py` 直接读）走通，掩盖了该缺口。
+> 修复：补上 `if rhythm_geometric: cmd += ["--rhythm-geometric"]`，
+> 回归守卫见 `tests/test_omr_eval_groundtruth_wiring.py`
+> （`test_run_oemer_rhythm_flag_*`、`test_arm_*_with_rgeo`，SK-7 逐 token 兼容）。
+
+> **语料 pred 曾回滚 baseline**：pitch 杠杆 A/B 实验卫生把 13 页 pred 恢复回
+> raw oemer baseline（== `build/_f3ab_backup`，实测 35.7%，pitch_octave 868）。
+> 恢复路径：`python tools/omr_eval_groundtruth.py <corpus> --oemr --f3-geometric
+> --rhythm-geometric`（重生成 oemer pred + sidecar，再叠加 R-geo），或对已有
+> pred 直接调 `geometric_pitch.recompute_rhythm_from_geometry`（用 F3 sidecar）。
+> 恢复后全量复刻验证：**35.7%（baseline）→ 71.7%（F3）→ 83.2%（F3+R-geo）**，
+> 与 f623221 A/B 的 83.19% 一致；swan-lake/the-swan 锚点门控跳过（0 回归），
+> 总改写 844 音。
+
 ## 1. 开关语义（已落实）
 
 | 开关 | 默认 | 作用 |

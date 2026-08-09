@@ -186,6 +186,36 @@ class DefaultArgvUnchangedTest(_BaseWiringTest):
                     self.assertNotIn("--no-preprocess", got)
                     self.assertEqual(got[1], G.OMER_RUNNER)
 
+    def test_run_oemer_rhythm_flag_appended_after_f3(self):
+        """🔴 R-geo 回归守卫（2026-08-09 bug 修复）：rhythm_geometric=True 时
+        argv 必须含 ``--rhythm-geometric``，且紧跟在 ``--f3-geometric`` 之后。
+        此前 f623221 只把 flag 接进 OemerOpts/签名/CLI，实际 cmd 构建漏加，
+        eval harness 复现不了 83.19%（靠环境变量 PUDU_RHYTHM_GEOMETRIC 走通）。"""
+        gt = self._path("g.gt.musicxml")
+        for has_gt in (False, True):
+            for f3 in (False, True):
+                with self.subTest(gt=has_gt, f3=f3):
+                    got = self._run(gt_path=gt if has_gt else None,
+                                    f3_geometric=f3, rhythm_geometric=True)
+                    want = legacy_run_oemer_cmd(
+                        self._path("in.jpg"), self._path("out.musicxml"),
+                        gt_path=gt if has_gt else None, f3_geometric=f3)
+                    want += ["--rhythm-geometric"]
+                    self.assertEqual(got, want)
+                    self.assertEqual(got.count("--rhythm-geometric"), 1)
+                    if f3:  # 位置：紧跟在 --f3-geometric 之后
+                        self.assertEqual(
+                            got.index("--rhythm-geometric"),
+                            got.index("--f3-geometric") + 1)
+
+    def test_run_oemer_rhythm_flag_absent_by_default(self):
+        """默认（rhythm_geometric=False）不出现 ``--rhythm-geometric``（SK-7
+        兼容：改动后默认 argv 仍与改动前逐 token 相同）。"""
+        for f3 in (False, True):
+            with self.subTest(f3=f3):
+                got = self._run(f3_geometric=f3)
+                self.assertNotIn("--rhythm-geometric", got)
+
     def test_pudu_jianpu_json_default_unchanged(self):
         rec = Recorder()
         with mock.patch.object(G.subprocess, "run", rec):
@@ -252,6 +282,25 @@ class ArmArgvTest(_BaseWiringTest):
                 "--preprocess-config", cfg,
                 "--gt", self._path("p1.gt.musicxml"),
             ])
+
+    def test_arm_direct_with_rgeo(self):
+        """直调路径 rhythm_geometric=True 也带 flag（修复覆盖两条 runner 路径）。"""
+        self.assertEqual(self._argv(rhythm_geometric=True), [
+            G.VENV_PYTHON, G.OMER_RUNNER,
+            self._path("p1.jpg"), self._path("p1.pred.musicxml"),
+            "--gt", self._path("p1.gt.musicxml"),
+            "--rhythm-geometric",
+        ])
+
+    def test_arm_pipe_off_with_rgeo(self):
+        """代理路径（preprocess='off'）同样带 flag。"""
+        self.assertEqual(self._argv(preprocess="off", rhythm_geometric=True), [
+            G.VENV_PYTHON, G.PIPELINE_RUNNER,
+            self._path("p1.jpg"), self._path("p1.pred.musicxml"),
+            "--no-preprocess",
+            "--gt", self._path("p1.gt.musicxml"),
+            "--rhythm-geometric",
+        ])
 
     def test_arm_with_metrics_sidecar(self):
         """SK-5：显式 --preprocess-metrics 必须出现在 --gt 之前、preset 之后。"""
