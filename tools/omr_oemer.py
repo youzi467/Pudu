@@ -4,13 +4,16 @@
 #
 # 适配器以子进程方式调用本脚本：
 #   python omr_oemer.py <input_image_or_pdf> <output_musicxml> [--gt <gt_musicxml>]
-#                        [--f3-geometric] [--no-f3-sidecar]
+#                        [--f3-geometric] [--rhythm-geometric] [--no-f3-sidecar]
 #
 # 职责：用 oemer（基于深度学习的 OMR）把乐谱图片/PDF 识别为 MusicXML，
 # 随后做：
 #   * 方案A（correct_key_signature）：调号后处理重推断（fifths + alter）。
 #   * F3（recompute_pitch_from_geometry）：几何感知音高校正，
 #     仅重写 <step>/<octave>（默认关，需 --f3-geometric 或 PUDU_F3_GEOMETRIC=1）。
+#   * R-geo（recompute_rhythm_from_geometry）：几何感知时值校正，
+#     只把被 oemer 读长的快音符缩回几何间距对应时值，仅重写 <duration>/<type>
+#     （默认关，需 --rhythm-geometric 或 PUDU_RHYTHM_GEOMETRIC=1）。
 #
 # 这是"黑盒"边界——Pudu 只消费产出的 MusicXML，不关心 oemer 内部。
 #
@@ -65,6 +68,7 @@ import numpy as np
 from geometric_pitch import (  # noqa: E402
     SidecarDoc, StaffGeometry, LineGeom, ClefGeometry, NoteGeometry,
     recompute_pitch_from_geometry,
+    recompute_rhythm_from_geometry,
 )
 
 
@@ -821,17 +825,19 @@ def _dump_geometry_sidecar(mxl_path: str) -> str:
 # ===================== oemer 调用 + 调号校正 + F3 主流程 =====================
 
 def _parse_args(argv):
-    """从 sys.argv[1:] 解析位置参数与可选的 --gt / --f3-geometric / --no-f3-sidecar。
+    """从 sys.argv[1:] 解析位置参数与可选的 --gt / --f3-geometric /
+    --rhythm-geometric / --no-f3-sidecar。
 
     必须在覆盖 sys.argv 给 oemer 之前调用，否则这些 flag 会被 oemer 的 argv
     构造吞掉丢失。
 
     Returns:
-        (positional, gt_path, f3_geometric, f3_suppress)
+        (positional, gt_path, f3_geometric, rhythm_geometric, f3_suppress)
     """
     positional = []
     gt_path = None
     f3_geometric = False
+    rhythm_geometric = False
     f3_suppress = False
     i = 0
     while i < len(argv):
@@ -847,19 +853,23 @@ def _parse_args(argv):
         elif a == "--f3-geometric":
             f3_geometric = True
             i += 1
+        elif a == "--rhythm-geometric":
+            rhythm_geometric = True
+            i += 1
         elif a == "--no-f3-sidecar":
             f3_suppress = True
             i += 1
         else:
             positional.append(a)
             i += 1
-    return positional, gt_path, f3_geometric, f3_suppress
+    return positional, gt_path, f3_geometric, rhythm_geometric, f3_suppress
 
 
 def main():
     # ---- 解析 flag（必须在覆盖 sys.argv 给 oemer 之前） ----
     try:
-        positional, gt_path, f3_geometric, f3_suppress = _parse_args(sys.argv[1:])
+        positional, gt_path, f3_geometric, rhythm_geometric, f3_suppress = \
+            _parse_args(sys.argv[1:])
     except ValueError as e:
         sys.stderr.write(f"[错误] {e}\n")
         return 2
@@ -867,7 +877,8 @@ def main():
     if len(positional) == 0:
         sys.stderr.write(
             "用法: python omr_oemer.py <input> [<output.musicxml>] "
-            "[--gt <gt_path>] [--f3-geometric] [--no-f3-sidecar]\n")
+            "[--gt <gt_path>] [--f3-geometric] [--rhythm-geometric] "
+            "[--no-f3-sidecar]\n")
         return 2
 
     in_path = positional[0]
@@ -1001,6 +1012,28 @@ def main():
                 # 对齐异常不致命：保留 F3 输出
                 traceback.print_exc()
                 sys.stderr.write(f"[警告] F3 后 alter 对齐异常（保留现有输出）: {e}\n")
+
+    # ---- R-geo：几何感知时值校正（只缩被读长的快音符，依赖 sidecar x）。
+    #      独立于 F3（F3 只动 step/octave，R-geo 只动 duration/type）。
+    #      --rhythm-geometric 或环境变量 PUDU_RHYTHM_GEOMETRIC=1 开启。 ----
+    rhythm_enabled = rhythm_geometric or (
+        os.environ.get("PUDU_RHYTHM_GEOMETRIC") == "1")
+    if rhythm_enabled:
+        rhythm_sidecar = out_path.replace('.musicxml', '.geometry.json')
+        if f3_suppress:
+            sys.stderr.write(
+                "[警告] --rhythm-geometric 已开启但 --no-f3-sidecar 抑制了 sidecar，"
+                "R-geo 无几何数据可用（将跳过）\n")
+        else:
+            try:
+                n_rhythm = recompute_rhythm_from_geometry(
+                    out_path, rhythm_sidecar)
+                sys.stdout.write(
+                    f"[rhythm] 几何时值校正改写 {n_rhythm} 个音符的 duration\n")
+            except Exception as e:  # noqa: BLE001
+                # R-geo 异常不致命：保留既有输出
+                traceback.print_exc()
+                sys.stderr.write(f"[警告] R-geo 时值校正异常（保留现有输出）: {e}\n")
 
     sys.stdout.write(f"[ok] oemer 产出 MusicXML: {out_path}\n")
     return 0

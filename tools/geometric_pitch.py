@@ -436,6 +436,240 @@ def recompute_pitch_from_geometry(musicxml_path: str, sidecar_path: str,
     return count
 
 
+# ----------------------------------------------------------------------
+# R-geo：几何感知时值校正（只缩不伸，规避过检测回归）
+# ----------------------------------------------------------------------
+
+# 改写目标表：16 分倍数（class）→ quarterLength → MusicXML <type>
+_RHYTHM_QL_TO_TYPE = {
+    0.25: "16th",
+    0.5: "eighth",
+    1.0: "quarter",
+    2.0: "half",
+    4.0: "whole",
+}
+# 时值重写的合法 class（16 分倍数；点节奏等非整数倍保守跳过）
+_RHYTHM_CLASSES = {1, 2, 4, 8, 16}
+# 校准锚点下限（仅 oemer 读出的 16 分音符）：不足则跳过整页（非致命，镜像 F3 B 计划）。
+# 2026-08-09 全量 A/B（13 页）归因：校准锚点 <40 的页面几何时值校正均净亏——
+#   * the-swan（无 16 分锚点，靠 8 分/2 兜底）：-6
+#   * swan-lake（仅 20 个 16 分锚点）：-23
+# 而 8 个净胜页最低锚点数 = 66（badinerie），故 40 取在「最弱胜者之下、清晰亏损者之上」，
+# 零误伤胜者。同时移除 8 分/32 分兜底校准（the-swan 坏校准来源）：无足量真 16 分锚点
+# 即视为「该页不是 16 分主导谱面」，R-geo 无从可缩，跳过比猜更安全。
+_MIN_RHYTHM_CALIBRATION = 40
+
+
+def _note_ql(note: ET.Element, divisions: int) -> Optional[float]:
+    """返回音符的 quarterLength（``<duration>/divisions``），无法解析返回 None。"""
+    dur_el = note.find("duration")
+    if dur_el is None or dur_el.text is None:
+        return None
+    try:
+        return int(str(dur_el.text).strip()) / float(divisions)
+    except (ValueError, ZeroDivisionError):
+        return None
+
+
+def _min_defined_gap(g_prev: Optional[float], g_next: Optional[float]) -> Optional[float]:
+    """两邻侧间距中已定义者取小者；同 x 和弦（gap≤1px）视为无邻侧。"""
+    gs = [g for g in (g_prev, g_next) if g is not None and g > 1.0]
+    return min(gs) if gs else None
+
+
+def _calibrate_unit(records, divisions: int) -> Optional[float]:
+    """自校准 16 分间距（px），纯相对、无 ts 依赖。
+
+    仅用 oemer 已正确读出的 16 分音符（quarterLength==0.25）的 min(邻隙) 中位数；
+    不足 ``_MIN_RHYTHM_CALIBRATION`` 个返回 None（调用方跳过整页，非致命）。
+    依据：sidecar onset 间距与时值成精确比例（16 分≈1 单位、8 分≈2、4 分≈4），
+    且 oemer 的 duration 误读均为「读长」（16→4/8 分、8→4 分），故 quarterLength
+    ==0.25 的音符即真 16 分，可作校准锚点。
+
+    2026-08-09 修正（全量 A/B 归因）：移除 8 分/2、32 分×2 兜底。兜底会拿「真 8 分
+    的间距/2」当 16 分单位，把整页几何时值定得偏小 → 真 8 分/4 分被误缩成 16 分
+    （the-swan 靠 8 分兜底净亏 -6 的根因）。无足量真 16 分锚点 = 非 16 分主导谱面，
+    R-geo 无从可缩，跳过更安全。
+    """
+    def _median(vals):
+        s = sorted(vals)
+        return s[len(s) // 2]
+
+    samples = []
+    for note, _x, g_prev, g_next in records:
+        ql = _note_ql(note, divisions)
+        if ql is not None and abs(ql - 0.25) < 1e-9:
+            g = _min_defined_gap(g_prev, g_next)
+            if g is not None:
+                samples.append(g)
+    if len(samples) >= _MIN_RHYTHM_CALIBRATION:
+        return _median(samples)
+    return None
+
+
+def recompute_rhythm_from_geometry(musicxml_path: str, sidecar_path: str) -> int:
+    """几何感知时值校正：只把「被 oemer 读长」的快音符缩回几何间距对应的时值。
+
+    背景（2026-08-09 全量 A/B 归因，见 docs/f3-abtest.md）：oemer 的 duration 头
+    在快速乐句上把 16 分读成 4/8 分（16分→4分 ×334、16分→8分 ×265、8分→4分 ×70，
+    占 771 个 rhythm 失败的 87%），且 746/771 发生在时值混合小节——是**逐音符**
+    误读，不是整小节塌缩（均匀小节仅 25 个）。sidecar 里符头 onset 间距与时值成
+    精确比例，与 oemer 的误读完全解耦，故可按间距反推每个音符应有时值。
+
+    校正规则（只缩不伸 + 双侧判定，规避过收缩与过检测回归）：
+        class_i 由两侧间距各自量化后合并：
+          * 两侧一致 → 该 class 可信；
+          * 一侧 ≥4 倍级更大 → 快音符贴慢音符（[16分][4分] 边界），取快 class；
+          * 其余不一致 → 保守取大 class（几何无法区分「8分邻16分」与「16分在
+            8 分边界」，取大不会把真 8 分/4 分误缩成 16 分）。
+        仅当 ``0.25*class_i < oemer 当前 ql`` 时改写（把读长的缩回几何间距）；
+        绝不伸长（避免把「快段结尾 / 孤音」的大间距误缩成更短，也不改动正确音符）。
+        量化下界 1（=16 分）使假音符劈开的半距（~0.49 单位 → round→0 → 钳到 1）
+        不会把真 16 分误缩成 32 分（过检测回归）；代价是真实 32 分（语料仅 ~39 个）
+        不在 v1 范围。
+
+    校准（无 ts 依赖，纯相对）：见 :func:`_calibrate_unit`。
+
+    边界（B 计划，非致命，镜像 ``recompute_pitch_from_geometry``）：
+        * sidecar 缺失 / 解析失败 → 返回 0 不改文件。
+        * 单音符小节 / 小节首末音符无邻侧时用另一侧；两侧均无效则跳过。
+        * class 非 {1,2,4,8,16}（点节奏等）→ 跳过（保守，不猜点）。
+        * 改写时同步更新 ``<duration>`` 与 ``<type>``（若存在）、移除 ``<dot>``，
+          保持 MusicXML 自洽（Pudu 依 duration/divisions 投影，duration 即评测口径）。
+
+    Args:
+        musicxml_path: 待校正 MusicXML（就地写回；仅在有改动时写）。
+        sidecar_path: 对应的 ``<basename>.geometry.json`` 路径。
+
+    Returns:
+        int: 实际被改写时值的音符数。
+    """
+    # —— 非致命前置：sidecar 缺失/解析失败 → 返回 0 ——
+    if not os.path.isfile(sidecar_path):
+        sys.stderr.write(
+            f"[rhythm] sidecar 缺失，跳过几何时值校正（保留原产出）: {sidecar_path}\n")
+        return 0
+    try:
+        with open(sidecar_path, 'r', encoding='utf-8') as f:
+            doc = SidecarDoc.from_dict(json.load(f))
+    except Exception as e:  # noqa: BLE001
+        sys.stderr.write(f"[rhythm] sidecar 解析失败，跳过几何时值校正: {e}\n")
+        return 0
+
+    try:
+        tree = ET.parse(musicxml_path)
+    except Exception as e:  # noqa: BLE001
+        sys.stderr.write(f"[rhythm] MusicXML 解析失败，跳过几何时值校正: {e}\n")
+        return 0
+    root = tree.getroot()
+    _strip_ns(root)
+
+    # divisions：取首处 attributes（oemer 只在 measure 1 写 divisions），默认 16
+    divisions = 16
+    for a in root.iter("attributes"):
+        d = a.find("divisions")
+        if d is not None and d.text:
+            try:
+                divisions = int(str(d.text).strip())
+            except ValueError:
+                pass
+            if divisions > 0:
+                break
+    if divisions <= 0:
+        divisions = 16
+
+    n_notes = len(doc.notes)
+
+    # —— 1:1 映射：sidecar.notes 发射序 ↔ MusicXML 非休止 <note> 文档序（镜像 F3）。
+    #    每小节按 x 排序后求邻隙；跨小节不配对（小节末/首音符用另一侧邻隙）。 ——
+    measures = []
+    i = 0
+    for m in root.iter("measure"):
+        pairs = []
+        for note in m.findall("note"):
+            if note.find("rest") is not None:
+                continue
+            if note.find("duration") is None:
+                continue
+            if i >= n_notes:
+                break
+            ng = doc.notes[i]
+            i += 1
+            pairs.append((note, float(ng.center[0])))
+        if pairs:
+            measures.append(pairs)
+
+    # 每小节组内按 x 排序，展平为 (note, x, g_prev, g_next)
+    records = []
+    for pairs in measures:
+        pairs.sort(key=lambda t: t[1])
+        n = len(pairs)
+        for k, (note, x) in enumerate(pairs):
+            g_prev = (x - pairs[k - 1][1]) if k > 0 else None
+            g_next = (pairs[k + 1][1] - x) if k < n - 1 else None
+            records.append((note, x, g_prev, g_next))
+
+    unit = _calibrate_unit(records, divisions)
+    if unit is None or unit <= 0:
+        sys.stderr.write(
+            "[rhythm] 无法校准 16 分间距，跳过几何时值校正（非致命）\n")
+        return 0
+
+    count = 0
+    for note, _x, g_prev, g_next in records:
+        old_ql = _note_ql(note, divisions)
+        if old_ql is None:
+            continue
+        classes = []
+        for g in (g_prev, g_next):
+            if g is not None and g > 1.0:
+                c = int(_round_half_up(g / unit))
+                if c >= 1:
+                    classes.append(c)
+        if not classes:
+            continue
+        # 双侧判定（关键，2026-08-09 修过度收缩回归）：
+        #   * 两侧一致（c 相等）→ 该 class 可信；
+        #   * 一侧 4 倍级更大 → 是快音符贴慢音符（如 [16分][4分] 边界），取快 class；
+        #   * 其余不一致（如一侧 16 分、一侧 8 分）→ 保守取大 class：几何无法区分
+        #     「8分邻16分」与「16分在 8 分边界」——取大不会把真 8 分/4 分误缩成 16 分
+        #     （swan-lake/canon/summer_p2 过收缩根因：oemer 已正确读出的 8 分/4 分
+        #     常与 16 分相邻，min() 单侧判为 16 分被误缩）。
+        if len(classes) >= 2:
+            c_small, c_large = min(classes), max(classes)
+            if c_large >= 4 * c_small:
+                cls = c_small
+            else:
+                cls = c_large
+        else:
+            cls = classes[0]
+        if cls not in _RHYTHM_CLASSES:
+            continue  # 非标准倍数（点节奏等），保守跳过
+        new_ql = 0.25 * cls
+        if new_ql >= old_ql - 1e-9:
+            continue  # 只缩不伸：几何不短于当前时值则不动
+        new_dur = int(round(new_ql * divisions))
+        dur_el = note.find("duration")
+        dur_el.text = str(new_dur)
+        type_el = note.find("type")
+        new_type = _RHYTHM_QL_TO_TYPE.get(new_ql)
+        if type_el is not None:
+            type_el.text = new_type if new_type else type_el.text
+        dot = note.find("dot")
+        if dot is not None:
+            note.remove(dot)
+        count += 1
+
+    # 仅在有改动时写回，避免无谓的文件改写
+    if count > 0:
+        try:
+            ET.indent(tree, space="  ")
+        except AttributeError:
+            pass
+        tree.write(musicxml_path, encoding="UTF-8", xml_declaration=True)
+    return count
+
+
 if __name__ == "__main__":
     # 轻量自测：验证核心几何/映射与 oemer decode_note 口径一致
     staff = StaffGeometry(staff_id=0, track=0, group=0,

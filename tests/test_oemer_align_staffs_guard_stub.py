@@ -77,15 +77,16 @@ class AlignStaffsGuardStubTest(unittest.TestCase):
         self.assertIn("E.StafflineException", text, "应抛 oemer 自有异常")
         self.assertIn("raise", text)
 
-    def test_manifest_loads_with_two_stage_chain(self):
+    def test_manifest_loads_with_three_stage_chain(self):
         from oemer_patch_lib import load_manifest
         version, specs = load_manifest(REPO_ROOT)
         self.assertEqual(version, "0.1.8")
         by_file = {s.file: s for s in specs}
         self.assertIn("staffline_extraction.py", by_file)
         spec = by_file["staffline_extraction.py"]
-        self.assertEqual(len(spec.chain), 2,
-                         "staffline_extraction.py 应有 2 级增量补丁链")
+        self.assertEqual(len(spec.chain), 3,
+                         "staffline_extraction.py 应有 3 级增量补丁链"
+                         "（基底 + #7 align_staffs + #8 extract_part）")
         # 链尾 sha == patched_sha256_lf
         self.assertEqual(spec.chain[-1].to_sha256_lf, spec.patched_sha256_lf)
         # 首级 from == original

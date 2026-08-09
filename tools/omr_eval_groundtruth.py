@@ -128,12 +128,15 @@ class OemerOpts:
             占位符，由 :func:`_eval_one` 按当前页 base 展开（SK-5：降级必须
             逐页可观测）。
         f3_geometric: 透传 ``--f3-geometric``（P1-2 恒 False，F3 已证零效果）。
+        rhythm_geometric: 透传 ``--rhythm-geometric``（R-geo 几何时值校正，
+            只缩被 oemer 读长的快音符）。
     """
 
     preprocess: Optional[str] = None
     preprocess_config: Optional[str] = None
     preprocess_metrics: Optional[str] = None
     f3_geometric: bool = False
+    rhythm_geometric: bool = False
 
 
 @dataclass(frozen=True)
@@ -174,6 +177,7 @@ def _expand_base(template, base):
 
 def run_oemer(image_path, out_musicxml, gt_path=None, venv_python=VENV_PYTHON,
               f3_geometric=False,
+              rhythm_geometric=False,
               *,
               preprocess=None,
               preprocess_config=None,
@@ -181,8 +185,9 @@ def run_oemer(image_path, out_musicxml, gt_path=None, venv_python=VENV_PYTHON,
     """调用 ``tools/omr_oemer.py`` 把五线谱图片识别为 MusicXML。
 
     命令：``venv_python tools/omr_oemer.py <image> <out_musicxml> [--gt <gt>]
-    [--f3-geometric]``（omr_oemer.py 为位置参数契约，--gt 注入 ground-truth
-    做方案A调号后处理重推断，--f3-geometric 开启 F3 几何音高校正，详见
+    [--f3-geometric] [--rhythm-geometric]``（omr_oemer.py 为位置参数契约，
+    --gt 注入 ground-truth 做方案A调号后处理重推断，--f3-geometric 开启 F3
+    几何音高校正，--rhythm-geometric 开启 R-geo 几何时值校正，详见
     omr_oemer.py 模块 docstring）。
 
     **P1-2 接线点 ①**：当 ``preprocess is not None`` 时，runner 换成 P0-2 的
@@ -195,6 +200,7 @@ def run_oemer(image_path, out_musicxml, gt_path=None, venv_python=VENV_PYTHON,
         + (["--preprocess-metrics", m]      if m)
         + (["--gt", gt_path]                if gt_path)      # C4/SK-2：所有 arm 必带
         + (["--f3-geometric"]               if f3_geometric)
+        + (["--rhythm-geometric"]           if rhythm_geometric)
 
     ``preprocess is None`` 时 argv 与 P0-2 前**逐字节一致**（SK-7 红线）。
 
@@ -207,6 +213,9 @@ def run_oemer(image_path, out_musicxml, gt_path=None, venv_python=VENV_PYTHON,
         venv_python: 含 oemer/music21/opencv 的 venv 解释器。
         f3_geometric: 是否透传 ``--f3-geometric`` 给 oemer 运行器（开启 F3
             几何音高校正）。也可经环境变量 ``PUDU_F3_GEOMETRIC=1`` 启用。
+        rhythm_geometric: 是否透传 ``--rhythm-geometric`` 给 oemer 运行器
+            （开启 R-geo 几何时值校正）。也可经环境变量
+            ``PUDU_RHYTHM_GEOMETRIC=1`` 启用。
         preprocess: 见 :class:`OemerOpts`。keyword-only，默认 None = 现行为。
         preprocess_config: 见 :class:`OemerOpts`。keyword-only。
         preprocess_metrics: 见 :class:`OemerOpts`。keyword-only。
@@ -226,6 +235,8 @@ def run_oemer(image_path, out_musicxml, gt_path=None, venv_python=VENV_PYTHON,
             "请显式给定 preprocess（'off' 或 preset 名）以走 omr_pipeline.py 代理")
 
     f3_geometric = f3_geometric or (os.environ.get("PUDU_F3_GEOMETRIC") == "1")
+    rhythm_geometric = rhythm_geometric or (
+        os.environ.get("PUDU_RHYTHM_GEOMETRIC") == "1")
     runner = OMER_RUNNER if preprocess is None else PIPELINE_RUNNER
     cmd = [venv_python, runner, image_path, out_musicxml]
     if preprocess == "off":
@@ -477,6 +488,7 @@ def _eval_one(corpus_dir, image_path, gt_path, base, use_oemer,
             if not run_oemer(
                     image_path, pred_musicxml, gt_path=gt_path,
                     f3_geometric=f3_geometric or oemer_opts.f3_geometric,
+                    rhythm_geometric=oemer_opts.rhythm_geometric,
                     preprocess=oemer_opts.preprocess,
                     preprocess_config=oemer_opts.preprocess_config,
                     preprocess_metrics=_expand_base(
@@ -883,6 +895,12 @@ def main(argv=None):
                         help="透传 --f3-geometric 给 oemer 运行器（开启 F3 几何"
                              "音高校正）；也可经环境变量 PUDU_F3_GEOMETRIC=1 启用。"
                              "仅影响 oemer 识别路径，不改比对内核。")
+    parser.add_argument("--rhythm-geometric", dest="rhythm_geometric",
+                        action="store_true",
+                        help="透传 --rhythm-geometric 给 oemer 运行器（开启 R-geo"
+                             "几何时值校正，只缩被 oemer 读长的快音符）；也可经"
+                             "环境变量 PUDU_RHYTHM_GEOMETRIC=1 启用。"
+                             "仅影响 oemer 识别路径，不改比对内核。")
     # —— P1-2 接线点 ④：A/B 实验 opt-in flag（命名与 P0-2 omr_pipeline 一致，C6）——
     pre = parser.add_mutually_exclusive_group()
     pre.add_argument("--preprocess-preset", "--omr-preprocess-preset",
@@ -913,6 +931,7 @@ def main(argv=None):
                         help="跳过 oemer，直接复用语料目录内已有的 "
                              "<base>.pred.musicxml（P1-2 Stage-2 投影打分）。")
     parser.set_defaults(use_oemer=True, f3_geometric=False,
+                        rhythm_geometric=False,
                         no_preprocess=False, apply_postcorrect=False,
                         reuse_pred=False)
     args = parser.parse_args(argv)
@@ -923,6 +942,7 @@ def main(argv=None):
         preprocess_config=args.preprocess_config,
         preprocess_metrics=args.preprocess_metrics,
         f3_geometric=args.f3_geometric,
+        rhythm_geometric=args.rhythm_geometric,
     )
     project_opts = ProjectOpts(
         postcorrect_pred=args.apply_postcorrect,

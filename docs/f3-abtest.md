@@ -31,6 +31,75 @@
 > bach_p3（缺 sidecar 后 oemer 2.3× 过切分，仅 19 可比音符）为已知坏页，修复不影响其余页。
 > F3 + postcorrect 无叠加（49.81%→49.81%，修复前基线）。
 
+## R-geo 几何感知时值校正（2026-08-09，A/B 已落地）
+
+> 配套：`tools/geometric_pitch.py::recompute_rhythm_from_geometry`、
+> `tools/omr_oemer.py --rhythm-geometric`（环境变量 `PUDU_RHYTHM_GEOMETRIC=1` 等价）、
+> `tools/omr_eval_groundtruth.py --rhythm-geometric`。
+> 在 F3 基础上**再叠一层**：只把「被 oemer 读长」的快音符缩回几何间距对应的时值。
+
+**背景（ROI 分析）**：rhythm 是单类失败的最大杠杆——13 页 771/891 个单类失败，占
+87%。其中 87% 是 oemer「读长」：16分→4分 ×334、16分→8分 ×265、8分→4分 ×70，
+且 746/771 在时值混合小节（逐音符误读，非整小节塌缩）。sidecar 的符头 onset 间距
+与时值成精确比例，与 oemer 的误读解耦，可按间距反推应有之时值。
+
+**校正规则（只缩不伸 + 双侧判定，规避过收缩回归）**：
+- 双侧判定：两侧间距量化出 class 后，一致→可信；一侧 ≥4 倍级更大→快音符贴慢音符
+  边界，取快 class；其余不一致→保守取大 class（取大不会把真 8 分/4 分误缩成 16 分）。
+- 只缩不伸：仅当 `0.25*class < oemer 当前 ql` 时改写，绝不伸长；改写同步更新
+  `<duration>`/`<type>` 并移除 `<dot>`，保持 MusicXML 自洽。
+
+**校准门控（A/B 归因，防净亏）**：仅用 oemer 读出的 16 分音符作锚点，取 min(邻隙)
+中位数作 16 分间距；**锚点 <40 个 → 整页跳过**（`_MIN_RHYTHM_CALIBRATION=40`），
+并**移除 8 分/32 分兜底**。依据：锚点不足的页面 R-geo 均净亏（the-swan 无锚点靠兜底
+-6、swan-lake 仅 20 锚点 -23），而 8 个净胜页最低锚点数 = 66（badinerie），40 取在
+「最弱胜者之下、清晰亏损者之上」，零误伤胜者。
+
+**全量 A/B（13 可评页，同一 harness，门控后）**：
+
+| 指标 | A 组（baseline） | B 组（F3+R-geo） | 变化 |
+|------|------|------|------|
+| `note_pass_rate` | 71.67% (2254/3145) | **83.19%** (2618/3147) | **+11.52pp** |
+| `rhythm` 失败 | 771 | 380 | −391 |
+| 净改写数 | — | 844 音符 | — |
+
+逐页 `notes_correct`：8 页净赚（bach_p1 +43、bach_p2 +62、badinerie +41、
+prelude_p1 +86、prelude_p2 +86、summer_p1 +47、summer_p3 +22、summer_p4 +60），
+swan-lake / the-swan 门控跳过（0 回归），**2 页仍净亏**：
+- **canon-in-d-violin-solo_p1**（−44）、**summer-third-movement_p2**（−39）：
+  **几何不可分辨的根本局限**——这两页的真 8 分/4 分以 16 分间距排版（onset 密度
+  与时值不成比例，或 8 分与 16 分交错密集），几何上看与「真 16 分读长」完全相同。
+  A/B 验证：canon 与净胜页 badinerie 在全部可测静态特征（锚点数、间距 spread、
+  隐含 class 分布、bbox 宽度、小节和符合度）上不可区分，任何门控都会同时误伤
+  badinerie（净收益为零）。故如实保留，作为已知局限，不动这两页时 R-geo 达到最优。
+
+### 开关语义
+
+| 开关 | 默认 | 作用 |
+|------|------|------|
+| `tools/omr_oemer.py --rhythm-geometric` | **关** | 开启 R-geo 几何时值校正 |
+| 环境变量 `PUDU_RHYTHM_GEOMETRIC=1` | 关 | 等价于 `--rhythm-geometric` |
+| `tools/omr_eval_groundtruth.py --rhythm-geometric` | 关 | 透传给 oemer 运行器 |
+
+- R-geo **只动 `<duration>`/`<type>`/`<dot>`**，不碰 pitch/alter/调号/休止/和弦——
+  与方案A/F3 职责分离（见 §8），比对内核零改动前提下做 A/B。
+- 与 F3 同守铁律：`--no-oemr` 自验路径不触发；A/B 只在 `--oemr` 路径有意义。
+
+### 评测口径
+
+评测 `rhythm` 维度比的是 Pudu 投影出的 jianpu 节奏元组（underline/augmentDashes/
+dots）；`quarterLength = duration/divisions`（divisions=16），
+RHYTHM_BASE：(0.25,0,2)=16 分、(0.5,0,1)=8 分、(1.0,0,0)=4 分。R-geo 改写 duration
+即改写该口径。
+
+### 已知约束 / 风险
+
+- **校准锚点依赖 oemer 16 分读出**：oemer 若把整页 16 分全读长（极端），锚点不足会
+  整页跳过（保守，不猜）。
+- **真 8 分以 16 分间距排版**（canon/summer_p2）：几何无法分辨，v1 已知局限，
+  如前述归档。残余 380 个 rhythm 失败中此类占比最大，属几何信号天花板，
+  需梁/旗结构识别（oemer 内部信息，sidecar 未导出）才能突破。
+
 ## 1. 开关语义（已落实）
 
 | 开关 | 默认 | 作用 |
