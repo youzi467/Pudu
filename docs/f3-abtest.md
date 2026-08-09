@@ -164,17 +164,24 @@ model→PNG 变换（每页 by∈{8,12,14}）——纯 stdlib 大工程，只为
 | 类别 | 实例 | 单类失败 | 处置 |
 |---|---|---|---|
 | `rhythm` | 380 | 348 | 读短 196 几何+beam 双盲封账；读长 156 中 swan 门控 35 校准同源污染（高风险）为唯一潜在剩余面 |
-| `pitch_accidental` | 88 | 59 | 残余多为 F3 几何 step/octave 未到位页面的连带误差（bach_p2/prelude_p2），未单独立杠杆 |
+| `pitch_accidental` | 88 | 59 | 根因=**oemer 真实 accidental 检测漏**（bach_p2 13 个 C♮ 误读/漏读变音记号）。keysig 物化模拟 Δ−79 证伪「表示层缺口」假说，需图像级 ♯/♭ 符号检测，封账 |
 | `pitch_degree` | 62 | 26 | 含 prelude_p2/bach_p3 模型失败页（不可修） |
 | `pitch_octave` | 49 | 11 | bach_p2 极音区补丁已知可行但 **note_pass 持平** |
-| `tie` | 20 | 14 | 未调研（量小） |
+| `tie` | 20 | 14 | 根因=oemer **从不发射 `<tie>`**（全 13 页 0 个 vs gt 24 个标记）。「相邻同音高=延音线」启发式假阳性 ~85%（重复音），需图像级弧线检测，封账 |
 | `octave_jump` | 20 | — | 预检子维度，随 pitch 修 |
 | `chord` / `grace` | 3 / 2 | — | 量级可忽略 |
 | `event_count` | 637 | — | 不进 note_pass |
 
 失败音符按页：canon_p1 129 / summer_p2 72 / badinerie 70 / bach_p2 58 / prelude_p2 52 /
-swan-lake 49 / the-swan 33 / bach_p3 17 / 其余 ≤14。**可行动面收敛为三**：① swan 门控
-（高风险低 ROI）；② bach_p2 极音区（note_pass 持平，已证）；③ tie 14（未调研）。
+swan-lake 49 / the-swan 33 / bach_p3 17 / 其余 ≤14。
+
+**第三轮补充调查（2026-08-09）**：pitch_accidental 59 与 tie 14 均已根因并封账——
+accidental 是 oemer 读不出谱面 ♯/♭ 符号（keysig 物化模拟 Δ−79 证伪表示层缺口），
+tie 是 oemer 完全不产 `<tie>`（同音高启发式假阳性 85%）。两者均需图像级符号/弧线
+检测。**至此 83.2% 后的可行动面仅剩三**：① 页级门控跳过 canon_p1+summer_p2（+83，
+纯 eval 过拟合，早期已证无静态特征可分）；② swan 门控 35（校准同源污染，高风险）；
+③ 图像级符号检测（accidental/tie，代价同 beam 工程，上限 ~+73）。几何/时值/对齐
+路径已到顶。
 
 ## 1. 开关语义（已落实）
 
