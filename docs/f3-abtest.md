@@ -116,7 +116,7 @@ RHYTHM_BASE：(0.25,0,2)=16 分、(0.5,0,1)=8 分、(1.0,0,0)=4 分。R-geo 改�
 > 恢复路径：`python tools/omr_eval_groundtruth.py <corpus> --oemr --f3-geometric
 > --rhythm-geometric`（重生成 oemer pred + sidecar，再叠加 R-geo），或对已有
 > pred 直接调 `geometric_pitch.recompute_rhythm_from_geometry`（用 F3 sidecar）。
-> 恢复后全量复刻验证：**35.7%（baseline）→ 71.7%（F3）→ 83.2%（F3+R-geo）**，
+> 恢复后全量复刻验证：**35.7%（baseline）→ 71.7%（F3）→ 83.2%（F3+R-geo）→ 84.5%（2026-08-10 置信窗细化重跑）**，
 > 与 f623221 A/B 的 83.19% 一致；swan-lake/the-swan 锚点门控跳过（0 回归），
 > 总改写 844 音。
 
@@ -157,28 +157,80 @@ RHYTHM_BASE：(0.25,0,2)=16 分、(0.5,0,1)=8 分、(1.0,0,0)=4 分。R-geo 改�
 （`image_width_px=None`）；beam 检测需自行定位 PNG + stdlib 解码二值化 + 重估
 model→PNG 变换（每页 by∈{8,12,14}）——纯 stdlib 大工程，只为 canon_p1+prelude_p2。
 
-### 残余杠杆清单（83.2% 封账，2026-08-09）
+### 置信窗修复：R-geo 重跑非幂等过缩（2026-08-10，封账）
 
-权威账本（`omr_eval_note_diffs.json`，3147 音符，pass 2618 / fail 529）：
+> **症状**：对 pass-1 已校正的 pred（83.21%）重跑单遍 R-geo，改写 ~26 音符（0.50→0.25
+> 或 0.38→0.25）——非幂等，坏 6 个真 8 分/4 分（badinerie i=38、canon i=119–123）。
+
+**根因 = 校准 unit 跨 pass 漂移 + 1.5 舍入边界薄如纸**：pass-1 缩回 16 分的音符
+（ql==0.25）加入 `_calibrate_unit` 锚点池，其间距（含 pass-1 误缩者的膨胀间隙）污染
+锚点中位数 → canon 页 unit 从 pass-1 的 ~30px 漂到 pass-2 的 ~40.5px（35%）。被标记的
+6 音符 gap/unit ∈ [1.42, 1.52]，恰在 `_round_half_up` 的 1.5 边界两侧；35% 漂移让
+cls 从 2（正确，不缩）翻到 1（误缩）。
+
+**锚点审计**（`build/_anchor_audit.py`）：pass-1 状态 ql==0.25 音符按 gap/unit 分桶，
+对照 gt 时值——`[1.25, 1.5)` 桶仅 18.4% GT 正确（31/38 误），即**边界处 pass-1 缩回
+16 分者大多是 GT 8 分被误缩**。模糊区不可信。
+
+**修复 = 侧置信窗 `_RHYTHM_SIDE_CONFIDENCE = 0.25`**：仅当 `|gap/unit − class| ≤ 0.25`
+才采信该侧（排除贴近 .5 边界的模糊侧）；双侧全模糊 → 保守不动、不打标。贴 0.5 边界的
+间距不再被"量化为 16 分"。
+
+**结果（`build/_mark_control` vs `_mark_corpus` 同一 harness）**：
+
+| 指标 | control（pass-1 基线） | 置信窗定点 | 变化 |
+|------|------|------|------|
+| `note_pass_rate` | 83.2061% | **83.3333%** | +0.13pp |
+| `field_pass_rate` | 91.5677% | 91.5855% | +0.02pp |
+| 低置信标记数 | 65 | **29** | −36（模糊区误标剔除） |
+
+- **收敛到定点**：R-geo 第 3 遍 0 改写；F3 第 3 遍内容级 0 变化（33xx「改写」为幻影，
+  重写同值）。83.33% 定点稳定，≥ 存储基线 83.21%。
+- **6 个被标记过缩全部拦截**（badinerie i=38、canon i=119–123 不再改写）。
+- **标记 65→29 是质量改进**：被删 36 个标记全在模糊边界（ratio≈.5）上，先前被误判为
+  非标准 class，GT 多数正确。全保留的 140 个双侧全模糊音符不打标（若打标膨胀至 169，
+  过噪）。
+- **诚实边界**：对存储 pred 重跑仍有 ~26 处改写，混合真修复/真回归（badinerie i=48、
+  canon i=20,21,38,39 确证对 GT=0.5 回归）；逐音符 control-vs-marked 比对受 eval 对齐
+  工件污染（9/11「改进」时值相同），不逐音符归因。净数字为正，定点收敛，风险已封。
+
+**定盘（2026-08-10，用户已拍板）**：语料 pred 重跑至置信窗定点作为新存储基线
+（`data/omr_eval/real/mvp_2026Q3`，重跑前 pass-1 状态备份于 `_bak_preds_8321/`；
+`data/` 未入 git，回滚靠该备份）。重跑后 eval 复现 **83.3% (2620/3144)、91.6%**
+（`notes_compared` 3144 而非文档旧数 3147——后者为 forward 溢出修复前的数，
+修复移除 corrupt `<forward>` 后 3 音符不再进 pred/gt 对齐集合）。定盘定点全部
+13 页 R-geo 0 改写（收敛），29 个低置信标记落盘。product-status §1/§2/§3/§5
+与本节残余杠杆清单已按新数同步。
+
+**更新（2026-08-10 深夜，全链路重跑刷新基线）**：存储 pred（11:24 置信窗定点）早于最终
+工作树（17:38 置信窗细化等，605 行已随 `tools/geometric_pitch.py` 落盘）。7 PDF 光栅化
+15 页 fresh 全链路重跑（GT 逐字节一致、harness 同版；reuse-pred 交叉复现 83.3%/84.5%
+互证差异纯在 pred）实测 **84.5% (2656/3143)、91.7% (20618/22480)**——rhythm 实例 378→346
+（−32，置信窗细化少过缩：summer_p2 +19 / canon_p1 +12 / badinerie +7 / bach_p2 −2，净 +36）。
+29 低置信标记数不变。本节残余杠杆清单与 product-status §1–§3/§5/§7 已按 84.5% 同步。
+
+### 残余杠杆清单（84.5% 封账，2026-08-10 全链路重跑）
+
+权威账本（`omr_eval_note_diffs.json`，3143 音符，pass 2656 / fail 487）：
 
 | 类别 | 实例 | 单类失败 | 处置 |
 |---|---|---|---|
-| `rhythm` | 380 | 348 | 读短 196 几何+beam 双盲封账；读长 156 中 swan 门控 35 校准同源污染（高风险）为唯一潜在剩余面 |
-| `pitch_accidental` | 88 | 59 | 根因=**oemer 真实 accidental 检测漏**（bach_p2 13 个 C♮ 误读/漏读变音记号）。keysig 物化模拟 Δ−79 证伪「表示层缺口」假说，需图像级 ♯/♭ 符号检测，封账 |
-| `pitch_degree` | 62 | 26 | 含 prelude_p2/bach_p3 模型失败页（不可修） |
-| `pitch_octave` | 49 | 11 | bach_p2 极音区补丁已知可行但 **note_pass 持平** |
-| `tie` | 20 | 14 | 根因=oemer **从不发射 `<tie>`**（全 13 页 0 个 vs gt 24 个标记）。「相邻同音高=延音线」启发式假阳性 ~85%（重复音），需图像级弧线检测，封账 |
+| `rhythm` | 346 | 308 | 读短/读长 348 几何+beam 双盲封账（2026-08-10 逐条复核全 GT对、pred 唯一错源）；读长残余中 swan 门控 35 校准同源污染（高风险）为唯一潜在剩余面 |
+| `pitch_accidental` | 86 | 60 | 根因=**oemer 真实 accidental 检测漏**（bach_p2 13 个 C♮ 误读/漏读变音记号）。keysig 物化模拟 Δ−79 证伪「表示层缺口」假说，需图像级 ♯/♭ 符号检测，封账 |
+| `pitch_degree` | 59 | 25 | 含 prelude_p2/bach_p3 模型失败页（不可修） |
+| `pitch_octave` | 47 | 10 | bach_p2 极音区补丁已知可行但 **note_pass 持平** |
+| `tie` | 20 | 13 | 根因=oemer **从不发射 `<tie>`**（全 13 页 0 个 vs gt 24 个标记）。「相邻同音高=延音线」启发式假阳性 ~85%（重复音），需图像级弧线检测，封账 |
 | `octave_jump` | 20 | — | 预检子维度，随 pitch 修 |
 | `chord` / `grace` | 3 / 2 | — | 量级可忽略 |
-| `event_count` | 637 | — | 不进 note_pass |
+| `event_count` | 645 | — | 不进 note_pass |
 
-失败音符按页：canon_p1 129 / summer_p2 72 / badinerie 70 / bach_p2 58 / prelude_p2 52 /
-swan-lake 49 / the-swan 33 / bach_p3 17 / 其余 ≤14。
+失败音符按页（84.5% 重跑）：canon_p1 118 / badinerie 64 / bach_p2 54 / prelude_p2 53 /
+summer_p2 52 / swan-lake 49 / the-swan 33 / bach_p3 17 / 其余 ≤13。
 
 **第三轮补充调查（2026-08-09）**：pitch_accidental 59 与 tie 14 均已根因并封账——
 accidental 是 oemer 读不出谱面 ♯/♭ 符号（keysig 物化模拟 Δ−79 证伪表示层缺口），
 tie 是 oemer 完全不产 `<tie>`（同音高启发式假阳性 85%）。两者均需图像级符号/弧线
-检测。**至此 83.2% 后的可行动面仅剩三**：① 页级门控跳过 canon_p1+summer_p2（+83，
+检测。**至此 84.5% 后的可行动面仅剩三**：① 页级门控跳过 canon_p1+summer_p2（+83，
 纯 eval 过拟合，早期已证无静态特征可分）；② swan 门控 35（校准同源污染，高风险）；
 ③ 图像级符号检测（accidental/tie，代价同 beam 工程，上限 ~+73）。几何/时值/对齐
 路径已到顶。
