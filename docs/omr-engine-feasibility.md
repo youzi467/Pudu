@@ -148,6 +148,14 @@ step 口径 91.6% 而 step+octave 只有 55.0% —— 差距几乎全部由**八
 
 ### 2.2 但是：`audiveris` 分支是**不可达的死代码，且命令行是错的**
 
+> ✅ **2026-08-12 已修正并启用**：Audiveris A/B 三投诉全面胜出（note_pass 84.5%→**97.56%**，
+> 见 docs/audiveris-ab-verdict.md）后，本文问题 A/B/C 全部落地修复——`src/omr_adapter.cpp`
+> audiveris 死分支（`java -jar` 形态）已替换为薄分支（调 `tools/omr_audiveris.py`，C++ 净增 ≈0），
+> 问题 B 的 5 处 CLI 错误由适配层按「修正后的正确命令形态」实现（含 `.mxl` 解包 + 从 book
+> 目录定位产物），问题 C 的 `Audiveris.exe`（jpackage 自带 JRE）即 `build/_audiveris/extract/`。
+> 仅 §2.4 方案乙的「Tesseract OCR 语言包安装」未执行——AV 5.11 图像符号检测不依赖 OCR
+> 语料即可正确读 keysig/拍号（13/13）。以下为修复前核验记录，保留作迁移依据。
+
 任务书假设"audiveris 分支已经写好了，只是没配 jar"。**核验结果：比这更糟——它从未被执行过，且即使配了 jar 也跑不通。**
 
 **问题 A：`audiverisJar` 无任何赋值路径 → 分支 100% 不可达**

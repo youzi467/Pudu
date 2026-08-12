@@ -181,12 +181,12 @@ bool runOmr(const std::string& input, const std::string& outMusicXml,
         cmd = "\"" + cfg.python + "\" \"" + cfg.toolsDir + script + "\" \"" +
               input + "\" \"" + outMusicXml + "\"";
     } else if (cfg.engine == "audiveris") {
-        if (cfg.audiverisJar.empty()) {
-            err = "audiveris 引擎需设置 audiverisJar";
+        if (cfg.toolsDir.empty()) {
+            err = "audiveris 引擎需设置 toolsDir（CMake 注入 PUDU_TOOLS_DIR）";
             return false;
         }
-        cmd = "java -jar \"" + cfg.audiverisJar + "\" \"" + input +
-              "\" -o \"" + outMusicXml + "\"";
+        cmd = "\"" + cfg.python + "\" \"" + cfg.toolsDir + "/omr_audiveris.py\" \"" +
+              input + "\" \"" + outMusicXml + "\"";
     } else {
         err = "未知 OMR 引擎: " + cfg.engine +
               "（可选: oemer | audiveris | fixture）";
@@ -227,20 +227,19 @@ bool isOmrEngineAvailable(const OmrEngineConfig& cfg, std::string& detail) {
         return false;
     }
     if (cfg.engine == "audiveris") {
-        // 简单检查 java 是否可达
-        std::string output, err;
-        int rc = runCommand("java -version", 15000, output, err);
-        if (rc != 0) {
-            detail = "audiveris 不可用: java 不在 PATH（退出码 " +
-                     std::to_string(rc) + "）";
+        // 不探测 python（AV 适配层 stdlib-only；python 可用性交给 runOmr 的
+        // CreateProcess 失败自然暴露）。AV exe 定位在 Python 侧经 env
+        // PUDU_AUDIVERIS_EXE / 仓库默认路径，C++ 不碰。
+        if (cfg.toolsDir.empty()) {
+            detail = "audiveris 引擎未配置 toolsDir";
             return false;
         }
-        if (cfg.audiverisJar.empty() || GetFileAttributesA(cfg.audiverisJar.c_str()) ==
-                                            INVALID_FILE_ATTRIBUTES) {
-            detail = "audiveris 不可用: audiverisJar 未设置或不存在";
+        std::string script = cfg.toolsDir + "/omr_audiveris.py";
+        if (GetFileAttributesA(script.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            detail = "audiveris 适配层缺失: " + script;
             return false;
         }
-        detail = "audiveris 可用";
+        detail = "audiveris 可用（toolsDir=" + cfg.toolsDir + "）";
         return true;
     }
     detail = "未知引擎: " + cfg.engine;

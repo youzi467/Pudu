@@ -13,7 +13,8 @@
 //       * "fixture"  : C++ 原生，写出内嵌样例 MusicXML（确定性、零外部依赖），
 //                       用于 ctest 与 CLI 即时演示，证明全链路契约正确。
 //       * "oemer"    : 子进程调用 tools/omr_oemer.py（真引擎，待用户环境实跑）。
-//       * "audiveris": 子进程调用 `java -jar <jar>`（Java 应用，本沙箱无 JRE）。
+//       * "audiveris": 子进程调用 tools/omr_audiveris.py（调 Audiveris.exe -batch，
+//                      自带 JRE，PDF 逐页 -sheets 拼接）。
 //   - 子进程统一用 Windows CreateProcess + 超时 + stdout/stderr 捕获，
 //     命令模板含 {input}/{output} 占位，与具体引擎解耦。
 //   - 不修改任何既有数据模型（Score / JianpuDoc / MusicXMLParser）。
@@ -28,7 +29,7 @@ struct OmrEngineConfig {
     std::string engine = "oemer";   // "oemer" | "audiveris" | "fixture"
     std::string python = "python";  // 子进程解释器（oemer / fixture 脚本）
     bool pythonExplicit = false;    // 用户是否通过 --omr-python 显式指定了解释器
-    std::string audiverisJar;       // audiveris 预设的 jar 路径（engine=="audiveris" 时使用）
+    std::string audiverisJar;       // [废弃] 旧 java -jar 形态遗留；AV 现已改走 omr_audiveris.py
     std::string toolsDir;           // omr_oemer.py / omr_fixture.py 所在目录（CMake 注入 PUDU_TOOLS_DIR）
     int timeoutMs = 120000;         // 子进程超时（毫秒）
     // P0-2：oemer 前置图像增强（默认关）。true 时 runOmr 改调 tools/omr_pipeline.py，
@@ -54,7 +55,7 @@ bool runOmr(const std::string& input,
 // 检测指定引擎是否可用（可启动并产出）。
 //   fixture  : 恒 true（C++ 原生）。
 //   oemer    : 测 `python -c "import oemer"` 退出码 0。
-//   audiveris: 测 java 可用且 audiverisJar 存在。
+//   audiveris: 测 toolsDir/omr_audiveris.py 存在（AV exe 定位在 Python 侧）。
 // detail 返回可读说明；不可用返回 false。
 bool isOmrEngineAvailable(const OmrEngineConfig& cfg, std::string& detail);
 

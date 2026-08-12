@@ -100,6 +100,8 @@ ROOT = r"C:\Users\13157\WorkBuddy\omr"
 BUILD = os.path.join(ROOT, "build")
 EXE = os.path.join(BUILD, "Pudu.exe")
 OMER_RUNNER = os.path.join(TOOLS_DIR, "omr_oemer.py")
+#: Audiveris 引擎适配层（AV 默认引擎，位置参数契约与 omr_oemer.py 同构）。
+AUDIVERIS_RUNNER = os.path.join(TOOLS_DIR, "omr_audiveris.py")
 #: P0-2 预处理透明代理（``run_oemer`` 在 ``preprocess is not None`` 时改走此脚本）。
 PIPELINE_RUNNER = os.path.join(TOOLS_DIR, "omr_pipeline.py")
 VENV_PYTHON = r"C:\Users\13157\.workbuddy\binaries\python\envs\default\Scripts\python.exe"
@@ -266,6 +268,44 @@ def run_oemer(image_path, out_musicxml, gt_path=None, venv_python=VENV_PYTHON,
         print(f"[oemer] 未产出有效 MusicXML: {out_musicxml}")
         return False
     print(f"[oemer] ok -> {out_musicxml}")
+    return True
+
+
+def run_audiveris(image_path, out_musicxml, venv_python=VENV_PYTHON):
+    """调用 ``tools/omr_audiveris.py`` 把乐谱图片/PDF 识别为 MusicXML。
+
+    命令：``venv_python tools/omr_audiveris.py <image> <out_musicxml>``
+    （AV 适配层为位置参数契约，与 ``omr_oemer.py`` 同构）。
+
+    **与 ``run_oemer`` 的差异**：
+      * 不注入 ``--gt`` —— AV 用图像 glyph 检测 keysig（13/13 全对），
+        无需求统计法 fallback；ground-truth 也不参与识别过程。
+      * 不传 ``--f3-geometric`` / ``--rhythm-geometric`` —— AV 无 oemer
+        geometry sidecar 源，F3/R-geo 不适用。
+      * 支持多页 PDF：适配层内部逐页 ``-sheets N`` 并拼接，本函数无感。
+
+    Args:
+        image_path: 输入乐谱图片/PDF 路径。
+        out_musicxml: 期望产出的 MusicXML 路径。
+        venv_python: 含 stdlib 的 python 解释器（AV 自带 JRE，无第三方依赖）。
+
+    Returns:
+        bool: 成功产出有效 MusicXML 为 True，否则 False（并打印原因）。
+    """
+    cmd = [venv_python, AUDIVERIS_RUNNER, image_path, out_musicxml]
+    try:
+        proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, timeout=600)
+    except Exception as e:  # noqa: BLE001
+        print(f"[audiveris] 调用异常: {e}")
+        return False
+    if proc.returncode != 0:
+        msg = (proc.stderr or proc.stdout).decode("utf-8", "replace")[:300]
+        print(f"[audiveris] 退出码 {proc.returncode}: {msg}")
+        return False
+    if not os.path.exists(out_musicxml) or os.path.getsize(out_musicxml) == 0:
+        print(f"[audiveris] 未产出有效 MusicXML: {out_musicxml}")
+        return False
+    print(f"[audiveris] ok -> {out_musicxml}")
     return True
 
 

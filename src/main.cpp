@@ -88,10 +88,11 @@ int main(int argc, char* argv[]) {
     //   [--omr-preprocess] 打开 P0-2 前置图像增强（默认关；关时链路与 P0-2 之前完全一致）。
     //   经 omr_adapter 调子进程 OMR 引擎产出 MusicXML，再喂入既有解析器流水线。
     //   fixture 引擎为 C++ 原生（确定性、零外部依赖），用于 ctest 与沙箱演示；
-    //   oemer 为默认真引擎目标（待用户环境具备 oemer 与乐谱图片时实跑）。
+    //   audiveris 为默认真引擎（调 tools/omr_audiveris.py → Audiveris.exe -batch，自带 JRE），
+    //   oemer 为回退（需 CUDA/权重）。
     bool fromOmr = false;
     std::string omrInput;
-    std::string omrEngine = "oemer";
+    std::string omrEngine = "audiveris";
     std::string omrPythonPath;
     bool omrPythonExplicit = false;
     bool omrPreprocess = false;     // P0-2：--omr-preprocess 打开前置图像增强（默认关）
@@ -126,7 +127,7 @@ int main(int argc, char* argv[]) {
             cfg.python = omrPythonPath;
             cfg.pythonExplicit = true;
         }
-        if (cfg.engine == "oemer")
+        if (cfg.engine == "oemer" || cfg.engine == "audiveris")
             cfg.python = pudu::resolveOmerPython(cfg);
         std::string avail;
         if (!pudu::isOmrEngineAvailable(cfg, avail)) {

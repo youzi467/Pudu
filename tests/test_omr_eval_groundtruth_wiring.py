@@ -365,6 +365,54 @@ class Sk8GuardTest(_BaseWiringTest):
 
 
 # ======================================================================
+# 3.5 run_audiveris 契约（AV 引擎评估入口）
+# ======================================================================
+
+class RunAudiverisTest(_BaseWiringTest):
+    """``run_audiveris`` 的 argv 与成功/失败分支。
+
+    AV 引擎评估独立于 oemer 参数化：不传 ``--gt``（AV 图像 glyph 检测 keysig，
+    无统计 fallback）、不传 ``--f3-geometric`` / ``--rhythm-geometric``（AV 无
+    oemer geometry sidecar 源）。``--reuse-pred`` 模式下 AV 语料直接复用磁盘
+    pred，本函数不参与（CLI 零改动）。
+    """
+
+    def _run(self, rc=0, make_outputs=True, **kwargs):
+        rec = Recorder(rc=rc, make_outputs=make_outputs)
+        out = self._path("out.musicxml")
+        with mock.patch.object(G.subprocess, "run", rec):
+            ok = G.run_audiveris(self._path("in.pdf"), out, **kwargs)
+        return ok, rec.last
+
+    def test_argv_exact(self):
+        ok, argv = self._run()
+        self.assertTrue(ok)
+        self.assertEqual(
+            argv, [G.VENV_PYTHON, G.AUDIVERIS_RUNNER,
+                   self._path("in.pdf"), self._path("out.musicxml")])
+
+    def test_never_carries_oemer_flags(self):
+        """AV 路径绝不携带 oemer 的 --gt / F3 / R-geo flag（对比可读）。"""
+        _, argv = self._run()
+        for flag in ("--gt", "--f3-geometric", "--rhythm-geometric",
+                     "--preprocess-preset", "--no-preprocess"):
+            self.assertNotIn(flag, argv)
+
+    def test_custom_venv(self):
+        _, argv = self._run(venv_python=r"X:\py.exe")
+        self.assertEqual(argv[0], r"X:\py.exe")
+        self.assertEqual(argv[1], G.AUDIVERIS_RUNNER)
+
+    def test_nonzero_rc_returns_false(self):
+        ok, _ = self._run(rc=3)
+        self.assertFalse(ok)
+
+    def test_missing_output_returns_false(self):
+        ok, _ = self._run(make_outputs=False)
+        self.assertFalse(ok)
+
+
+# ======================================================================
 # 4. Pudu 投影侧（接线点 ②）
 # ======================================================================
 

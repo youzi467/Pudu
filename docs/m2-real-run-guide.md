@@ -102,6 +102,31 @@ PY
 
 ## 3. 执行真实 OMR 命令
 
+### 3.1 Audiveris 默认引擎（2026-08-12 迁移后推荐路径）
+
+**默认引擎已改为 Audiveris**（`--omr-engine audiveris`）——无需 GPU/CUDA/cuDNN、无需 oemer
+权重、无需 PATH 注入，Audiveris.exe 自带 JRE（`build/_audiveris/extract/Audiveris/Audiveris.exe`，
+可用环境变量 `PUDU_AUDIVERIS_EXE` 覆盖）。支持 PNG/JPG 与多页 PDF（逐页拼接）。
+
+```bash
+# Git Bash
+cd /c/Users/13157/WorkBuddy/omr/build
+# 真实 OMR 路径（默认引擎即 audiveris）
+./Pudu.exe --from-omr ../data/score.png --to-jianpu
+# 多页 PDF
+./Pudu.exe --from-omr ../data/score.pdf --omr-engine audiveris --to-jianpu-l2 out.html
+# 显式回退到 oemer
+./Pudu.exe --from-omr ../data/score.png --omr-engine oemer --to-jianpu
+```
+
+AV 基线 97.56%（13 共有页）；oemer 回退口径 84.5%。详见
+[docs/audiveris-ab-verdict.md](audiveris-ab-verdict.md) 与
+[docs/product-status.md](product-status.md)。
+
+### 3.2 oemer 回退引擎（`--omr-engine oemer`，需 CUDA）
+
+> ⚠️ 本节仅当显式使用 `--omr-engine oemer` 时适用。
+
 **Python 解释器选址（已修复）**：早期 `omr_adapter` 写死用 `python` 命令字，需手动把
 venv 的 `Scripts` 放到 PATH 最前。现已改为 `resolveOmerPython()` 自动选址——按
 `--omr-python` → 环境变量 `PUDU_OMR_PYTHON` → PATH `python` →
@@ -118,8 +143,8 @@ CUDA 13 把运行时 dll 放在 `bin/x64`，cuDNN 9 放在 `bin\<cuda版本>\x64
 export PATH="/c/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/bin/x64:/c/Program Files/NVIDIA/CUDNN/v9.24/bin/13.3/x64:$PATH"
 # 进入构建目录（Pudu.exe 在此）
 cd /c/Users/13157/WorkBuddy/omr/build
-# 真实 OMR 路径（默认引擎即 oemer）
-./Pudu.exe --from-omr ../data/score.png --to-jianpu
+# 真实 OMR 路径（oemer 回退引擎）
+./Pudu.exe --from-omr ../data/score.png --omr-engine oemer --to-jianpu
 ```
 
 > ⚠️ **改完系统 PATH 后必须关闭并重新打开终端**——Windows 环境变量只对新建进程生效，
@@ -144,12 +169,12 @@ cd /c/Users/13157/WorkBuddy/omr/build
 ## 4. 验证转换结果正确性
 
 ### 4.1 M2-2：music21 结构/语义校验（推荐）
-对 oemer 产出的中间 MusicXML 做校验（适配器内部已落地，也可单独跑）：
+对引擎产出的中间 MusicXML 做校验（适配器内部已落地，也可单独跑）：
 ```bat
-"%PY%" ..\tools\omr_validate.py <oemer产出的.musicxml>
+"%PY%" ..\tools\omr_validate.py <引擎产出的.musicxml>
 ```
 输出应包含：Part 数、Measure 数、Note 数、拍号（如 4/4）、调号 fifths 等。
-这些都是 oemer 识别是否合理的硬指标。
+这些都是识别是否合理的硬指标（AV 默认 / oemer 回退产物均可）。
 
 ### 4.2 往返自洽（M2-3 思想）
 简谱行应与 MusicXML 的音高/节奏一致：取 oemer 产出的 MusicXML，用

@@ -1,5 +1,10 @@
 # F3 几何感知音高校正器 · A/B 评测接入说明
 
+> ✅ **2026-08-12 引擎迁移后定位**：本文 84.5% 封账全部为 **oemer 回退路径**的技术账本。
+> Audiveris 已成为默认引擎（AV 97.56% 权威基线，见 [docs/audiveris-ab-verdict.md](audiveris-ab-verdict.md)），
+> F3/R-geo/拍号注入/重切/打标等 oemer 侧装置在 `--omr-engine oemer` 回退分支保留；AV 路径
+> 不用 F3/R-geo（AV 无 oemer geometry sidecar 源，节奏 99.26% 自带正确）。
+>
 > 配套：`tools/omr_eval_groundtruth.py`（已透传 `--f3-geometric`）、
 > `tools/omr_oemer.py`（F3 开关与 sidecar）、`docs/system_design.md` §6 T05。
 > 本说明面向 QA：如何用现有 harness 做 F3 的 on/off A/B 量化。

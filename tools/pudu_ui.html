@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>谱渡 Pudu · 图片转简谱 / MusicXML</title>
+<style>
+  :root { --accent:#2f6f4f; --accent-2:#1f4f39; --bg:#f6f7f4; --card:#fff;
+          --text:#23261f; --muted:#6b7066; --line:#e2e5dd; --err:#b3261e; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+         background:var(--bg); color:var(--text); }
+  header { background:var(--accent-2); color:#fff; padding:14px 24px;
+           display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:20px; font-weight:600; }
+  header .sub { opacity:.85; font-size:13px; }
+  .engine { margin-left:auto; display:flex; background:#ffffff22; border-radius:8px; overflow:hidden; }
+  .engine button { border:0; background:transparent; color:#fff; padding:7px 14px;
+                   cursor:pointer; font-size:13px; }
+  .engine button.active { background:#fff; color:var(--accent-2); font-weight:600; }
+  main { max-width:1080px; margin:20px auto; padding:0 16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px;
+          padding:20px; margin-bottom:18px; box-shadow:0 1px 3px #0000000d; }
+  .dropzone { border:2px dashed var(--accent); border-radius:12px; padding:46px 20px;
+              text-align:center; cursor:pointer; transition:background .15s; }
+  .dropzone:hover, .dropzone.drag { background:#eef6f1; }
+  .dropzone .big { font-size:17px; font-weight:600; }
+  .dropzone .hint { color:var(--muted); font-size:13px; margin-top:6px; }
+  .file-meta { margin-top:12px; font-size:13px; color:var(--muted); }
+  .demo-btn { display:block; margin:14px auto 0; background:var(--accent); color:#fff;
+              border:0; border-radius:8px; padding:10px 22px; font-size:14px; cursor:pointer; }
+  .demo-btn:hover { background:var(--accent-2); }
+  .progress { margin-top:8px; }
+  .stage-label { font-size:14px; font-weight:600; margin-bottom:8px; }
+  .stage-label .cancel { float:right; font-weight:400; font-size:13px; color:var(--muted);
+                          cursor:pointer; background:none; border:1px solid var(--line);
+                          border-radius:6px; padding:4px 12px; }
+  .bar { height:10px; background:#e8ebe3; border-radius:5px; overflow:hidden; }
+  .bar > div { height:100%; background:var(--accent); width:0; transition:width .4s; }
+  .error-panel { background:#fdecea; border:1px solid #f5c6c2; color:var(--err);
+                 border-radius:10px; padding:16px 18px; margin-bottom:18px; }
+  .error-panel .retry { margin-top:10px; background:var(--err); color:#fff; border:0;
+                        border-radius:6px; padding:6px 16px; cursor:pointer; }
+  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:14px; flex-wrap:wrap; }
+  .tabs button { border:0; background:transparent; padding:9px 16px; font-size:14px;
+                 cursor:pointer; color:var(--muted); border-bottom:3px solid transparent; }
+  .tabs button.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+  .tab-pane { display:none; } .tab-pane.active { display:block; }
+  iframe.jianpu { width:100%; height:680px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  .dl-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .btn { background:var(--accent); color:#fff; border:0; border-radius:8px;
+         padding:9px 18px; font-size:14px; cursor:pointer; text-decoration:none; display:inline-block; }
+  .btn.ghost { background:#fff; color:var(--accent); border:1px solid var(--accent); }
+  .muted { color:var(--muted); font-size:13px; }
+  .review-count { font-size:15px; font-weight:600; margin-bottom:10px; }
+  .review-cat { margin:12px 0 6px; font-weight:600; }
+  .review-item { font-size:14px; padding:4px 0; border-bottom:1px dashed var(--line); }
+  .review-item .pos { color:var(--muted); }
+  img.orig { max-width:100%; max-height:560px; border:1px solid var(--line); border-radius:8px; }
+  #busy { display:none; text-align:center; color:var(--muted); font-size:13px; padding:8px; }
+  #results { display:none; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>谱渡 Pudu</h1>
+  <span class="sub">乐谱图片 → 简谱预览 + MusicXML 下载</span>
+  <div class="engine">
+    <button id="engAv" class="active" type="button">真实识别 (Audiveris)</button>
+    <button id="engOemer" type="button">oemer 回退</button>
+    <button id="engDemo" type="button">演示模式 (fixture)</button>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <div id="dropzone" class="dropzone">
+      <div class="big">拖拽乐谱图片 / PDF 到这里，或点击选择</div>
+      <div class="hint">PNG / JPG / PDF · 单页或多页 · ≤ 约 64MB</div>
+      <div id="fileMeta" class="file-meta"></div>
+    </div>
+    <button id="demoBtn" class="demo-btn hidden" type="button">
+      【运行演示样例（秒级，无需选图）】
+    </button>
+    <input id="fileInput" type="file" accept=".png,.jpg,.jpeg,.bmp,.webp,.pdf" class="hidden">
+    <div id="busy">上传中…</div>
+  </div>
+
+  <div id="errBox" class="error-panel hidden">
+    <div id="errMsg"></div>
+    <button id="retryBtn" class="retry" type="button">重试</button>
+  </div>
+
+  <div id="progressCard" class="card hidden">
+    <div class="progress">
+      <div class="stage-label"><span id="stageLabel">识别中…</span>
+        <button id="cancelBtn" class="cancel" type="button">取消</button></div>
+      <div class="bar"><div id="barFill"></div></div>
+      <div id="progressMeta" class="muted"></div>
+    </div>
+  </div>
+
+  <div id="results" class="card">
+    <div class="tabs">
+      <button class="tab active" data-tab="jianpu" type="button">简谱预览</button>
+      <button class="tab" data-tab="musicxml" type="button">MusicXML</button>
+      <button class="tab" data-tab="review" type="button">需校对</button>
+      <button class="tab" data-tab="image" type="button">原图</button>
+    </div>
+    <div id="pane-jianpu" class="tab-pane active">
+      <div class="dl-row" style="margin-bottom:10px">
+        <button id="printBtn" class="btn ghost" type="button">打印</button>
+        <a id="dlHtml" class="btn ghost" download="jianpu.html">下载简谱 HTML</a>
+      </div>
+      <iframe id="jianpuFrame" class="jianpu" title="简谱预览"></iframe>
+    </div>
+    <div id="pane-musicxml" class="tab-pane">
+      <div class="dl-row">
+        <a id="dlMx" class="btn" download="final.musicxml">下载 final.musicxml</a>
+      </div>
+      <p class="muted">标准 MusicXML（music21 可读、可再渲染），可导入打谱软件 / DAW / 教学工具。</p>
+    </div>
+    <div id="pane-review" class="tab-pane">
+      <div id="reviewBody" class="muted">加载中…</div>
+    </div>
+    <div id="pane-image" class="tab-pane">
+      <img id="origImg" class="orig" alt="原图">
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ---- 运行方式守卫：必须由 pudu_server.py 提供，不能直接双击打开本文件 ----
+  if (location.protocol !== "http:" && location.protocol !== "https:") {
+    $("errMsg").textContent =
+      "请勿直接双击打开本文件：页面必须由谱渡服务器提供才能调用识别接口。\n" +
+      "正确做法：双击仓库根目录的 pudu_ui.bat，浏览器会自动打开 http://127.0.0.1:8765/。";
+    $("errBox").classList.remove("hidden");
+    $("dropzone").style.pointerEvents = "none";
+    return;
+  }
+
+  var state = { jobId: null, engine: "audiveris", demo: false, timer: null, pendingFile: null, lastFileName: null };
+  var STAGES = {
+    extract: "提取音符中…", keysig: "调号校正中…", f3: "几何音高校正中…",
+    rgeo: "几何时值校正中…", audiveris: "Audiveris 识别中…",
+    fixedpoint: "定点校验中…", render: "简谱渲染中…"
+  };
+
+  // ---- 引擎切换（audiveris 默认 / oemer 回退 / demo） ----
+  $("engAv").addEventListener("click", function () { setEngine("audiveris", false); });
+  $("engOemer").addEventListener("click", function () { setEngine("oemer", false); });
+  $("engDemo").addEventListener("click", function () { setEngine("audiveris", true); });
+  function setEngine(engine, demo) {
+    state.engine = engine;
+    state.demo = demo;
+    $("engAv").classList.toggle("active", !demo && engine === "audiveris");
+    $("engOemer").classList.toggle("active", !demo && engine === "oemer");
+    $("engDemo").classList.toggle("active", demo);
+    $("demoBtn").classList.toggle("hidden", !demo);
+    $("fileMeta").textContent = "";
+    state.pendingFile = null;
+  }
+
+  // ---- 上传区 ----
+  var dz = $("dropzone"), fi = $("fileInput");
+  dz.addEventListener("click", function () { fi.click(); });
+  dz.addEventListener("dragover", function (e) { e.preventDefault(); dz.classList.add("drag"); });
+  dz.addEventListener("dragleave", function () { dz.classList.remove("drag"); });
+  dz.addEventListener("drop", function (e) {
+    e.preventDefault(); dz.classList.remove("drag");
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) pick(e.dataTransfer.files[0]);
+  });
+  fi.addEventListener("change", function () { if (fi.files[0]) pick(fi.files[0]); });
+  function pick(file) {
+    var ok = /\.(png|jpe?g|bmp|webp|pdf)$/i.test(file.name || "");
+    if (!ok) { showError("仅支持 PNG / JPG / PDF（单页或多页）"); return; }
+    if (file.size > 64 * 1024 * 1024) { showError("文件超过 64MB 上限"); return; }
+    state.pendingFile = file;
+    $("fileMeta").textContent = file.name + " · " + (file.size / 1024 / 1024).toFixed(2) + " MB";
+    upload();
+  }
+  $("demoBtn").addEventListener("click", function () {
+    state.pendingFile = null;
+    $("fileMeta").textContent = "演示样例（fixture）";
+    upload();
+  });
+  $("retryBtn").addEventListener("click", upload);
+
+  // ---- 上传 ----
+  function upload() {
+    hideError();
+    stopPoll();
+    var q = [];
+    if (state.demo) q.push("demo=1");
+    else q.push("engine=" + encodeURIComponent(state.engine));
+    var url = "/api/ocr" + (q.length ? "?" + q.join("&") : "");
+    var opts = { method: "POST" };
+    if (state.pendingFile) {
+      opts.body = state.pendingFile;
+      opts.headers = { "Content-Type": "application/octet-stream",
+                       "X-Filename": encodeURIComponent(state.pendingFile.name) };
+    } else {
+      opts.body = new Blob([], { type: "application/octet-stream" });
+    }
+    $("busy").style.display = "block";
+    $("progressCard").classList.add("hidden");
+    $("results").style.display = "none";
+    fetch(url, opts).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { r: r, j: j }; }); })
+      .then(function (res) {
+        $("busy").style.display = "none";
+        if (res.r.ok) { startPoll(res.j.job_id); }
+        else { showError(res.j.error || ("请求失败（HTTP " + res.r.status + "）")); }
+      })
+      .catch(function (e) { $("busy").style.display = "none"; showError("请求失败: " + e.message); });
+  }
+
+  // ---- 轮询进度 ----
+  function startPoll(jobId) {
+    state.jobId = jobId;
+    $("progressCard").classList.remove("hidden");
+    var backoff = 1500;
+    var tick = function () {
+      fetch("/api/status/" + encodeURIComponent(jobId)).then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      }).then(function (s) {
+        backoff = 1500;
+        if (s.state === "done") { stopPoll(); renderDone(jobId); }
+        else if (s.state === "error") { stopPoll(); showError(s.error || "识别失败"); }
+        else if (s.state === "cancelled") { stopPoll(); showError("已取消"); }
+        else { renderProgress(s); }
+      }).catch(function (e) {
+        backoff = Math.min(backoff * 2, 10000);
+      });
+      if (state.jobId === jobId) state.timer = setTimeout(tick, backoff);
+    };
+    clearTimeout(state.timer);
+    state.timer = setTimeout(tick, backoff);
+  }
+  function stopPoll() { if (state.timer) { clearTimeout(state.timer); state.timer = null; } }
+
+  function renderProgress(s) {
+    var label = STAGES[s.stage] || (s.message || "识别中…");
+    $("stageLabel").firstChild.textContent = label + " ";
+    var pct = Math.max(0, Math.min(100, Math.round(s.progress || 0)));
+    $("barFill").style.width = pct + "%";
+    $("progressMeta").textContent = s.filename ? s.filename + " · " + pct + "%" : pct + "%";
+  }
+
+  // ---- 结果页签 ----
+  function renderDone(jobId) {
+    $("progressCard").classList.add("hidden");
+    $("results").style.display = "block";
+    var base = "/api/result/" + encodeURIComponent(jobId) + "/";
+    $("jianpuFrame").src = base + "jianpu.html";
+    $("dlHtml").href = base + "jianpu.html";
+    $("dlMx").href = base + "final.musicxml";
+    $("origImg").src = base + "image";
+    loadReview(base);
+    switchTab("jianpu");
+  }
+  var tabs = document.querySelectorAll(".tab");
+  tabs.forEach(function (b) {
+    b.addEventListener("click", function () { switchTab(b.dataset.tab); });
+  });
+  function switchTab(name) {
+    tabs.forEach(function (b) { b.classList.toggle("active", b.dataset.tab === name); });
+    var panes = document.querySelectorAll(".tab-pane");
+    panes.forEach(function (p) { p.classList.toggle("active", p.id === "pane-" + name); });
+  }
+  $("printBtn").addEventListener("click", function () {
+    var f = $("jianpuFrame");
+    if (f.contentWindow) f.contentWindow.print();
+  });
+
+  function loadReview(base) {
+    var body = $("reviewBody");
+    body.textContent = "加载中…";
+    body.className = "muted";
+    fetch(base + "review.json").then(function (r) { return r.json(); }).then(function (rev) {
+      var total = rev.total || 0;
+      body.className = "";
+      if (total === 0) {
+        body.textContent = "无需校对 ✔";
+        body.className = "muted";
+        return;
+      }
+      var html = '<div class="review-count">需校对 ' + total + ' 处</div>';
+      Object.keys(rev.categories || {}).forEach(function (cat) {
+        html += '<div class="review-cat">' + cat + ' ×' + rev.categories[cat] + '</div>';
+        (rev.items || []).filter(function (it) { return (it.reasons || []).indexOf(cat) !== -1; })
+          .forEach(function (it) {
+            var pos = "小节 " + it.measure + " · 第 " + it.note_index + " 个音符";
+            if (it.step) pos += " · " + it.step + (it.octave || "");
+            html += '<div class="review-item"><span class="pos">' + pos + "</span></div>";
+          });
+      });
+      html += '<p class="muted">标记含义：该音符几何校正被跳过，请在打谱软件中核对。</p>';
+      body.innerHTML = html;
+    }).catch(function () { body.textContent = "需校对数据加载失败"; body.className = "muted"; });
+  }
+
+  // ---- 错误 ----
+  function showError(msg) {
+    $("progressCard").classList.add("hidden");
+    $("errMsg").textContent = msg;
+    $("errBox").classList.remove("hidden");
+  }
+  function hideError() { $("errBox").classList.add("hidden"); }
+})();
+</script>
+</body>
+</html>
