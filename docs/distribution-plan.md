@@ -92,12 +92,12 @@
 > 总量约 **4–7 天**。每阶段含验收标准，全部完成后交付「双击即用」的桌面应用。
 > 原则：**识别核心与前端零改动**，只加壳；引擎缺省时降级，不阻塞主线。
 
-### 阶段 P0 — 后端可移植化（0.5–1 天）
+### 阶段 P0 — 后端可移植化（0.5–1 天）✅ 完成（2026-08-13）
 
-- [ ] `tools/pudu_server.py` 路径重定位：`REPO`/`BUILD`/`TOOLS` 改为 `os.path.dirname(sys.executable)` 相对定位（开发态仍兼容仓库根，双模式判定）。
-- [ ] 动态端口：绑 `127.0.0.1:0`，实际端口写入 `%APPDATA%/Pudu/port.txt`（壳读取后注入前端）。
-- [ ] 单实例互斥：`ctypes.CreateMutex` 或 `%APPDATA%/Pudu/pudu.lock` + PID。
-- **验收**：脱离 git 仓库的目录内仍可正常起服务、识别、出简谱；重复启动只保留一个实例。
+- [x] `tools/pudu_server.py` 路径重定位：双模式解析（开发态 `__file__` 相对仓库根；打包态 `sys.frozen` → `_MEIPASS`/exe 目录），`PUDU_EXE`/`UI_HTML`/`JOBS_ROOT` 智能发现（含扁平便携目录：脚本 + Pudu.exe 同目录）。
+- [x] 动态端口：`--port 0` 绑 `127.0.0.1:0`，实际端口写入 `%APPDATA%/Pudu/port.txt`（供 pywebview 壳读取）。
+- [x] 单实例互斥：`ctypes.CreateMutexW`（`Local\PuduServer.Singleton`），env `PUDU_SINGLETON=0` 可关闭。
+- **验收 ✅**：开发态回归（GET / → 200）+ 脱离仓库扁平目录启动正常（随机端口落盘 + 页面响应）；重复启动只留一实例；`--help` 正常。**附带修复**：原 `PUDU_EXE` 指向 `build/Pudu.exe`（死路径，真实 exe 在 `build/windows-msvc-vcpkg/Debug/Pudu.exe`），开发态识别/渲染本会失败，现已自动发现。
 
 ### 阶段 P1 — pywebview 壳（1–2 天）
 

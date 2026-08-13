@@ -18,6 +18,8 @@
     ``repair_forward_overflow`` + 循环 ``recompute_rhythm_from_geometry`` 至 0
     （对齐 build/_rerun_fixedpoint.py 的定盘逻辑）。
   * 作业目录 ``build/_ui_jobs/<uuid>/``（build/ 已 gitignored）。
+  * 可移植化（P0，2026-08-13）：路径按打包态/开发态双模式解析（Pudu.exe/UI/作业目录），
+    ``--port 0`` 随机端口写 ``%APPDATA%/Pudu/port.txt`` 供壳读取；Windows 单实例互斥。
   * 仅监听 127.0.0.1；取消/超时/异常一律显式 error（对齐 product-status §5）。
 
 模块分段（纯函数段不依赖服务器对象、可被 tests 直接 import）：
@@ -50,15 +52,59 @@ import xml.etree.ElementTree as ET
 # CONFIG（常量 + env 覆盖）
 # ----------------------------------------------------------------------
 
-HERE = os.path.dirname(os.path.abspath(__file__))      # tools/
-REPO = os.path.dirname(HERE)                            # 仓库根
-TOOLS = HERE
-BUILD = os.path.join(REPO, "build")
-JOBS_ROOT = os.path.join(BUILD, "_ui_jobs")             # gitignored（build/ 首行忽略）
+HERE = os.path.dirname(os.path.abspath(__file__))      # tools/（开发态）
+REPO = os.path.dirname(HERE)                            # 仓库根（开发态）
 
-PUDU_EXE = os.path.join(BUILD, "Pudu.exe")
-UI_HTML = os.path.join(TOOLS, "pudu_ui.html")
+
+def _is_frozen() -> bool:
+    """PyInstaller 打包态判定（onedir/onefile 均设 sys.frozen）。"""
+    return bool(getattr(sys, "frozen", False))
+
+
+def _first_existing(*candidates: str) -> Optional[str]:
+    """返回首个存在的候选路径；全不存在返回 None（用于双模式资源定位）。"""
+    for c in candidates:
+        if c and os.path.exists(c):
+            return c
+    return None
+
+
+_MEIPASS = getattr(sys, "_MEIPASS", None)               # 打包态 bundle 内数据目录
+_APP_DIR = os.path.dirname(os.path.abspath(sys.executable))   # 外壳 exe 目录
+
+# 脚本/UI 目录：开发态 = tools/；打包态 = _MEIPASS（bundle 内 data），兜底 exe 目录。
+TOOLS = HERE if not _is_frozen() else (_MEIPASS or _APP_DIR)
+
+# Pudu.exe（L2 渲染核心）：打包态候选 = exe 目录 / _MEIPASS；
+# 开发态候选 = 仓库 build/ 各层级（含 vcpkg Debug/Release 子目录，历史落点）。
+PUDU_EXE = _first_existing(
+    os.path.join(HERE, "Pudu.exe"),                     # 扁平便携目录：脚本旁放 Pudu.exe
+    *(os.path.join(d, "Pudu.exe") for d in (_APP_DIR, _MEIPASS) if d),
+    os.path.join(REPO, "build", "Pudu.exe"),
+    os.path.join(REPO, "build", "windows-msvc-vcpkg", "Debug", "Pudu.exe"),
+    os.path.join(REPO, "build", "windows-msvc-vcpkg", "Release", "Pudu.exe"),
+) or os.path.join(REPO, "build", "Pudu.exe")
+
+# 前端页面：打包态候选 = _MEIPASS / exe 目录；开发态 = tools/。
+UI_HTML = _first_existing(
+    *(os.path.join(d, "pudu_ui.html") for d in (_MEIPASS, _APP_DIR) if d),
+    os.path.join(HERE, "pudu_ui.html"),
+) or os.path.join(HERE, "pudu_ui.html")
+
 VENV_PYTHON = os.environ.get("PUDU_OMR_PYTHON") or sys.executable
+
+
+def appdata_dir() -> str:
+    """%APPDATA%/Pudu（跨平台兜底 ~/.pudu），供 port.txt / settings.json / 打包态作业目录。"""
+    base = os.environ.get("APPDATA") or os.path.join(os.path.expanduser("~"), ".pudu")
+    d = os.path.join(base, "Pudu")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+# 作业根目录：开发态 = build/_ui_jobs（gitignored）；打包态 = %APPDATA%/Pudu/jobs。
+JOBS_ROOT = (os.path.join(REPO, "build", "_ui_jobs") if not _is_frozen()
+             else os.path.join(appdata_dir(), "jobs"))
 
 # oemer GPU 运行所需 DLL 目录（仅追加存在者；缺失则 CPU 回退，见 inject_cuda_path）
 CUDA_BINS = [
@@ -805,11 +851,53 @@ class PuduHandler(BaseHTTPRequestHandler):
 
 
 # ----------------------------------------------------------------------
+# PORT / SINGLETON（P0 可移植化：动态端口落盘 + 单实例互斥）
+# ----------------------------------------------------------------------
+
+_SINGLETON_HANDLE = None  # 进程存活期持有互斥句柄，防止内核对象被回收
+
+
+def _acquire_single_instance() -> bool:
+    """Windows 单实例互斥：已存在实例返回 False（本次启动应退出）。
+    env PUDU_SINGLETON=0 可关闭（测试/多实例）。非 Windows 恒返回 True。"""
+    global _SINGLETON_HANDLE
+    if sys.platform != "win32" or os.environ.get("PUDU_SINGLETON", "1") == "0":
+        return True
+    import ctypes
+    _ERROR_ALREADY_EXISTS = 183
+    name = "Local\\PuduServer.Singleton"
+    handle = ctypes.windll.kernel32.CreateMutexW(None, False, name)
+    if not handle:
+        return True  # 创建失败保守放行，不阻塞启动
+    if ctypes.windll.kernel32.GetLastError() == _ERROR_ALREADY_EXISTS:
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return False
+    _SINGLETON_HANDLE = handle
+    return True
+
+
+def _port_file_path() -> str:
+    """%APPDATA%/Pudu/port.txt 路径（供 pywebview 壳读取实际端口）。"""
+    return os.path.join(appdata_dir(), "port.txt")
+
+
+def _write_port_file(port: int) -> None:
+    """把实际监听端口写入 port.txt；失败仅告警不致命。"""
+    path = _port_file_path()
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(str(port))
+    except OSError as e:
+        sys.stderr.write(f"[警告] 写端口文件失败 {path}: {e}\n")
+
+
+# ----------------------------------------------------------------------
 # MAIN
 # ----------------------------------------------------------------------
 
 def serve(host: str, port: int, mgr: JobManager) -> ThreadingHTTPServer:
-    """构造并返回已绑定（未 serve_forever）的服务器；仅监听回环。"""
+    """构造并返回已绑定（未 serve_forever）的服务器；仅监听回环。
+    ``port=0`` 时由系统分配空闲端口，实际端口取 ``httpd.server_address[1]``。"""
     PuduHandler.mgr = mgr
     httpd = ThreadingHTTPServer((host, port), PuduHandler)
     httpd.daemon_threads = True
@@ -819,12 +907,18 @@ def serve(host: str, port: int, mgr: JobManager) -> ThreadingHTTPServer:
 def main(argv: Optional[List[str]] = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    # 单实例互斥（Windows；env PUDU_SINGLETON=0 关闭，便于测试/多实例）
+    if not _acquire_single_instance():
+        sys.stderr.write("[提示] 谱渡 Pudu 已在运行；本次启动自动退出。\n")
+        return 0
     import argparse
     p = argparse.ArgumentParser(prog="pudu_server",
                                 description="谱渡 Pudu · 本地网页应用后端")
     p.add_argument("--host", default=HOST, help="仅监听回环即可（默认 127.0.0.1）")
-    p.add_argument("--port", type=int, default=PORT)
-    p.add_argument("--jobs", default=JOBS_ROOT, help="作业根目录（默认 build/_ui_jobs）")
+    p.add_argument("--port", type=int, default=PORT,
+                   help="监听端口；0 = 系统分配随机空闲端口（写 %%APPDATA%%/Pudu/port.txt）")
+    p.add_argument("--jobs", default=JOBS_ROOT,
+                   help="作业根目录（默认开发态 build/_ui_jobs，打包态 %%APPDATA%%/Pudu/jobs）")
     p.add_argument("--no-browser", action="store_true",
                    help="不自动打开浏览器（如无头/自动化环境）")
     args = p.parse_args(argv)
@@ -837,9 +931,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         sys.stderr.write(f"[错误] 无法监听 {args.host}:{args.port}: {e}\n")
         return 1
 
-    url = f"http://{args.host}:{args.port}/"
+    actual_port = int(httpd.server_address[1])           # port=0 时取系统分配值
+    _write_port_file(actual_port)                        # 供 pywebview 壳注入前端
+    url = f"http://{args.host}:{actual_port}/"
     print(f"谱渡 Pudu 已启动: {url}", flush=True)
     print(f"作业目录: {jobs_root}", flush=True)
+    print(f"端口文件: {_port_file_path()}", flush=True)
     print("仅监听回环；Ctrl+C 退出。请勿直接双击打开 pudu_ui.html，须从本服务器访问。",
           flush=True)
     if not args.no_browser and args.host in ("127.0.0.1", "localhost", "::1"):
