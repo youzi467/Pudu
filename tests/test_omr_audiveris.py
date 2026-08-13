@@ -247,6 +247,104 @@ class MainFlowTest(unittest.TestCase):
         self.assertEqual(oa.main(["only_input.png"]), 2)
 
 
+class ResolutionRetryTest(unittest.TestCase):
+    """低分辨率失败自动放大重试（2x→3x）。"""
+
+    RES_TEXT = (
+        "WARN ... With a too low interline value of 8 pixels,\n"
+        "either this sheet contains no multi-line staves,\n"
+        "or the picture resolution is too low (try 300 DPI).\n"
+        "This interline value is NOT RELIABLE!\n"
+        "Sheet ... flagged as invalid.\n"
+    )
+
+    @staticmethod
+    def _mk_input(d):
+        inp = os.path.join(d, "in.png")
+        with open(inp, "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
+        return inp
+
+    def test_is_resolution_failure_matches(self):
+        self.assertTrue(oa._is_resolution_failure(self.RES_TEXT))
+        self.assertTrue(oa._is_resolution_failure("resolution is too low"))
+        self.assertTrue(oa._is_resolution_failure(
+            "With a too low interline value of 8 pixels"))
+        self.assertFalse(oa._is_resolution_failure(""))
+        self.assertFalse(oa._is_resolution_failure(None))
+        self.assertFalse(oa._is_resolution_failure(
+            "No system found on this sheet"))   # 非分辨率失败 → 不重试
+
+    def test_upscale_image_real(self):
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("PIL 不可用")
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, "src.png")
+            dst = os.path.join(d, "dst.png")
+            Image.new("L", (100, 50), 200).save(src)
+            self.assertTrue(oa.upscale_image(src, dst, 2))
+            with Image.open(dst) as im:
+                self.assertEqual(im.size, (200, 100))
+
+    def test_main_retries_upscale_then_succeeds(self):
+        with tempfile.TemporaryDirectory() as d:
+            inp = self._mk_input(d)
+            out = os.path.join(d, "out.musicxml")
+            mxl = os.path.join(d, "fake.mxl")
+            _make_mxl(mxl, "fake.xml", _simple_xml(fifths="2", note_durs=("1", "1")))
+            calls = {"n": 0}
+
+            def fake_run(cmd, timeout=oa._TIMEOUT_S):
+                calls["n"] += 1
+                return (1, self.RES_TEXT) if calls["n"] == 1 else (0, "")
+
+            with mock.patch.object(oa, "_run_audiveris", side_effect=fake_run), \
+                 mock.patch.object(oa, "upscale_image", return_value=True), \
+                 mock.patch.object(oa, "locate_export", return_value=mxl):
+                rc = oa.main([inp, out])
+            self.assertEqual(rc, 0)
+            self.assertEqual(calls["n"], 2)   # 原图失败 1 次 + 放大重试 1 次
+            root = ET.parse(out).getroot()
+            self.assertEqual({k.text for k in root.iter("fifths")}, {"2"})
+
+    def test_main_retries_then_reports_failure(self):
+        with tempfile.TemporaryDirectory() as d:
+            inp = self._mk_input(d)
+            out = os.path.join(d, "out.musicxml")
+            calls = {"n": 0}
+
+            def fake_run(cmd, timeout=oa._TIMEOUT_S):
+                calls["n"] += 1
+                return (1, self.RES_TEXT)
+
+            with mock.patch.object(oa, "_run_audiveris", side_effect=fake_run), \
+                 mock.patch.object(oa, "upscale_image", return_value=True), \
+                 mock.patch("sys.stderr"):
+                rc = oa.main([inp, out])
+            self.assertEqual(rc, 1)
+            self.assertEqual(calls["n"], 3)   # 原图 + 2x + 3x 全失败
+
+    def test_main_no_retry_on_other_failure(self):
+        with tempfile.TemporaryDirectory() as d:
+            inp = self._mk_input(d)
+            out = os.path.join(d, "out.musicxml")
+            calls = {"n": 0}
+
+            def fake_run(cmd, timeout=oa._TIMEOUT_S):
+                calls["n"] += 1
+                return (1, "No system found on this sheet")
+
+            with mock.patch.object(oa, "_run_audiveris", side_effect=fake_run), \
+                 mock.patch.object(oa, "upscale_image", return_value=True) as up, \
+                 mock.patch("sys.stderr"):
+                rc = oa.main([inp, out])
+            self.assertEqual(rc, 1)
+            self.assertEqual(calls["n"], 1)   # 非分辨率失败 → 不放大
+            up.assert_not_called()
+
+
 @unittest.skipUnless(oa.resolve_audiveris_exe() is not None,
                      "Audiveris 未安装（build/_audiveris 或 PATH）")
 class RealAvSmokeTest(unittest.TestCase):

@@ -20,6 +20,13 @@
 # 各页独立 .mxl 解包后用 ET 拼接为一个合法 score-partwise（见 merge_pages：
 # 保留页 1 骨架、后续页只取 measure、顺序重编号、divisions 一致性守卫）。
 #
+# 单图策略（本文件的自动放大重试）：用户上传的 PNG/JPG 可能是截图/导出而来，
+# 分辨率不足时 AV 测得 interline（五线谱行距）过小 → "resolution is too low"
+# / "interline value is NOT RELIABLE" → Sheet 标记 invalid → export 失败 rc=1。
+# 此时自动用 PIL LANCZOS 放大 2x→3x 重试（实测 968x1369/interline 8px 的图
+# 放大后 RC=0，fifths/time/音符数与原 PDF 单页一致）。正常分辨率图首跑成功，
+# 不经过放大路径、零影响。
+#
 # 依赖：Audiveris 5.11.0 安装（内置 JRE，无需系统 Java）。定位顺序：
 #   env PUDU_AUDIVERIS_EXE → build/_audiveris/extract/Audiveris/Audiveris.exe
 #   → PATH 中的 Audiveris.exe。
@@ -90,6 +97,46 @@ def build_av_cmd(exe: str, in_path: str, out_dir: str, sheet: int = None) -> Lis
         cmd += ["-sheets", str(sheet)]
     cmd += ["-output", out_dir, "--", in_path]
     return cmd
+
+
+def _is_resolution_failure(text: str) -> bool:
+    """判断 AV 失败输出是否属于「分辨率过低」（值得放大重试）。
+
+    匹配 AV 5.11 ScaleStep / SheetStub 的关键行：
+      * "resolution is too low (try 300 DPI)"
+      * "This interline value is NOT RELIABLE"
+      * "interline value of 8 pixels"（过低提示）
+    命中任意一个即视为低分辨率边界。区分其他失败（如 No system found /
+    非图片输入），那些放大无效，不应重试。
+    """
+    if not text:
+        return False
+    lowered = text.lower()
+    markers = (
+        "resolution is too low",
+        "interline value is not reliable",
+        "too low interline value",
+    )
+    return any(m in lowered for m in markers)
+
+
+def upscale_image(in_path: str, out_path: str, scale: int) -> bool:
+    """PIL LANCZOS 放大图片到 out_path（无 PIL 时返回 False）。
+
+    放大只用于低分辨率救回（见 _is_resolution_failure）。保持灰度转换让 AV
+    的 binarization 有更干净的输入——AV 自己也会 Converting max RGB to gray。
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        return False
+    try:
+        im = Image.open(in_path).convert("L")
+        im = im.resize((im.width * scale, im.height * scale), Image.LANCZOS)
+        im.save(out_path)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def locate_export(out_dir: str, base: str) -> Optional[str]:
@@ -274,6 +321,28 @@ def main(argv: List[str]) -> int:
     with tempfile.TemporaryDirectory(prefix="pudu_av_") as tmp:
         if not is_pdf:
             rc, out = _run_audiveris(build_av_cmd(exe, in_abs, tmp))
+            # 低分辨率边界：首跑失败且命中分辨率特征 → 自动放大重试
+            if rc != 0 and _is_resolution_failure(out):
+                retried = 0
+                for scale in (2, 3):
+                    up_path = os.path.join(tmp, f"upscaled_{scale}x.png")
+                    if not upscale_image(in_abs, up_path, scale):
+                        break
+                    rc2, out2 = _run_audiveris(build_av_cmd(exe, up_path, tmp))
+                    retried += 1
+                    if rc2 == 0:
+                        rc, out = 0, out2
+                        sys.stdout.write(
+                            f"[audiveris] 低分辨率检测，{scale}x 放大重试成功\n")
+                        break
+                else:
+                    # 2x/3x 均失败：用最后一次失败信息（out 已为 out2）
+                    pass
+                if rc != 0 and retried:
+                    sys.stderr.write(
+                        f"[错误] Audiveris 单页导出失败（rc={rc}，已尝试"
+                        f"{retried} 次放大重试）:\n{out[-2000:]}\n")
+                    return 1
             if rc != 0:
                 sys.stderr.write(
                     f"[错误] Audiveris 单页导出失败（rc={rc}）:\n{out[-2000:]}\n")
