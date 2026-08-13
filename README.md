@@ -1,8 +1,8 @@
 # 谱渡 Pudu
 
-五线谱与简谱互转工具（MVP 阶段）。
+五线谱与简谱互转工具。
 
-> 当前状态（2026-07-17）：已实现 **MusicXML ⇄ 简谱** 双向转换（阶段 2 + 阶段 3，MVP 达成），支持纯文本(L1)、二维 HTML(L2)、结构化 JSON(L3)，并通过 music21 跨语言 100% 校验。OMR 识别（阶段 1）已完成黑盒集成（oemer 接入 + 评测 harness + Plan A 调号后处理 + H2 分维指标），真引擎已在本机端到端跑通；**P1-1 后处理音乐规则引擎已交付并本地真机验收（2026-08-01）：150/150 用例全绿，含 7 份出版级 GT 谱 no-op 红线回归**。
+> 当前状态（2026-08-13）：已实现 **MusicXML ⇄ 简谱** 双向转换（阶段 2 + 阶段 3），支持纯文本(L1)、二维 HTML(L2)、结构化 JSON(L3)，并通过 music21 跨语言 100% 校验（13492/13492 音符）。OMR 识别（阶段 1）完成黑盒集成并迁移到 **Audiveris 默认引擎 + oemer 回退**（2026-08-12，note_pass 97.56%）；**P1-1 后处理音乐规则引擎已交付**（5 类规则，干净输入零修正）。仓库已于 2026-08-13 清理：测试代码、评测工具与调研文档移入 `to_be_delete/` 归档，功能代码不受影响。
 
 ## 阶段与里程碑
 
@@ -15,7 +15,7 @@
 | 阶段 4 | AI / 深度学习进阶 | ⬜ 未开始 |
 | 阶段 5 | 工程化与 GUI | ⬜ 未开始 |
 
-> 整体规划与 5 阶段路线见 `omr-tool-research/results/research_report.md`；阶段 3 具体行动计划见 `stage3_action_plan.md`。
+> 整体 5 阶段路线与产品状态见 `docs/omr-engine-feasibility.md`、`docs/product-status.md`。
 
 ## 功能概览（阶段 2 + 阶段 3）
 
@@ -27,11 +27,11 @@
 - **三种简谱呈现**：
   - **L1 纯文本**（`--to-jianpu`）：命令行核对用。
   - **L2 二维 HTML/Unicode**（`--to-jianpu-l2 [out.html]`）：自包含、可直接浏览器打开，含真实八度点、减时线横向连写、增时线、和弦列、连音弧。
-  - **L3 结构化 JSON**（`--to-jianpu-json [out.json]`）：无损，供 `verify_jianpu_groundtruth.py` 逐音比对。
+  - **L3 结构化 JSON**（`--to-jianpu-json [out.json]`）：无损，供程序化逐音比对。
 - **P1-1 后处理音乐规则引擎（`--apply-postcorrect`，默认关闭）**：挂接在 `staffToJianpu` 之后的**确定性音乐规则引擎**，对 OMR 常见错误做「高置信自修 / 低置信标记」，产出可审计的 `applied`/`flagged` 轨迹。
   - 开关：`--apply-postcorrect`（**默认关闭，需显式开启**）；`--postcorrect-report <path>` 将审计报告 JSON 写出（含每条 `applied`/`flagged` 详情）。
   - 五类规则：`BeatReconcile`（小节节拍对账，**唯一带积极自修**的规则）、`Accidental`（临时记号与调号一致性）、`OctaveDot`（八度点自洽与异常跳变）、`TupletGroup`（连音组完整性）、`RestFill`（占拍缺失标记，**绝不臆造音符**）。
-  - **核心不变量：对干净输入必须 0 修正（no-op）**。已由 7 份出版级 ground-truth 乐谱（Bach Partita BWV1004 / Cello Suite BWV1007 / Vivaldi a 小调协奏曲 / Badinerie / Paganini Caprice 24 / Canon in D / Summer 3rd mvt）的语料级回归测试守护，断言 `applied` 与 `flagged` 皆空。
+  - **核心不变量：对干净输入必须 0 修正（no-op）**。该不变量由 7 份出版级 ground-truth 乐谱（Bach Partita BWV1004 / Cello Suite BWV1007 / Vivaldi a 小调协奏曲 / Badinerie / Paganini Caprice 24 / Canon in D / Summer 3rd mvt）的语料级回归测试守护，断言 `applied` 与 `flagged` 皆空（测试代码已随清理归档至 `to_be_delete/`）。
   - 已知边界（诚实交代）：
     - 多声部（`doc.lines.size() > 1`）文档整条跳过 `BeatReconcile` —— 因 `<forward>/<backup>` 不物化休止，稀疏声部小节天然不满拍，target 不可信。
     - `implicit`（不完全/续接）小节跳过。
@@ -48,7 +48,7 @@
 - **阶段 1 OMR 黑盒集成（`--from-omr`，M2）**：
   - `omr_adapter` 子进程分派 **audiveris（默认，`--omr-engine audiveris`）** / fixture（确定性，ctest 用）/**oemer（回退，`--omr-engine oemer`）**；产出 MusicXML 喂入既有 `MusicXMLParser → staffToJianpu` 流水线，端到端出简谱。
   - **Audiveris 默认引擎（2026-08-12 迁移落地）**：`tools/omr_audiveris.py` 调 `Audiveris.exe -batch -export`（自带 JRE），图像 glyph 检测 keysig/拍号/时值，支持多页 PDF 逐页拼接；基线 **97.56%**（13 共有页，见 docs/audiveris-ab-verdict.md）。
-  - 评测 harness `tools/omr_eval_groundtruth.py` 量化引擎→简谱 误差分布（`run_oemer` / `run_audiveris` 双入口 + H2 分维指标）；真实 AV / oemer 路径均已本机端到端跑通。
+  - 评测 harness 量化引擎→简谱误差分布（`run_audiveris` / `run_oemer` 双入口 + H2 分维指标）；真实 AV / oemer 路径均已本机端到端跑通（评测工具已随清理归档至 `to_be_delete/tools/`）。
 - **P0-2 前置图像预处理增强（`--omr-preprocess`，默认关闭，仅 oemer 回退路径适用）**：
   - 在 oemer 识别**之前**插入一层 Python + OpenCV 图像增强（阴影抑制 → CLAHE 对比度归一 → 中值去噪 → 小角度纠偏 → 边框裁切 → 自适应/Otsu 二值化 → 缩放），改善**拍照/扫描/低对比度/轻微倾斜/带阴影**谱面的识别鲁棒性。Audiveris 引擎（默认）走 AV 自带预处理，不适用本开关。
   - **默认关闭，且是 no-op 红线**：不加该开关时 `runOmr` 仍直接调用 `tools/omr_oemer.py`（oemer 引擎下），子进程命令串与 P0-2 之前**逐字节一致**，不产生任何临时文件、不追加任何参数。
@@ -58,8 +58,8 @@
   - 每次运行旁写 `<out>.preprocess.json` 指标（schema `pudu.omr.preprocess.metrics/v1`：分步耗时、纠偏角与决策、墨迹占比、降级原因），便于 A/B 与调参。
   - 独立调参入口：`python tools/omr_preprocess.py <in> <out.png> [--preset photo]`，可脱离 C++ 直接查看增强效果。
 - **质量保障**：
-  - C++ 单元测试 **161 个用例（ctest `PuduTests` 入口全绿；含 P1-1 后处理规则引擎 33 例，Bug B/C 等扩展后由早期 117 → 161）+ 41 个 F3 Python 单测**全绿（header-only 自研测试框架，零外部依赖）。
   - music21 跨语言 ground-truth 校验：8/8 样本、音符 **100.0%**（13492/13492）、字段 **100.0%**（79240/79240）、计入类差异 = 0。
+  - C++ / Python 单元测试代码已随 2026-08-13 仓库清理归档至 `to_be_delete/`（历史基线：C++ 161 用例 + F3 Python 单测全绿）。
 
 ## 前置依赖
 
@@ -81,7 +81,7 @@ cmake --preset windows-msvc-vcpkg
 cmake --build build/windows-msvc-vcpkg --config Debug
 ```
 
-构建产物：`build/Pudu.exe`（主程序）、`build/PuduTests.exe`（单元测试）。
+构建产物：`build/Pudu.exe`（主程序）。
 
 ## 运行
 
@@ -135,12 +135,6 @@ python tools/omr_preprocess.py data/scan.png  out_scan.png  --preset scan
 > $env:PATH = "D:\vcpkg\installed\x64-windows\bin;" + $env:PATH
 > ```
 
-运行单元测试：
-
-```bash
-build/PuduTests.exe
-```
-
 ### 本地网页应用（图片 → 简谱 + MusicXML + 需校对）
 
 面向非开发者用户的浏览器入口（stdlib-only，零新依赖；设计见 `docs/user-side-interface-design.md`）：
@@ -157,13 +151,11 @@ C:/Users/13157/.workbuddy/binaries/python/envs/default/Scripts/python.exe tools/
 - 多页 PDF 由 AV 逐页 `-sheets N` 拼接（坏页单独跳过不拖垮好页）；拍号校验对节拍不符小节打 `<footnote>`「需校对：小节节拍不符」；
 - 作业目录 `build/_ui_jobs/`（gitignored）；取消/超时/失败一律显式报错，不留僵尸进程。
 
-运行测试：`.../python.exe -m pytest tests/test_pudu_server.py -q`
-
 ## 项目结构
 
 ```
 Pudu/  (工作区当前磁盘名为 omr/，规划重命名为 Pudu/)
-├── CMakeLists.txt              # 构建配置（Pudu + PuduTests 目标）
+├── CMakeLists.txt              # 构建配置（Pudu 目标；PuduTests 目标已随清理下线）
 ├── CMakePresets.json           # VS Code / CMake 预设
 ├── vcpkg.json                  # 第三方依赖声明（pugixml）
 ├── README.md
@@ -176,7 +168,7 @@ Pudu/  (工作区当前磁盘名为 omr/，规划重命名为 Pudu/)
 │   ├── jianpu_to_staff.cpp     # 阶段3 G1：JianpuDoc -> Score
 │   ├── jianpu_text_parser.cpp  # 阶段3 G4：简谱 L1 文本 -> JianpuDoc
 │   ├── musicxml_serializer.cpp # 阶段3 G2：Score -> MusicXML（scoreToMusicXML）
-│   └── omr_adapter.cpp         # 阶段1 OMR 黑盒适配（oemer/fixture/audiveris 子进程分派）
+│   └── omr_adapter.cpp         # 阶段1 OMR 黑盒适配（audiveris/oemer/fixture 子进程分派）
 ├── include/
 │   ├── score_model.hpp         # MusicXML 内存模型（Score/Note/.../Credit）
 │   ├── musicxml_parser.hpp     # 解析器接口
@@ -188,22 +180,18 @@ Pudu/  (工作区当前磁盘名为 omr/，规划重命名为 Pudu/)
 │   ├── jianpu_text_parser.hpp  # 阶段3 G4 API（parseJianpuText）
 │   └── omr_adapter.hpp         # 阶段1 OMR 适配 API（OmrEngineConfig / runOmr）
 ├── tools/                      # Python 侧工具链（子进程调用，C++ 不直接依赖）
-│   ├── omr_oemer.py            # 阶段1 oemer 识别脚本（P0-2 零改动，回退引擎）
-│   ├── omr_audiveris.py        # 阶段1 Audiveris 识别适配层（默认引擎；调 Audiveris.exe -batch，PDF 逐页拼接）
+│   ├── omr_audiveris.py        # 阶段1 Audiveris 识别适配层（默认引擎；调 Audiveris.exe -batch，PDF 逐页拼接、低分辨率放大重试）
+│   ├── omr_oemer.py            # 阶段1 oemer 回退引擎（含 F3 sidecar / 拍号注入 / 保守重切）
+│   ├── geometric_pitch.py      # F3 几何音高 + R-geo 节奏几何校正（oemer 回退路径）
 │   ├── omr_pipeline.py         # P0-2 透明代理：预处理后转发 omr_oemer.py（默认不参与链路）
 │   ├── omr_preprocess.py       # P0-2 增强核心库 + 独立调参 CLI（cv2 全部惰性导入）
 │   ├── omr_preprocess_config.json  # P0-2 默认配置与 4 套预设（default/scan/photo/low_contrast）
-│   ├── pudu_server.py          # 阶段5 本地网页应用后端（stdlib-only HTTP + 作业线程）
-│   └── pudu_ui.html            # 阶段5 单页前端（上传/进度/简谱预览/MusicXML/需校对，零依赖）
-├── test/                       # C++ 单元测试（header-only 自研框架 + 11 测试文件）
-├── tests/                      # Python 单元测试（pytest；P0-2 新增 5 文件，不依赖 cv2/numpy）
-├── data/                       # 测试 MusicXML 语料（8 份，.gitignore 已排除）
-└── omr-tool-research/          # 调研文档（技术选型/架构/规范/校验报告/计划）
-    ├── results/research_report.md        # 总路线与 5 阶段规划
-    ├── jianpu_output_spec.md             # 阶段2 简谱输出规范
-    ├── verify_jianpu_groundtruth.py      # music21 ground-truth 校验器
-    ├── jianpu_groundtruth_report.md      # 校验报告（人读）
-    └── ...
+│   ├── omr_fixture.py          # 演示/调试用 fixture 引擎（+ omr_fixture_sample.musicxml）
+│   ├── pudu_server.py          # 本地网页应用后端（stdlib-only HTTP + 作业线程）
+│   └── pudu_ui.html            # 本地网页应用前端（上传/进度/简谱预览/MusicXML/需校对，零依赖）
+├── data/                       # 评测语料：样本 MusicXML/PDF + data/omr_eval/real/ GT（.gitignore 排除具体文件）
+├── docs/                       # 产品/设计/教程文档（product-status、system_design、软件用户手册、musicxml-diff-guide 等）
+└── to_be_delete/               # 清理归档区：测试代码/评测工具/调研文档/中间产物（.gitignore 排除）
 ```
 
 ## 已知限制（阶段 2）

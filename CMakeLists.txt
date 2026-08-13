@@ -23,10 +23,6 @@ endif()
 # 谱渡 Pudu —— 五线谱 ⇄ 简谱互转工具（OMR）
 project(Pudu VERSION 0.1.0 LANGUAGES CXX)
 
-# 启用 CTest：必须在顶层 CMakeLists 调用，才会在构建目录生成
-# CTestTestfile.cmake，使 `ctest` 能发现并运行注册过的测试目标。
-enable_testing()
-
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -83,54 +79,11 @@ target_link_libraries(Pudu PRIVATE
 )
 
 # ----------------------------------------------------------------------
-# 5. 单元测试（阶段 2 简谱转换）
-#    极简 header-only 测试框架（test/pudu_test.hpp），不引入新依赖，
-#    与项目"最小依赖"哲学一致；如需 GoogleTest 可在此替换并链接。
-#    运行：build/PuduTests.exe
+# 5. 单元测试目标已移除（2026-08-13 仓库清理）
+#    test/（C++ 单测，header-only 自研框架）随清理归档至 to_be_delete/，
+#    PuduTests 目标随之下线，仅保留 Pudu 主程序目标。若需恢复测试，
+#    从 to_be_delete/test/ 搬回并恢复本目标即可。
 # ----------------------------------------------------------------------
-add_executable(PuduTests
-    test/pudu_test_main.cpp
-    test/test_tonic.cpp
-    test/test_pitch_mapping.cpp
-    test/test_duration.cpp
-    test/test_staff_to_jianpu.cpp
-    test/test_transpose.cpp
-    test/test_jianpu_to_staff.cpp   # 阶段 3 G1+G2 单测
-    test/test_serializer.cpp        # 阶段 3 G2 序列化自洽（需 pugixml）
-    test/test_jianpu_text_parser.cpp  # G4：简谱文本解析单测（含端到端闭环）
-    test/test_m15_hardening.cpp        # M1.5 边界硬化单测（此前仅 g++ 手动验证，现纳入 ctest 全量回归）
-    test/test_jianpu_postcorrect.cpp   # P1-1 后处理规则引擎单测（含"干净输入 no-op"不变量红线）
-    src/jianpu_converter.cpp
-    src/transpose.cpp
-    src/jianpu_to_staff.cpp
-    src/musicxml_serializer.cpp
-    src/jianpu_text_parser.cpp    # G4：与 Pudu 目标并列编入（避免链接遗漏）
-    src/musicxml_parser.cpp       # 提供 MusicXMLParser::parseString：test_serializer.cpp 的往返自洽测试需把序列化结果解析回 Score
-    src/omr_adapter.cpp           # 阶段1 OMR 黑盒集成适配层（M2-3 ctest）
-    test/test_omr_adapter.cpp     # 阶段1 OMR 集成 ctest：OMR 产出 -> 解析 -> 简谱全链路
-    src/jianpu_postcorrect.cpp    # P1-1：与 Pudu 目标并列编入（避免链接遗漏）
-)
-
-target_include_directories(PuduTests PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/test
-)
-
-if(MSVC)
-    target_compile_options(PuduTests PRIVATE /utf-8)
-endif()
-
-target_compile_definitions(PuduTests PRIVATE "PUDU_TOOLS_DIR=\"${PUDU_TOOLS_DIR_FWD}\"")
-
-# 关键：PuduTests 自身编译了 src/musicxml_serializer.cpp（直接 #include <pugixml.hpp>）
-# 以及 test/test_serializer.cpp（经 musicxml_parser.hpp 间接引入 pugixml.hpp），
-# 因此必须链接 pugixml 才能把其 include 目录（INTERFACE_INCLUDE_DIRECTORIES）
-# 传递进来，否则 MSVC 报 C1083: 无法打开包括文件 "pugixml.hpp"。
-target_link_libraries(PuduTests PRIVATE pugixml::pugixml)
-
-# 注册到 CTest：直接跑 PuduTests 可执行文件（其 main 自带 header-only
-# 测试框架，返回非 0 表示有失败）。这样 `ctest` 即可驱动全套单元测试。
-add_test(NAME PuduTests COMMAND PuduTests)
 
 # ----------------------------------------------------------------------
 # 4. Windows 下运行时 DLL 提示
