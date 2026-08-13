@@ -143,6 +143,9 @@ python tools/omr_preprocess.py data/scan.png  out_scan.png  --preset scan
 # 启动（仅监听 127.0.0.1:8765；浏览器打开提示的地址即可）
 C:/Users/13157/.workbuddy/binaries/python/envs/default/Scripts/python.exe tools/pudu_server.py
 
+# 桌面端（pywebview 原生窗口，保留同一套前端；--check 无头验收）：见 docs/distribution-plan.md
+C:/Users/13157/.workbuddy/binaries/python/envs/default/Scripts/python.exe tools/desktop_main.py
+
 # 演示模式全链路秒级出稿（fixture 引擎，零 GPU）：界面右上角切「演示模式」→ 运行演示样例
 ```
 

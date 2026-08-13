@@ -767,6 +767,8 @@ class PuduHandler(BaseHTTPRequestHandler):
         path = parsed.path
         if path == "/api/ocr":
             self._handle_ocr(parsed.query)
+        elif path == "/api/open":
+            self._handle_open()
         elif path.startswith("/api/cancel/"):
             self._handle_cancel(path[len("/api/cancel/"):])
         else:
@@ -837,6 +839,45 @@ class PuduHandler(BaseHTTPRequestHandler):
             self._send_500(f"作业创建失败: {e}")
             return
         self._send_json(200, {"job_id": job.id, "demo": demo})
+
+    def _handle_open(self):
+        """桌面端本地路径直投：POST /api/open {"path": "...", "engine": "..."}。
+        与上传流同一条 worker 管线（复制进作业目录后走 run_worker）。"""
+        body, err = self._read_body()
+        if err is not None:
+            self._send_400("请求体格式不支持")
+            return
+        try:
+            payload = json.loads(body.decode("utf-8") or "{}")
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self._send_400("JSON 解析失败")
+            return
+        src = (payload.get("path") or "").strip()
+        engine = payload.get("engine", DEFAULT_ENGINE)
+        if engine not in _ENGINES:
+            self._send_400(f"未知引擎: {engine}（可选: {sorted(_ENGINES)}）")
+            return
+        if not src or not os.path.isfile(src):
+            self._send_400("文件不存在或不可读")
+            return
+        ext = os.path.splitext(src)[1].lower()
+        if ext not in _IMAGE_EXTS:
+            self._send_400(
+                f"仅支持 {sorted(_IMAGE_EXTS)} 图片/PDF（收到: {os.path.basename(src) or '?'}）")
+            return
+        try:
+            job = self.mgr.create(ext, demo=False, filename=os.path.basename(src),
+                                  engine=engine)
+            in_path = os.path.join(job.dir, "input" + ext)
+            shutil.copyfile(src, in_path)
+            job.input_path = in_path
+            t = threading.Thread(target=run_worker, args=(job, self.mgr), daemon=True)
+            job.worker = t
+            t.start()
+        except OSError as e:
+            self._send_500(f"作业创建失败: {e}")
+            return
+        self._send_json(200, {"job_id": job.id, "demo": False})
 
     def _handle_cancel(self, job_id: str):
         try:

@@ -99,14 +99,15 @@
 - [x] 单实例互斥：`ctypes.CreateMutexW`（`Local\PuduServer.Singleton`），env `PUDU_SINGLETON=0` 可关闭。
 - **验收 ✅**：开发态回归（GET / → 200）+ 脱离仓库扁平目录启动正常（随机端口落盘 + 页面响应）；重复启动只留一实例；`--help` 正常。**附带修复**：原 `PUDU_EXE` 指向 `build/Pudu.exe`（死路径，真实 exe 在 `build/windows-msvc-vcpkg/Debug/Pudu.exe`），开发态识别/渲染本会失败，现已自动发现。
 
-### 阶段 P1 — pywebview 壳（1–2 天）
+### 阶段 P1 — pywebview 壳（1–2 天）✅ 完成（2026-08-13）
 
-- [ ] `pip install pywebview`（Windows 自动用 EdgeChromium/WebView2，无 JRE 依赖）。
-- [ ] 新建 `tools/desktop_main.py`：读端口 → `webview.create_window(..., http://127.0.0.1:<port>/)` → `webview.start()`。
-- [ ] 原生打开：`create_file_dialog()` 选 PDF/图片 → 新增 `POST /api/open`（本地路径直投，免上传）。
-- [ ] 原生保存：保存对话框 → MusicXML/简谱写用户指定路径（替代浏览器下载）。
-- [ ] 关窗优雅退出：停 HTTP + 杀引擎子进程 + 清作业目录。
-- **验收**：原生窗口内完成「选文件 → 识别 → 预览 → 校对 → 导出」全流程，无需开浏览器。
+- [x] `pip install pywebview`（venv 6.2.1，自动装 pythonnet/clr-loader → edgechromium/WebView2）。
+- [x] 新建 `tools/desktop_main.py`：进程内起 HTTP（127.0.0.1:0）→ 端口落盘 → `webview.create_window(url)` → `webview.start(gui="edgechromium")`；`js_api` 暴露原生对话框；`--check` 无头验收模式；`PUDU_TEST_CLOSE_MS` 自动关窗（自动化用）。
+- [x] 原生打开：`create_file_dialog(OPEN_DIALOG)` → 新增 `POST /api/open`（本地路径直投，复制进作业目录走同一 worker 管线）。
+- [x] 原生保存：`create_file_dialog(SAVE_DIALOG)` 把作业结果（jianpu.html / final.musicxml / review.json）复制到用户选择路径。
+- [x] 关窗优雅退出：`webview.start()` 返回后 `httpd.shutdown()` + `mgr.shutdown()`（取消作业/终止子进程）。
+- [x] 前端桥（pudu_ui.html 保留原前端，仅加条件分支）：`isDesktop` 检测 → 上传区点击改走原生打开；结果区加「保存到本地…」原生条。
+- **验收 ✅**：`--check` 无头（服务+端口+GET 200，exit 0）；`/api/open` 无效路径 400、真实 PNG 直投 200+job_id、引擎缺失正确 error 态；真实窗口 5s 自动关闭退出码 0。
 
 ### 阶段 P2 — 设置持久化 + 引擎引导（1 天）
 

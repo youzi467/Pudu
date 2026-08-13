@@ -102,6 +102,14 @@
   </div>
 
   <div id="results" class="card">
+    <div id="nativeBar" class="dl-row hidden" style="margin-bottom:10px">
+      <select id="saveName" aria-label="保存内容">
+        <option value="jianpu.html">简谱 HTML</option>
+        <option value="final.musicxml">MusicXML</option>
+        <option value="review.json">需校对 JSON</option>
+      </select>
+      <button id="saveNative" class="btn" type="button">保存到本地…</button>
+    </div>
     <div class="tabs">
       <button class="tab active" data-tab="jianpu" type="button">简谱预览</button>
       <button class="tab" data-tab="musicxml" type="button">MusicXML</button>
@@ -146,6 +154,39 @@
   }
 
   var state = { jobId: null, engine: "audiveris", demo: false, timer: null, pendingFile: null, lastFileName: null };
+
+  // ---- 桌面端（pywebview）桥：原生打开/保存 ----
+  var isDesktop = !!(window.pywebview && window.pywebview.api);
+  function startFromPath(path) {
+    hideError(); stopPoll();
+    $("busy").style.display = "block";
+    fetch("/api/open", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: path, engine: state.engine })
+    }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { r: r, j: j }; }); })
+      .then(function (res) {
+        $("busy").style.display = "none";
+        if (res.r.ok) {
+          $("fileMeta").textContent = path.replace(/^.*[\\\/]/, "");
+          startPoll(res.j.job_id);
+        } else { showError(res.j.error || ("请求失败（HTTP " + res.r.status + "）")); }
+      })
+      .catch(function (e) { $("busy").style.display = "none"; showError("请求失败: " + e.message); });
+  }
+  var saveNative = $("saveNative");
+  if (saveNative) {
+    saveNative.addEventListener("click", function () {
+      if (!state.jobId || !window.pywebview.api.save_result) return;
+      var name = $("saveName").value;
+      saveNative.disabled = true;
+      window.pywebview.api.save_result(state.jobId, name).then(function (res) {
+        saveNative.disabled = false;
+        saveNative.textContent = res.ok ? "已保存" : (res.reason || "保存失败");
+        setTimeout(function () { saveNative.textContent = "保存到本地…"; }, 2500);
+      }).catch(function () { saveNative.disabled = false; saveNative.textContent = "保存失败"; });
+    });
+  }
   var STAGES = {
     extract: "提取音符中…", keysig: "调号校正中…", f3: "几何音高校正中…",
     rgeo: "几何时值校正中…", audiveris: "Audiveris 识别中…",
@@ -169,7 +210,13 @@
 
   // ---- 上传区 ----
   var dz = $("dropzone"), fi = $("fileInput");
-  dz.addEventListener("click", function () { fi.click(); });
+  dz.addEventListener("click", function () {
+    if (isDesktop && window.pywebview.api.open_files) {
+      window.pywebview.api.open_files().then(function (paths) {
+        if (paths && paths.length) startFromPath(paths[0]);
+      }).catch(function () {});
+    } else { fi.click(); }
+  });
   dz.addEventListener("dragover", function (e) { e.preventDefault(); dz.classList.add("drag"); });
   dz.addEventListener("dragleave", function () { dz.classList.remove("drag"); });
   dz.addEventListener("drop", function (e) {
@@ -263,6 +310,7 @@
     $("dlMx").href = base + "final.musicxml";
     $("origImg").src = base + "image";
     loadReview(base);
+    if ($("nativeBar")) $("nativeBar").classList.toggle("hidden", !isDesktop);
     switchTab("jianpu");
   }
   var tabs = document.querySelectorAll(".tab");
