@@ -125,12 +125,30 @@
 - [x] 绿色版 ZIP（`build/_pkg/dist/pudu-desktop-win64.zip`，107MB）+ Inno Setup 安装包（`build/_pkg/dist/PuduSetup-0.9.0-win64.exe`，86MB；`packaging/pudu_setup.iss` + 简体中文翻译）。**文件关联暂不做**——桌面壳尚不支持 argv 传文件打开（后续可加）。
 - **验收 ✅**：打包产物 `--check` exit 0 + GET / 200；真实窗口（console=False）页面加载/设置拉取/自动关窗干净退出；**全链路识别**（POST /api/open → AV 引擎 → final.musicxml 98KB + jianpu.html 876 简谱数字，embeddable python→AV→Pudu.exe 在 frozen 环境端到端可用）；**fixture 演示**（/api/ocr demo=1 → done）；Inno 安装包静默安装到干净目录 → 主程序 `--check` exit 0 → 卸载器全清。注：真·干净机器（无 Python）未能实机验证，但引擎脚本走 embeddable python、CRT 随包、WebView2 为 Win11 自带，无系统 Python 依赖。
 
-### 阶段 P4 — 验证与发布（0.5–1 天）
+### 阶段 P4 — 验证与发布（0.5–1 天）✅ 完成（2026-08-14）
 
-- [ ] 冒烟：新装机器全链路（PDF/图片 → MusicXML → 简谱 L1/L2/L3 + 反向转换）。
-- [ ] 回归：与现网识别基线对比无劣化（引擎未动，应零回归）。
-- [ ] 包体/启动速度核对；清理 `%APPDATA%` 生命周期。
-- **验收**：发布清单齐备，可分发。
+- [x] 冒烟：正向全链路（打包 app /api/open → AV → final.musicxml 98KB + jianpu.html 876 简谱数字，P3 已验证）；**反向转换**（打包 Pudu.exe `--from-jianpu-text` → `--to-musicxml` 产出 3738B MusicXML，调号/拍号/标题全对）；fixture 演示（demo=1 → done）。
+- [x] 回归：**打包 frozen 环境 vs dev 逐字节一致（零劣化）**——同一 PDF 走 /api/open（打包，embeddable python→AV）与 dev omr_audiveris.py 双管道对比，262 音符/26 小节完全相同，唯一差异为 `<source>`/`source-file` 输入路径元数据（app 复制输入进作业目录属预期）。附带发现：`data/canon-in-d-violin-solo - 1.png` 该单张 PNG 在 AV 下报 "Error in export"（打包与 dev 行为一致，非打包回归，语料正主走 PDF）。
+- [x] 包体/启动速度核对；清理 `%APPDATA%` 生命周期：
+  - 包体：ZIP 107MB / 安装包 86MB（原始 217MB）；启动 headless 全流程 807ms。
+  - **%APPDATA% 生命周期**：作业目录新增 7 天保留策略（`sweep_old_jobs`，启动时清扫超期 UUID 作业目录，防无限累积）+ desktop.log 1MB 轮转（.old）。现状：jobs 5 个共 ~972KB，port.txt/settings.json 均小文件。
+- **验收 ✅**：发布清单齐备，可分发（见下）。
+
+#### P4 发布清单（2026-08-14）
+
+| 项 | 值 | 状态 |
+| --- | --- | --- |
+| 绿色 ZIP | `build/_pkg/dist/pudu-desktop-win64.zip`（107MB） | ✅ |
+| 安装包 | `build/_pkg/dist/PuduSetup-0.9.0-win64.exe`（86MB，per-user 免 UAC） | ✅ |
+| 合规 | AV 随包附 AGPL-3.0 LICENSE + 源码链接声明（随包 `audiveris/AV_LICENSE.txt` + `AV_NOTICE.txt`） | ✅ |
+| 依赖 | 无系统 Python（embeddable 3.13.14 跑引擎脚本）；CRT app-local 随包；WebView2 为 Win11 自带 | ✅ |
+| 启动 | headless 全流程 807ms | ✅ |
+| 全链路 | 正向 AV 识别 + 反向简谱→MusicXML + fixture 演示 | ✅ |
+| 回归 | 与 dev 输出逐字节一致（零劣化） | ✅ |
+| 生命周期 | %APPDATA%/jobs 7 天保留 + desktop.log 1MB 轮转 | ✅ |
+| 已知限制 | oemer 不随包（AV 缺失降级提示）；文件关联未做（壳不支持 argv 传文件）；干净机器实机未验（已论证无系统 Python 依赖） | 记录在案 |
+
+> **可分发条件齐备。** 发布动作（传网盘/打 release tag）由人执行；若需 `pudu.ico` 应用图标/文件关联可作后续增强。
 
 ---
 

@@ -132,6 +132,10 @@ _JOB_ID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 _CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
+# %APPDATA%/Pudu/jobs 作业目录保留天数：重启后 UI 无历史列表，旧作业即成孤儿
+# （结果需经「保存到本地」导出），启动时清扫超期目录，防磁盘无限累积。
+JOB_RETENTION_DAYS = 7
+
 if TOOLS not in sys.path:
     sys.path.insert(0, TOOLS)
 import geometric_pitch as gp  # noqa: E402  纯 stdlib，供定点重跑 + footnote 常量
@@ -392,6 +396,29 @@ def _new_job_id() -> str:
     return str(uuid.uuid4())
 
 
+def sweep_old_jobs(root: str, max_age_days: int = JOB_RETENTION_DAYS) -> int:
+    """启动时清扫超期作业目录（防 %APPDATA%/jobs 无限累积）。
+
+    仅删除 root 下 UUID 形态子目录（作业目录命名约定，防误删异物）；
+    单个目录出错跳过不中断。返回删除数。
+    """
+    if not os.path.isdir(root):
+        return 0
+    cutoff = time.time() - max_age_days * 86400
+    removed = 0
+    for name in os.listdir(root):
+        if not _JOB_ID_RE.match(name):
+            continue
+        d = os.path.join(root, name)
+        try:
+            if os.path.getmtime(d) < cutoff:
+                shutil.rmtree(d, ignore_errors=True)
+                removed += 1
+        except OSError:
+            continue
+    return removed
+
+
 def _assert_job_id(job_id: str) -> str:
     """job_id 正则白名单（防路径穿越；配合 registry 查找双保险）。"""
     if not _JOB_ID_RE.match(job_id or ""):
@@ -473,6 +500,7 @@ class JobManager:
     def __init__(self, root: str):
         self.root = os.path.abspath(root)
         os.makedirs(self.root, exist_ok=True)
+        sweep_old_jobs(self.root)   # P4：启动清扫超期孤儿作业，防磁盘累积
         self._lock = threading.Lock()
         self._jobs: Dict[str, Job] = {}
 

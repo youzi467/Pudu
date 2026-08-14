@@ -127,6 +127,12 @@ def main(argv=None) -> int:
         except Exception:  # noqa: BLE001
             log_path = os.path.join(os.path.expanduser("~"), "pudu_desktop.log")
         try:
+            # P4：日志 >1MB 时轮转到 .old（追加模式重开新日志），防 %APPDATA% 无限累积
+            try:
+                if os.path.getsize(log_path) > 1024 * 1024:
+                    os.replace(log_path, log_path + ".old")
+            except OSError:
+                pass
             _log_f = open(log_path, "a", encoding="utf-8", errors="replace")
             sys.stdout = sys.stderr = _log_f
         except OSError:
