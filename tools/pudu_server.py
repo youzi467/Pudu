@@ -91,6 +91,12 @@ UI_HTML = _first_existing(
     os.path.join(HERE, "pudu_ui.html"),
 ) or os.path.join(HERE, "pudu_ui.html")
 
+# 站点图标（favicon）：打包态随包（_MEIPASS/favicon.ico）；开发态 = 仓库根。
+FAVICON = _first_existing(
+    *(os.path.join(d, "favicon.ico") for d in (_MEIPASS, _APP_DIR) if d),
+    os.path.join(REPO, "favicon.ico"),
+) or os.path.join(REPO, "favicon.ico")
+
 VENV_PYTHON = os.environ.get("PUDU_OMR_PYTHON") or sys.executable
 
 # 打包态随包 Python 运行时（embeddable，跑 stdlib 引擎脚本 omr_audiveris/oemer）；
@@ -850,6 +856,8 @@ class PuduHandler(BaseHTTPRequestHandler):
         path = parsed.path
         if path == "/":
             self._send_file(UI_HTML, "text/html; charset=utf-8")
+        elif path == "/favicon.ico":   # 站点图标（浏览器标签页 / pywebview 标题栏）
+            self._send_file(FAVICON, "image/x-icon")
         elif path == "/api/jobs":  # P1 顺手提供（辅助多任务/调试）
             jobs = []
             for j in self.mgr.list():

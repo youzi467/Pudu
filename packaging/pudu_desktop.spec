@@ -25,6 +25,7 @@ engine_scripts = [
 # 单文件数据
 single_files = [
     (os.path.join(ROOT, "tools", "pudu_ui.html"), "."),
+    (os.path.join(ROOT, "favicon.ico"), "."),
     (os.path.join(ROOT, "build", "windows-msvc-vcpkg", "Release", "Pudu.exe"), "."),
     (os.path.join(ROOT, "build", "windows-msvc-vcpkg", "Release", "pugixml.dll"), "."),
     (os.path.join(ROOT, "LICENSE"), "."),
@@ -72,6 +73,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,         # 发布形态：无控制台窗口（日志重定向 desktop.log）
+    icon=[os.path.join(ROOT, "favicon.ico")],   # EXE 图标（资源管理器/任务栏）
     disable_windowed_traceback=False,
 )
 

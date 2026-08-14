@@ -29,7 +29,7 @@ DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=..\build\_pkg\dist
 OutputBaseFilename=PuduSetup-{#MyAppVersion}-win64
-; SetupIconFile 暂缺：PyInstaller 未嵌入应用图标（后续可加 .ico 再启用）
+SetupIconFile=..\favicon.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
