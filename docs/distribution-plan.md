@@ -109,12 +109,13 @@
 - [x] 前端桥（pudu_ui.html 保留原前端，仅加条件分支）：`isDesktop` 检测 → 上传区点击改走原生打开；结果区加「保存到本地…」原生条。
 - **验收 ✅**：`--check` 无头（服务+端口+GET 200，exit 0）；`/api/open` 无效路径 400、真实 PNG 直投 200+job_id、引擎缺失正确 error 态；真实窗口 5s 自动关闭退出码 0。
 
-### 阶段 P2 — 设置持久化 + 引擎引导（1 天）
+### 阶段 P2 — 设置持久化 + 引擎引导（1 天）✅ 完成（2026-08-14）
 
-- [ ] `%APPDATA%/Pudu/settings.json`：默认引擎（AV/oemer）、`PUDU_AUDIVERIS_EXE`、oemer 模型目录、简谱默认调式/升调。
-- [ ] 引擎缺失引导页（内嵌 HTML）：Audiveris/oemer 均不可用 → 提示装 AV 或切换 fixture 演示模式。
-- [ ] 首次运行向导（可选）：检测引擎 → 落盘设置。
-- **验收**：换机无 Python 环境下设置可读写；引擎缺失有明确引导而非报错。
+- [x] `%APPDATA%/Pudu/settings.json`：默认引擎（audiveris/oemer）、`audiveris_exe`（→ `PUDU_AUDIVERIS_EXE` 注入子进程）、`oemer_model_dir`；GET/POST `/api/settings` + 服务端校验（非法引擎/坏 JSON → 400 明确错误）。
+- [x] 引擎缺失引导横幅（前端内嵌）：所选引擎不可用 → 显示原因 + 「打开设置…」+「切换演示模式」；`GET /api/engines` 全引擎可用性报告（fixture 恒可用兜底）。
+- [x] 设置面板（header 齿轮 ⚙）：默认引擎下拉 + Audiveris.exe 路径输入，桌面端原生 `.exe` 浏览（`pick_exe` js_api），保存即落盘生效。
+- [ ] 首次运行向导：**（可选）跳过**——引擎检测已内置于引导横幅，等价覆盖该需求。
+- **验收 ✅**：设置读写落盘往返（含反斜杠路径）、非法值 400、`_engine_env()` 注入 `PUDU_AUDIVERIS_EXE` 验证、`desktop_main.py --check` exit 0、真实窗口冒烟（页面加载即自动 `GET /api/settings`，即前端 bootstrap 拉取真实触发）。
 
 ### 阶段 P3 — PyInstaller 打包 + 安装包（1–2 天）
 

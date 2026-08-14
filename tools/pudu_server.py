@@ -151,6 +151,98 @@ def inject_cuda_path(env: Dict[str, str]) -> Dict[str, str]:
     return env
 
 
+# ----------------------------------------------------------------------
+# SETTINGS（P2：%APPDATA%/Pudu/settings.json 持久化 + 引擎可用性探测）
+# ----------------------------------------------------------------------
+
+DEFAULT_SETTINGS = {
+    "default_engine": "audiveris",      # audiveris | oemer
+    "audiveris_exe": "",                # 用户指定的 Audiveris.exe 绝对路径（可选）
+    "oemer_model_dir": "",              # oemer 模型目录（可选；本分发不随包 oemer）
+}
+
+_SETTINGS_KEYS = set(DEFAULT_SETTINGS)
+_SETTINGS_ENGINES = {"audiveris", "oemer"}
+
+
+def load_settings() -> Dict[str, str]:
+    """读 %APPDATA%/Pudu/settings.json；缺失/损坏回默认值。"""
+    path = os.path.join(appdata_dir(), "settings.json")
+    if not os.path.isfile(path):
+        return dict(DEFAULT_SETTINGS)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return dict(DEFAULT_SETTINGS)
+    merged = dict(DEFAULT_SETTINGS)
+    merged.update({k: v for k, v in (data or {}).items() if k in _SETTINGS_KEYS})
+    return merged
+
+
+def save_settings(settings: Dict[str, str]) -> None:
+    """落盘 settings.json（失败仅告警，不致命）。"""
+    path = os.path.join(appdata_dir(), "settings.json")
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(settings, f, ensure_ascii=False, indent=2)
+    except OSError as e:
+        sys.stderr.write(f"[警告] 写设置失败 {path}: {e}\n")
+
+
+def resolve_audiveris_exe(settings: Optional[Dict[str, str]] = None) -> Optional[str]:
+    """三级选址：settings.audiveris_exe → env PUDU_AUDIVERIS_EXE → 仓库默认路径 → PATH。
+    与 omr_audiveris.py 的 resolve_audiveris_exe 口径一致（镜像）。"""
+    s = settings if settings is not None else load_settings()
+    candidates = []
+    if s.get("audiveris_exe"):
+        candidates.append(s["audiveris_exe"])
+    env = os.environ.get("PUDU_AUDIVERIS_EXE")
+    if env:
+        candidates.append(env)
+    candidates.append(os.path.join(REPO, "build", "_audiveris", "extract",
+                                   "Audiveris", "Audiveris.exe"))
+    for c in candidates:
+        if c and os.path.isfile(c):
+            return c
+    return shutil.which("Audiveris.exe")
+
+
+def check_engine_available(engine: str,
+                           settings: Optional[Dict[str, str]] = None) -> Tuple[bool, str]:
+    """引擎可用性探测：返回 (可用, 说明)。fixture 恒可用。"""
+    if engine == "fixture":
+        return True, "fixture 演示引擎（Pudu.exe 内置，零依赖）"
+    if engine == "audiveris":
+        exe = resolve_audiveris_exe(settings)
+        if exe:
+            return True, f"Audiveris: {exe}"
+        return False, "Audiveris 未安装（可用「演示模式」体验全流程）"
+    if engine == "oemer":
+        import importlib.util
+        if importlib.util.find_spec("oemer") is not None:
+            return True, "oemer 可用"
+        return False, "oemer 未安装（本分发不随包；可安装 Audiveris 或使用演示模式）"
+    return False, f"未知引擎: {engine}"
+
+
+def engine_status(settings: Optional[Dict[str, str]] = None) -> Dict[str, dict]:
+    """全部引擎可用性报告（供 /api/engines）。"""
+    s = settings if settings is not None else load_settings()
+    return {e: {"available": a, "detail": d}
+            for e, (a, d) in
+            ((e, check_engine_available(e, s)) for e in ("audiveris", "oemer", "fixture"))}
+
+
+def _engine_env() -> Dict[str, str]:
+    """识别子进程 env：settings.audiveris_exe → PUDU_AUDIVERIS_EXE 注入 + CUDA 路径。"""
+    s = load_settings()
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    if s.get("audiveris_exe"):
+        env["PUDU_AUDIVERIS_EXE"] = s["audiveris_exe"]
+    return inject_cuda_path(env)
+
+
 def build_ocr_cmd(image: str, mx_out: str, engine: str = DEFAULT_ENGINE) -> List[str]:
     """识别命令：audiveris = omr_audiveris.py（AV -batch，PDF 逐页拼接）；
     oemer = omr_oemer.py 一次子进程（oemer + keysig + F3 + R-geo + sidecar）。"""
@@ -494,7 +586,7 @@ def _run_engine(mgr: JobManager, job: Job):
     """识别子进程（AV / oemer；逐行解析 stage 关键字，支持超时/取消）。"""
     mgr.set_state(job, JobState.RUNNING, "extract", "提取音符中…")
     cmd = build_ocr_cmd(job.input_path, job.pred_mx, engine=job.engine)
-    env = inject_cuda_path({**os.environ, "PYTHONIOENCODING": "utf-8"})
+    env = _engine_env()  # P2：settings.audiveris_exe → PUDU_AUDIVERIS_EXE + CUDA 路径
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, encoding="utf-8", errors="replace",
                             env=env, creationflags=_CREATE_NO_WINDOW)
@@ -721,6 +813,11 @@ class PuduHandler(BaseHTTPRequestHandler):
             self._get_status(path[len("/api/status/"):])
         elif path.startswith("/api/result/"):
             self._get_result(path[len("/api/result/"):])
+        elif path == "/api/settings":   # P2 设置持久化（读）
+            self._send_json(200, {"settings": load_settings(),
+                                  "engines": engine_status()})
+        elif path == "/api/engines":    # P2 引擎可用性探测
+            self._send_json(200, {"engines": engine_status()})
         else:
             self._send_404()
 
@@ -771,8 +868,40 @@ class PuduHandler(BaseHTTPRequestHandler):
             self._handle_open()
         elif path.startswith("/api/cancel/"):
             self._handle_cancel(path[len("/api/cancel/"):])
+        elif path == "/api/settings":   # P2 设置持久化（写）
+            self._handle_settings()
         else:
             self._send_404()
+
+    def _handle_settings(self):
+        """POST /api/settings：校验 + 落盘 + 返回新设置与引擎状态。"""
+        body, err = self._read_body()
+        if err is not None:
+            self._send_json(400, {"error": "请求体读取失败"})
+            return
+        try:
+            data = json.loads(body.decode("utf-8") or "{}")
+        except (ValueError, UnicodeDecodeError):
+            self._send_json(400, {"error": "JSON 解析失败"})
+            return
+        if not isinstance(data, dict):
+            self._send_json(400, {"error": "请求体须为 JSON 对象"})
+            return
+        settings = load_settings()
+        for key in _SETTINGS_KEYS:
+            if key not in data:
+                continue
+            val = data[key]
+            if key == "default_engine":
+                if val not in _SETTINGS_ENGINES:
+                    self._send_json(
+                        400, {"error": f"default_engine 须为 {'/'.join(sorted(_SETTINGS_ENGINES))}"})
+                    return
+                settings[key] = val
+            else:
+                settings[key] = str(val).strip() if isinstance(val, str) else ""
+        save_settings(settings)
+        self._send_json(200, {"settings": settings, "engines": engine_status(settings)})
 
     def _read_body(self) -> Tuple[bytes, Optional[int]]:
         if self.headers.get("Transfer-Encoding", "").lower() == "chunked":

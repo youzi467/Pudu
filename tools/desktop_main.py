@@ -81,6 +81,15 @@ class PuduApi:
             file_types=("图片 / PDF（*.png;*.jpg;*.jpeg;*.bmp;*.webp;*.pdf）",))
         return list(paths) if paths else []
 
+    def pick_exe(self):
+        """原生对话框选 .exe（设置里指定 Audiveris.exe 路径用）。"""
+        import webview
+        w = webview.windows[0]
+        paths = w.create_file_dialog(
+            webview.OPEN_DIALOG, allow_multiple=False,
+            file_types=("程序（*.exe）",))
+        return list(paths) if paths else []
+
     def save_result(self, job_id: str, name: str):
         """把作业结果文件（jianpu.html / final.musicxml / review.json）保存到用户选择路径。
 

@@ -60,6 +60,38 @@
   #busy { display:none; text-align:center; color:var(--muted); font-size:13px; padding:8px; }
   #results { display:none; }
   .hidden { display:none !important; }
+
+  /* ---- P2：引擎引导横幅 + 设置面板 ---- */
+  .notice {
+    background:#fff7e0; border:1px solid #ecd27a; color:#7a5b00;
+    border-radius:10px; padding:10px 14px; font-size:13px; margin:0 0 18px;
+  }
+  .notice a { color:var(--accent); }
+  .gear {
+    background:none; border:1px solid #ffffff55; color:#fff; cursor:pointer;
+    font-size:13px; padding:5px 10px; border-radius:8px;
+  }
+  .gear:hover { background:#ffffff22; }
+  .modal {
+    position:fixed; inset:0; background:#00000066; z-index:50;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .modal-box {
+    background:var(--card); border-radius:12px; padding:22px 26px;
+    width:430px; max-width:92vw;
+  }
+  .modal-box h3 { margin:0 0 14px; }
+  .modal-box label {
+    display:block; font-size:13px; color:var(--muted); margin-bottom:14px;
+  }
+  .modal-box input, .modal-box select {
+    width:100%; margin-top:6px; padding:7px 10px;
+    border:1px solid var(--line); border-radius:8px; font-size:14px;
+    box-sizing:border-box; background:#fff;
+  }
+  .path-row { display:flex; gap:8px; margin-top:6px; }
+  .path-row input { margin-top:0; flex:1; }
+  .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
 </style>
 </head>
 <body>
@@ -70,8 +102,11 @@
     <button id="engAv" class="active" type="button">真实识别 (Audiveris)</button>
     <button id="engOemer" type="button">oemer 回退</button>
     <button id="engDemo" type="button">演示模式 (fixture)</button>
+    <button id="settingsBtn" class="gear" type="button" title="设置">⚙ 设置</button>
   </div>
 </header>
+
+<div id="engineNotice" class="notice hidden"></div>
 
 <main>
   <div class="card">
@@ -153,7 +188,7 @@
     return;
   }
 
-  var state = { jobId: null, engine: "audiveris", demo: false, timer: null, pendingFile: null, lastFileName: null };
+  var state = { jobId: null, engine: "audiveris", demo: false, timer: null, pendingFile: null, lastFileName: null, settings: {}, engines: {} };
 
   // ---- 桌面端（pywebview）桥：原生打开/保存 ----
   var isDesktop = !!(window.pywebview && window.pywebview.api);
@@ -206,7 +241,104 @@
     $("demoBtn").classList.toggle("hidden", !demo);
     $("fileMeta").textContent = "";
     state.pendingFile = null;
+    refreshEngineNotice(state.engines);
   }
+
+  // ---- 引擎可用性引导（P2）：所选引擎缺失时显示横幅 ----
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function refreshEngineNotice(eng) {
+    var key = state.demo ? "fixture" : state.engine;
+    var info = (eng || {})[key];
+    var el = $("engineNotice");
+    if (!el) return;
+    if (info && !info.available) {
+      var name = key === "audiveris" ? "Audiveris" : key === "oemer" ? "oemer" : "fixture";
+      el.innerHTML = "<b>⚠ " + name + " 未就绪</b>：" + esc(info.detail) +
+        ' · <a href="#" id="noticeSettings">打开设置…</a>' +
+        ' · <a href="#" id="noticeDemo">切换演示模式</a>';
+      el.classList.remove("hidden");
+      var lnk = $("noticeSettings");
+      if (lnk) lnk.addEventListener("click", function (e) { e.preventDefault(); openSettings(); });
+      var demo = $("noticeDemo");
+      if (demo) demo.addEventListener("click", function (e) { e.preventDefault(); setEngine("audiveris", true); });
+    } else {
+      el.classList.add("hidden");
+    }
+  }
+
+  // ---- 设置面板（P2：持久化到 %APPDATA%/Pudu/settings.json） ----
+  function openSettings() {
+    $("settingsModal").classList.remove("hidden");
+    var s = state.settings || {};
+    $("setEngine").value = s.default_engine || "audiveris";
+    $("setAvExe").value = s.audiveris_exe || "";
+    $("settingsMsg").textContent = "";
+  }
+  var setSave = $("setSave");
+  if (setSave) {
+    $("settingsBtn").addEventListener("click", openSettings);
+    $("setCancel").addEventListener("click", function () {
+      $("settingsModal").classList.add("hidden");
+    });
+    $("setSave").addEventListener("click", function () {
+      var payload = {
+        default_engine: $("setEngine").value,
+        audiveris_exe: $("setAvExe").value.trim(),
+        oemer_model_dir: ""
+      };
+      $("setSave").disabled = true;
+      $("settingsMsg").textContent = "保存中…";
+      fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) { return { r: r, j: j }; });
+      }).then(function (res) {
+        $("setSave").disabled = false;
+        if (res.r.ok) {
+          state.settings = res.j.settings;
+          state.engines = res.j.engines;
+          $("settingsMsg").textContent = "已保存 ✔";
+          setEngine(state.settings.default_engine, false);
+          setTimeout(function () { $("settingsModal").classList.add("hidden"); }, 800);
+        } else {
+          $("settingsMsg").textContent = res.j.error || ("保存失败（HTTP " + res.r.status + "）");
+        }
+      }).catch(function (e) {
+        $("setSave").disabled = false;
+        $("settingsMsg").textContent = "保存失败: " + e.message;
+      });
+    });
+    $("setBrowse").addEventListener("click", function () {
+      if (isDesktop && window.pywebview.api.pick_exe) {
+        window.pywebview.api.pick_exe().then(function (paths) {
+          if (paths && paths.length) $("setAvExe").value = paths[0];
+        }).catch(function () {});
+      } else {
+        $("setAvExe").focus();
+      }
+    });
+    $("settingsModal").addEventListener("click", function (e) {
+      if (e.target === $("settingsModal")) $("settingsModal").classList.add("hidden");
+    });
+  }
+
+  // ---- 启动：载入持久化设置 + 引擎可用性（P2） ----
+  function bootstrapSettings() {
+    fetch("/api/settings").then(function (r) { return r.json(); }).then(function (res) {
+      state.settings = res.settings || {};
+      state.engines = res.engines || {};
+      if (res.settings && res.settings.default_engine === "oemer") setEngine("oemer", false);
+      else if (res.settings && res.settings.default_engine === "audiveris") setEngine("audiveris", false);
+      else refreshEngineNotice(state.engines);
+    }).catch(function () {});
+  }
+  bootstrapSettings();
 
   // ---- 上传区 ----
   var dz = $("dropzone"), fi = $("fileInput");
@@ -363,5 +495,29 @@
   function hideError() { $("errBox").classList.add("hidden"); }
 })();
 </script>
+
+<div id="settingsModal" class="modal hidden">
+  <div class="modal-box">
+    <h3>设置</h3>
+    <label>默认识别引擎
+      <select id="setEngine">
+        <option value="audiveris">Audiveris（推荐，精度最高）</option>
+        <option value="oemer">oemer 回退</option>
+      </select>
+    </label>
+    <label>Audiveris.exe 路径（留空 = 自动查找）
+      <div class="path-row">
+        <input id="setAvExe" type="text" spellcheck="false"
+               placeholder="如 C:\Program Files\Audiveris\Audiveris.exe">
+        <button id="setBrowse" class="btn ghost" type="button">浏览…</button>
+      </div>
+    </label>
+    <div id="settingsMsg" class="muted"></div>
+    <div class="modal-actions">
+      <button id="setCancel" class="btn ghost" type="button">取消</button>
+      <button id="setSave" class="btn" type="button">保存</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
