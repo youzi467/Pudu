@@ -1,0 +1,21 @@
+Audiveris OMR engine — attribution notice
+=========================================
+
+This distribution bundles the Audiveris OMR engine (version 5.11.0) for offline
+sheet-music recognition.
+
+  Project:  Audiveris
+  License:  GNU Affero General Public License, version 3 (AGPL-3.0)
+  License text:  see AV_LICENSE.txt in this folder
+  Source code:   https://github.com/Audiveris/audiveris
+
+Pudu uses Audiveris as an optional recognition engine. Audiveris is not part of
+Pudu itself; it is an independent open-source project governed by its own
+license. By redistributing it in unmodified form together with the AGPL-3.0
+license text and this notice, the distribution complies with the terms of the
+AGPL-3.0 for free-of-charge distribution. If Pudu is ever distributed or sold
+for a fee, the AGPL-3.0 obligations of bundling Audiveris must be re-evaluated
+(see Audiveris's license for details).
+
+Pudu itself is licensed under the MIT License (see LICENSE in the distribution
+root).

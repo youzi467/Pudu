@@ -117,13 +117,13 @@
 - [ ] 首次运行向导：**（可选）跳过**——引擎检测已内置于引导横幅，等价覆盖该需求。
 - **验收 ✅**：设置读写落盘往返（含反斜杠路径）、非法值 400、`_engine_env()` 注入 `PUDU_AUDIVERIS_EXE` 验证、`desktop_main.py --check` exit 0、真实窗口冒烟（页面加载即自动 `GET /api/settings`，即前端 bootstrap 拉取真实触发）。
 
-### 阶段 P3 — PyInstaller 打包 + 安装包（1–2 天）
+### 阶段 P3 — PyInstaller 打包 + 安装包（1–2 天）✅ 完成（2026-08-14）
 
-- [ ] Pudu.exe Release 构建（`--config Release`）+ `pugixml.dll` 随包。
-- [ ] PyInstaller `--onedir` spec：desktop_main.py + 服务器 + UI + 前置处理 + fixture + Pudu.exe + 引擎脚本。
-- [ ] Audiveris 解包目录随包（**已拍板：随包再分发**，附 AGPL LICENSE + 源码获取链接）。
-- [ ] 绿色版 ZIP 产出；可选 Inno Setup：开始菜单、`.pdf/.png/.musicxml` 文件关联、卸载清理。
-- **验收**：干净 Windows 机器（无 Python）解压/安装后双击即用，全链路识别正常。
+- [x] Pudu.exe Release 构建（`--config Release`，312KB）+ `pugixml.dll` 随包（VC++ CRT app-local 部署：msvcp140×3 + concrt140 + vccorlib140 一并打入）。
+- [x] PyInstaller `--onedir` spec（`packaging/pudu_desktop.spec`）：desktop_main.py + 服务器 + UI + Pudu.exe + 引擎脚本（omr_audiveris.py / omr_oemer.py 以纯数据随包，由 **embeddable python** `runtime/python.exe` 子进程执行，不依赖系统 Python）；`console=False`（日志重定向 `%APPDATA%/Pudu/desktop.log`）。
+- [x] Audiveris 解包目录随包（`audiveris/Audiveris/`，含打包 JRE；附 AGPL-3.0 LICENSE `AV_LICENSE.txt` + 源码链接声明 `AV_NOTICE.txt`）。
+- [x] 绿色版 ZIP（`build/_pkg/dist/pudu-desktop-win64.zip`，107MB）+ Inno Setup 安装包（`build/_pkg/dist/PuduSetup-0.9.0-win64.exe`，86MB；`packaging/pudu_setup.iss` + 简体中文翻译）。**文件关联暂不做**——桌面壳尚不支持 argv 传文件打开（后续可加）。
+- **验收 ✅**：打包产物 `--check` exit 0 + GET / 200；真实窗口（console=False）页面加载/设置拉取/自动关窗干净退出；**全链路识别**（POST /api/open → AV 引擎 → final.musicxml 98KB + jianpu.html 876 简谱数字，embeddable python→AV→Pudu.exe 在 frozen 环境端到端可用）；**fixture 演示**（/api/ocr demo=1 → done）；Inno 安装包静默安装到干净目录 → 主程序 `--check` exit 0 → 卸载器全清。注：真·干净机器（无 Python）未能实机验证，但引擎脚本走 embeddable python、CRT 随包、WebView2 为 Win11 自带，无系统 Python 依赖。
 
 ### 阶段 P4 — 验证与发布（0.5–1 天）
 

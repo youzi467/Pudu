@@ -93,6 +93,11 @@ UI_HTML = _first_existing(
 
 VENV_PYTHON = os.environ.get("PUDU_OMR_PYTHON") or sys.executable
 
+# 打包态随包 Python 运行时（embeddable，跑 stdlib 引擎脚本 omr_audiveris/oemer）；
+# dev 态与 VENV_PYTHON 一致（PUDU_OMR_PYTHON 可覆盖，供离线/便携测试）
+RUNTIME_PYTHON = (os.path.join(_MEIPASS, "runtime", "python.exe")
+                  if _is_frozen() else VENV_PYTHON)
+
 
 def appdata_dir() -> str:
     """%APPDATA%/Pudu（跨平台兜底 ~/.pudu），供 port.txt / settings.json / 打包态作业目录。"""
@@ -190,8 +195,19 @@ def save_settings(settings: Dict[str, str]) -> None:
         sys.stderr.write(f"[警告] 写设置失败 {path}: {e}\n")
 
 
+def _bundled_audiveris_exe() -> str:
+    """打包态随包 AV 路径（_MEIPASS/_APP_DIR 下 audiveris/Audiveris/Audiveris.exe）；dev 返回空。"""
+    if not _is_frozen():
+        return ""
+    for base in (_MEIPASS, _APP_DIR):
+        p = os.path.join(base, "audiveris", "Audiveris", "Audiveris.exe")
+        if os.path.isfile(p):
+            return p
+    return ""
+
+
 def resolve_audiveris_exe(settings: Optional[Dict[str, str]] = None) -> Optional[str]:
-    """三级选址：settings.audiveris_exe → env PUDU_AUDIVERIS_EXE → 仓库默认路径 → PATH。
+    """选址：settings.audiveris_exe → env PUDU_AUDIVERIS_EXE → 仓库默认路径 → 随包路径 → PATH。
     与 omr_audiveris.py 的 resolve_audiveris_exe 口径一致（镜像）。"""
     s = settings if settings is not None else load_settings()
     candidates = []
@@ -202,6 +218,9 @@ def resolve_audiveris_exe(settings: Optional[Dict[str, str]] = None) -> Optional
         candidates.append(env)
     candidates.append(os.path.join(REPO, "build", "_audiveris", "extract",
                                    "Audiveris", "Audiveris.exe"))
+    bundled = _bundled_audiveris_exe()
+    if bundled:
+        candidates.append(bundled)
     for c in candidates:
         if c and os.path.isfile(c):
             return c
@@ -235,20 +254,22 @@ def engine_status(settings: Optional[Dict[str, str]] = None) -> Dict[str, dict]:
 
 
 def _engine_env() -> Dict[str, str]:
-    """识别子进程 env：settings.audiveris_exe → PUDU_AUDIVERIS_EXE 注入 + CUDA 路径。"""
+    """识别子进程 env：settings.audiveris_exe（或随包 AV）→ PUDU_AUDIVERIS_EXE 注入 + CUDA 路径。"""
     s = load_settings()
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
-    if s.get("audiveris_exe"):
-        env["PUDU_AUDIVERIS_EXE"] = s["audiveris_exe"]
+    av = s.get("audiveris_exe") or _bundled_audiveris_exe()
+    if av:
+        env["PUDU_AUDIVERIS_EXE"] = av
     return inject_cuda_path(env)
 
 
 def build_ocr_cmd(image: str, mx_out: str, engine: str = DEFAULT_ENGINE) -> List[str]:
     """识别命令：audiveris = omr_audiveris.py（AV -batch，PDF 逐页拼接）；
-    oemer = omr_oemer.py 一次子进程（oemer + keysig + F3 + R-geo + sidecar）。"""
+    oemer = omr_oemer.py 一次子进程（oemer + keysig + F3 + R-geo + sidecar）。
+    打包态用随包 embeddable python（RUNTIME_PYTHON）跑脚本，dev 态用 VENV_PYTHON。"""
     if engine == "audiveris":
-        return [VENV_PYTHON, os.path.join(TOOLS, "omr_audiveris.py"), image, mx_out]
-    return [VENV_PYTHON, os.path.join(TOOLS, "omr_oemer.py"), image, mx_out,
+        return [RUNTIME_PYTHON, os.path.join(TOOLS, "omr_audiveris.py"), image, mx_out]
+    return [RUNTIME_PYTHON, os.path.join(TOOLS, "omr_oemer.py"), image, mx_out,
             "--f3-geometric", "--rhythm-geometric"]
 
 

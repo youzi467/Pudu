@@ -119,6 +119,19 @@ class PuduApi:
 
 
 def main(argv=None) -> int:
+    # windowed 模式（PyInstaller console=False）下 stdout/stderr 为 None，
+    # print/write 会 AttributeError → 重定向到 %APPDATA%/Pudu/desktop.log
+    if sys.stdout is None or sys.stderr is None:
+        try:
+            log_path = os.path.join(ps.appdata_dir(), "desktop.log")
+        except Exception:  # noqa: BLE001
+            log_path = os.path.join(os.path.expanduser("~"), "pudu_desktop.log")
+        try:
+            _log_f = open(log_path, "a", encoding="utf-8", errors="replace")
+            sys.stdout = sys.stderr = _log_f
+        except OSError:
+            import io
+            sys.stdout = sys.stderr = io.StringIO()  # 兜底：丢弃
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     import argparse
