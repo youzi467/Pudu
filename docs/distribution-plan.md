@@ -138,8 +138,8 @@
 
 | 项 | 值 | 状态 |
 | --- | --- | --- |
-| 绿色 ZIP | `build/_pkg/dist/pudu-desktop-win64.zip`（107MB） | ✅ |
-| 安装包 | `build/_pkg/dist/PuduSetup-0.9.0-win64.exe`（86MB，per-user 免 UAC） | ✅ |
+| 绿色 ZIP | `build/_pkg/dist/pudu-desktop-win64.zip`（114MB，f318511 图标构建后） | ✅ |
+| 安装包 | `build/_pkg/dist/PuduSetup-0.9.0-win64.exe`（90MB，per-user 免 UAC，图标构建后） | ✅ |
 | 合规 | AV 随包附 AGPL-3.0 LICENSE + 源码链接声明（随包 `audiveris/AV_LICENSE.txt` + `AV_NOTICE.txt`） | ✅ |
 | 依赖 | 无系统 Python（embeddable 3.13.14 跑引擎脚本）；CRT app-local 随包；WebView2 为 Win11 自带 | ✅ |
 | 启动 | headless 全流程 807ms | ✅ |
@@ -147,9 +147,9 @@
 | 回归 | 与 dev 输出逐字节一致（零劣化） | ✅ |
 | 生命周期 | %APPDATA%/jobs 7 天保留 + desktop.log 1MB 轮转 | ✅ |
 | 已知限制 | oemer 不随包（AV 缺失降级提示）；文件关联未做（壳不支持 argv 传文件）；干净机器实机未验（已论证无系统 Python 依赖） | 记录在案 |
-| **发布** | **GitHub Release v0.9.0 已发布**（2026-08-14）：`https://github.com/youzi467/Pudu/releases/tag/v0.9.0`，双产物已上传（ZIP 107MB + 安装包 86MB）+ 发布说明（功能/依赖/已知限制） | ✅ 已发布 |
+| **发布** | **GitHub Release v0.9.0 已发布**（2026-08-14）：`https://github.com/youzi467/Pudu/releases/tag/v0.9.0`，双产物已上传 + 发布说明（功能/依赖/已知限制）；**f318511 图标全链路落地后资产已替换为图标构建**（ZIP 114MB + 安装包 90MB） | ✅ 已发布 |
 
-> **可分发条件齐备。** 发布动作（传网盘/打 release tag）由人执行；若需 `pudu.ico` 应用图标/文件关联可作后续增强。
+> **可分发条件齐备。** **应用图标已全链路落地（f318511）**：EXE 资源图标 + `/favicon.ico` 站点图标 + UI `<link rel=icon>` + Inno `SetupIconFile`（`ExtractAssociatedIcon` 三处 32×32 验证通过）。剩余可选增强：文件关联（桌面壳尚不支持 argv 传文件打开，需先加 `pudu_desktop.exe <image>` 直投）。
 
 ---
 

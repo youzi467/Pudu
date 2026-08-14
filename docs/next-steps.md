@@ -8,7 +8,7 @@
 
 ## 0. 当前位置（一句话）
 
-核心转换（MusicXML⇄简谱双向）已达成；**识别引擎已从 oemer 迁移到 Audiveris（主引擎，基线 97.56%）**；**分发/桌面化 P0–P4 全部完成**——pywebview 桌面壳 + 绿色 ZIP（107MB）+ Inno 安装包（86MB）+ 回归零劣化验证，发布清单齐备。剩余为「发布动作（人执行）」「版权申报决策（暂停待拍板）」以及若干可选增强。
+核心转换（MusicXML⇄简谱双向 + 简谱文本直入 MusicXML）已达成；**识别引擎已从 oemer 迁移到 Audiveris（主引擎，基线 97.56%）**；**分发/桌面化 P0–P4 全部完成 + GitHub Release v0.9.0 已发布**——pywebview 桌面壳 + 绿色 ZIP（114MB）+ Inno 安装包（90MB）+ 回归零劣化验证 + 图标全链路落地（f318511）。剩余为「版权申报决策（暂停待拍板）」以及若干可选增强。
 
 ---
 
@@ -25,21 +25,16 @@
 | 7 | MusicXML 层差异检测工具 | ✅ | 937d40d；`omr_musicxml_diff.py`，25 单测 |
 | 8 | 版权/合规基线 | ✅ 部分 | 22ff6da：MIT LICENSE + 分发方案；软著申报暂停 |
 | 9 | **分发/桌面化 P0–P4**（2026-08-13~14） | ✅ | 943e5bc→4453166；pywebview 壳 + ZIP 107MB + Inno 86MB + 回归零劣化 |
+| 10 | **应用图标全链路 + GitHub Release v0.9.0 发布**（2026-08-14） | ✅ | f318511（EXE/favicon/SetupIconFile 图标）+ 441266e/f318511 后资产已替换为图标构建（ZIP 114MB + Inno 90MB） |
 
 ---
 
 ## 2. 待办事项（按优先级）
 
-### 🔴 发布动作（人执行 · 0.5 天）
+### ✅ 发布动作（已完成 · 2026-08-14）
 
-- **目标**：把已就绪的分发产物正式发布。
-- **具体任务**：
-  1. 双产物齐备（`build/_pkg/dist/`，gitignored）：`pudu-desktop-win64.zip`（107MB）+ `PuduSetup-0.9.0-win64.exe`（86MB）。
-  2. 可选：打 GitHub release tag（版本建议 0.9.0）+ 附发布说明（含已知限制：oemer 不随包、文件关联未做、干净机器实机未验）。
-  3. 产物校验：发布前对 ZIP/安装包重跑 `--check` + fixture 冒烟（脚本 `build/_pkg/smoke_fixture.py`）。
-- **完成标准**：网盘或 GitHub release 可见双产物，说明文字齐备。
-- **依赖**：无（产物已随源码重打包同步至 4453166）。
-- **预计**：0.5 天（主要是人操作 + 可选写 release 说明）。
+- **现状**：**GitHub Release v0.9.0 已发布**（`https://github.com/youzi467/Pudu/releases/tag/v0.9.0`）——tag 已推、双产物已上传（ZIP 114MB + 安装包 90MB，f318511 图标构建）、发布说明齐备（功能/依赖/已知限制：oemer 不随包、文件关联未做、干净机器实机未验）。
+- **发布方式（非交互）**：`git credential fill` 取 GCM OAuth token → curl 打 Releases API；本机 curl 需 `--ssl-no-revoke`（schannel `CRYPT_E_NO_REVOCATION_CHECK`）。
 
 ### 🟡 版权申报决策（人拍板 · 暂停中）
 
@@ -49,7 +44,7 @@
 
 ### 🟢 可选增强（我可做，按需排期）
 
-1. **`pudu.ico` 应用图标 + 文件关联**：当前 PyInstaller/Inno 均无图标；文件关联需先给桌面壳加 argv 传文件打开（`pudu_desktop.exe <image>` 直投）。
+1. **文件关联**：应用图标已全链路落地（f318511，EXE/favicon/SetupIconFile）；文件关联需先给桌面壳加 argv 传文件打开（`pudu_desktop.exe <image>` 直投）。
 2. **M2-opt-C 后处理规则引擎扩展**：节拍对账/八度连续性已部分存在（Pudu.exe `--apply-postcorrect`），可按需扩展并接入桌面端。
 3. **oemer 回退链路本机完整性**：AV 为主引擎 + oemer 不随包分发，此项优先级已大幅降低；仅当要保证本机 dev 回退可用时重装 venv + 预放权重。
 4. **阶段 4 AI/DL**：自训/微调音符检测模型 + ONNX 部署（大工程，需 PyTorch + 合成数据基建，当前为零）。
@@ -86,14 +81,14 @@
 ## 5. 推荐执行顺序
 
 ```
-1. 发布动作（人执行，0.5 天）——产物已齐备，只差发布
+1. ✅ 发布动作（已完成 2026-08-14，v0.9.0）
    ↓
 2. 版权申报决策（人拍板，暂停中）
    ↓
-3. 可选增强按需排期（pudu.ico+文件关联 / M2-opt-C / AI-DL）
+3. 可选增强按需排期（文件关联 / M2-opt-C / AI-DL）
 ```
 
-> **关键路径**：当前无技术阻塞；唯一影响发布的外部因素是干净机器实机验证与发布渠道选择，均为人动作。
+> **关键路径**：当前无技术阻塞、无未发布产物；唯一悬挂的外部事项为版权申报决策（人拍板）。
 
 ---
 

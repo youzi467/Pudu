@@ -44,6 +44,8 @@
   - `jianpuToStaff(JianpuDoc) -> Score`：音级→绝对音高（逆 `midiToJianpu`，复用 `midiToPitch` 保证拼写口径一致）、八度点→octave、时值→`type`+`duration`（与 `typeToDuration` 严格互逆）、调号/拍号→`ScoreAttributes`、多声部按 `partIndex`/`voice` 还原、休止/和弦/装饰音/延音线映射回 `Note`。
   - `scoreToMusicXML(Score) -> .musicxml`：pugixml 写出 `score-partwise`；多声部用 `<backup>/<forward>` 还原并行时序、和弦用 `<chord/>`；写出的文件可被本仓库解析器读回且语义等价（G2 自洽测试）。
   - CLI `--to-musicxml [out.musicxml]`：演示「五线→简→五线」双向闭环，可叠加 `--key/--rekey/--transpose`。
+  - **G4 简谱文本直入（`--from-jianpu-text <path>`）**：读取简谱 L1 文本（标题行 / 调号头行 `1=<调名> [beats/beatType] [(mode)]` / 声部行 `voiceN:`；音符 `0-7` + 八度点 `'`/`,` + 增时线 `-` + 减时线 `_` + 附点 `.` + 和弦 `[1 3 5]` + `|`/`||` 小节线），与 `--to-musicxml` 组合即成「**简谱文本 → 五线谱 MusicXML**」直转。
+  - **输出形态边界（诚实）**：`--to-musicxml` 产出的 MusicXML 是五线谱的**标准数据文件**（`score-partwise` 4.0，含 `<clef>/<key>/<time>/<pitch>/<voice>`，多声部 `<backup>/<forward>`、和弦 `<chord/>`），可被 music21 / MuseScore 等读取**再渲染为五线谱图像**；Pudu 内核本身不渲染五线谱图像，视觉呈现需外部渲染器打开 MusicXML。
   - 和弦逐音独立八度点已支持（M1.5-A：反向精确还原）；`tieStop` 反向还原已支持（M1.5-B）。
 - **阶段 1 OMR 黑盒集成（`--from-omr`，M2）**：
   - `omr_adapter` 子进程分派 **audiveris（默认，`--omr-engine audiveris`）** / fixture（确定性，ctest 用）/**oemer（回退，`--omr-engine oemer`）**；产出 MusicXML 喂入既有 `MusicXMLParser → staffToJianpu` 流水线，端到端出简谱。
@@ -102,6 +104,12 @@ build/Pudu.exe data/cello-suite-no-1.musicxml --to-jianpu-json jianpu.json
 #   可叠加 --key/--rekey/--transpose 先变调再反向
 build/Pudu.exe data/cello-suite-no-1.musicxml --to-musicxml sample_back.musicxml
 build/Pudu.exe data/cello-suite-no-1.musicxml --key D --to-musicxml sample_back_D.musicxml
+
+# 阶段 3 G4 简谱文本直入：简谱文本 -> 五线谱 MusicXML（真正的「简谱 -> 五线谱」入口）
+#   文本格式：标题行 / 调号头行 "1=<调名> [beats/beatType] [(mode)]" / voiceN: 声部行，
+#   音符 0-7（0=休止）+ 八度点 ' 升 / , 降 + 增时线 - + 减时线 _ + 附点 . + 和弦 [1 3 5] + | 小节线
+#   --divisions N 控制反向 divisions（1..16，默认 4）
+build/Pudu.exe --from-jianpu-text jianpu.txt --to-musicxml out.musicxml
 
 # 变调重算（阶段 2 边界补全 / 阶段 3 前置）：在任一 --to-jianpu* 前追加
 #   --key <调名>    移调：实际音高平移，简谱数字不变（如歌手/乐器移调）
