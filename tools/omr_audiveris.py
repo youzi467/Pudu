@@ -210,19 +210,22 @@ def _renumber_measure(m, n):
     m.attrib["number"] = str(n)
 
 
-def _rescale_durations(m, div1, divi):
-    """divisions 不一致时重算该小节所有 duration（含 backup/forward）。
+def _rescale_durations(m, target_divs, source_divs):
+    """把小节内所有 duration（含 backup/forward/和弦成员）从 source_divs 单位
+    换算到 target_divs 单位。
 
+    AV 各页 divisions 自适应（页内最小粒度为 16 分时用 4、否则 2 等），而
     Pudu 解析器每 part 只读一次 <divisions>（musicxml_parser.cpp:187-204），
-    后续页 divisions 不同会让 quarterLength 用错单位；把页 i 的 duration 从
-    divi 单位换算到页 1 的 div1 单位。
+    拼接文件必须统一成一个 divisions。target_divs 取全部页的最大值（最细粒度），
+    保证换算因子 target/source ≥ 1 且为整数倍（AV 均为 2 的幂）→ 无损；若用
+    页 1 的粗粒度当 target，16 分音符会被取整塌成 8 分（历史 bug）。
     """
     for dur in m.iter("duration"):
         try:
             v = int(float(str(dur.text).strip()))
         except (TypeError, ValueError):
             continue
-        dur.text = str(max(1, round(v * div1 / divi)))
+        dur.text = str(max(1, round(v * target_divs / source_divs)))
 
 
 def merge_pages(page_xmls: List[str], out_musicxml: str) -> int:
@@ -236,7 +239,9 @@ def merge_pages(page_xmls: List[str], out_musicxml: str) -> int:
       之后从页 1 最大号+1 续起。
     * 页 2 首小节 <attributes> 保留：parser 对 <time> 每个 attributes 块都读
       （musicxml_parser.cpp:210-224），无 time 继承页 1 拍号、有则更新。
-    * divisions 一致性守卫（见 _rescale_durations）。
+    * divisions 统一为全部页的最大值（最细粒度）：各页 duration 从自身 divisions
+      换算到统一 divisions，并把所有 <divisions> 属性同步改写。既不因页 1 粗粒度
+      塌掉 16 分音符，也不留下「duration 已重算、属性未同步」的内部不一致。
 
     Returns:
         int: 拼接后总小节数。
@@ -248,6 +253,21 @@ def merge_pages(page_xmls: List[str], out_musicxml: str) -> int:
     if base_part is None:
         return 0
     divs = _first_divisions(root)
+
+    # 统一 divisions：取全部页 divisions 的最大值。AV 各页自适应粒度，页 1 常用
+    # 较粗的 div=2（无 16 分时），直接以它为基准会让 16 分音符（div=4 页）取整
+    # 塌成 8 分；以最细粒度为公共基准则各页换算因子 ≥ 1 且为整数倍，无损。
+    all_divs = [divs]
+    for page_path in page_xmls[1:]:
+        all_divs.append(_first_divisions(ET.parse(page_path).getroot()))
+    common = max(d for d in all_divs if d is not None) if any(all_divs) else None
+
+    # 页 1 若粗于公共粒度，先把页 1 各小节 duration 重算到 common 单位
+    if common is not None and divs is not None and divs != common:
+        for child in base_part:
+            if isinstance(child.tag, str) and _local(child.tag) == "measure":
+                _rescale_durations(child, common, divs)
+
     pid = base_part.attrib.get("id")
     next_number = _max_measure_number(base_part) + 1
     total = _max_measure_number(base_part)
@@ -264,11 +284,17 @@ def merge_pages(page_xmls: List[str], out_musicxml: str) -> int:
                 if not isinstance(child.tag, str) or _local(child.tag) != "measure":
                     continue  # 跳过注释 / 非 measure 元素
                 _renumber_measure(child, next_number)
-                if divs is not None and pdivs is not None and pdivs != divs:
-                    _rescale_durations(child, divs, pdivs)
+                if common is not None and pdivs is not None and pdivs != common:
+                    _rescale_durations(child, common, pdivs)
                 base_part.append(child)
                 next_number += 1
                 total += 1
+
+    # 同步全部 <divisions> 属性为 common：duration 已统一到 common 单位，属性必须
+    # 一致，否则按小节读 divisions 的读者（music21 / 打谱软件）会把页 2+ 节奏算错
+    if common is not None:
+        for div_el in root.iter("divisions"):
+            div_el.text = str(common)
 
     try:
         ET.indent(root, space="  ")   # 交付物可读性（Python 3.9+）
