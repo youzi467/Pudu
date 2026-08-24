@@ -231,6 +231,18 @@ namespace {
 std::string renderJianpuNote(const JianpuNote& jn) {
     std::string s;
     if (jn.degree == 0) {
+        // 休止符：标准简谱不用增时线。带增时线的长休止按拍数拆成多个 "0"
+        //   （整小节 4 拍 → "0 0 0 0"，二分休止 2 拍 → "0 0"），总时长不变。
+        if (jn.augmentDashes > 0) {
+            double beats = (jn.augmentDashes >= 3) ? 4.0 : 2.0;  // 全音符→4 拍，二分→2 拍
+            if (jn.dots == 1) beats *= 1.5;                       // 附点 ×1.5
+            else if (jn.dots == 2) beats *= 1.75;                 // 复附点 ×1.75
+            int n = static_cast<int>(std::lround(beats));
+            s = "0";
+            for (int i = 1; i < n; ++i) s += " 0";
+            if (jn.tieToNext) s += "~";                           // 连音线保留
+            return s;   // 休止不再走下方增时线/减时线/附点
+        }
         s = "0";                                   // 休止
     } else {
         if (jn.isGrace) s += "g";                  // 装饰音前缀
@@ -342,7 +354,10 @@ std::string l2OctaveDots(int n) {
 std::string l2Augment(int k) {
     if (k <= 0) return "";
     std::string s = "<span class=\"jp-aug\">";
-    for (int i = 0; i < k; ++i) s += "\xE2\x80\x94"; // —
+    for (int i = 0; i < k; ++i) {
+        if (i) s += " ";               // 多条增时线以空格隔开：— — —
+        s += "\xE2\x80\x94"; // —
+    }
     s += "</span>";
     return s;
 }
@@ -380,12 +395,33 @@ std::string l2UnderIsolated(int k) {
            "#1f2933 0 1.5px,transparent 1.5px 5px);\"></span>";
 }
 
-// 单数字核心（休止为 0；否则 临时记号 + 数字 + 附点）
+// 休止符按拍数拆分的 "0" 个数（标准简谱休止不用增时线）
+int l2RestBeats(const JianpuNote& jn) {
+    if (jn.augmentDashes <= 0) return 1;
+    double beats = (jn.augmentDashes >= 3) ? 4.0 : 2.0;
+    if (jn.dots == 1) beats *= 1.5;
+    else if (jn.dots == 2) beats *= 1.75;
+    return static_cast<int>(std::lround(beats));
+}
+
+// 单数字核心（休止为 0；否则 数字 + 附点，临时记号作左上角标）
 std::string l2Digit(const JianpuNote& jn) {
-    if (jn.degree == 0)
-        return "<span class=\"jp-num rest\">0</span>";
+    if (jn.degree == 0) {
+        // 休止符：不加增时线；长休止按拍数拆成多个 "0"（整小节 → 0 0 0 0）
+        int beats = l2RestBeats(jn);
+        if (beats <= 1)
+            return "<span class=\"jp-num rest\">0</span>";
+        std::string s;
+        for (int i = 0; i < beats; ++i) {
+            if (i) s += "&nbsp;";
+            s += "<span class=\"jp-num rest\">0</span>";
+        }
+        return s;
+    }
+    // 临时记号作音符左上角标（绝对定位，不进数字行内）
+    std::string core = "<span class=\"jp-num\">" + std::to_string(jn.degree) + "</span>";
     std::string acc = l2Accidental(jn.accidental);
-    std::string core = "<span class=\"jp-num\">" + acc + std::to_string(jn.degree) + "</span>";
+    if (!acc.empty()) core = "<span class=\"jp-acc\">" + acc + "</span>" + core;
     core += l2Dots(jn.dots);
     return core;
 }
@@ -410,7 +446,8 @@ std::string l2NoteCell(const JianpuNote& jn) {
     } else {
         cell += l2Digit(jn);
     }
-    cell += l2Augment(jn.augmentDashes);
+    // 休止符不加增时线（l2Digit 已按拍数拆分为多个 0）
+    if (jn.degree != 0) cell += l2Augment(jn.augmentDashes);
     cell += "</span>";
     return cell;
 }
@@ -467,24 +504,27 @@ const char* kL2Css =
     "border-bottom:1px dashed #ece7d8;}"
     ".voice-label{font-size:.75rem;color:#9aa0a6;margin-right:10px;align-self:center;min-width:42px;}"
     ".measure{display:inline-flex;align-items:flex-end;padding:0 1px;}"
-    ".barline{display:inline-block;width:2px;height:48px;background:#2b2b2b;margin:0 4px;align-self:flex-end;}"
+    ".barline{display:inline-block;width:2px;height:52px;background:#2b2b2b;margin:0 4px;align-self:flex-end;}"
     ".barline.final{position:relative;}"
-    ".barline.final::after{content:'';position:absolute;left:4px;top:0;width:2px;height:48px;background:#2b2b2b;}"
+    ".barline.final::after{content:'';position:absolute;left:4px;top:0;width:2px;height:52px;background:#2b2b2b;}"
     ".note{position:relative;display:inline-flex;align-items:flex-end;justify-content:center;"
-    "min-width:1.9em;padding:18px 4px 12px;}"
+    "min-width:1.9em;padding:24px 4px 12px;}"
     ".note.grace .jp-num{font-size:1.05rem;opacity:.65;}"
     ".jp-core{display:inline-flex;align-items:center;}"
     ".jp-num{font-family:'Times New Roman',Georgia,serif;font-size:1.75rem;line-height:1;font-weight:600;}"
     ".jp-num.rest{font-weight:400;color:#555;}"
+    ".jp-acc{position:absolute;left:2px;top:2px;font-size:.85rem;line-height:1;"
+    "color:#1f2933;font-family:'Times New Roman',Georgia,serif;}"
     ".chord{display:flex;flex-direction:column;align-items:center;}"
     ".chord .jp-num{font-size:1.35rem;}"
+    ".chord .jp-acc{left:0;top:0;}"
     ".jp-up{position:absolute;top:0;left:50%;transform:translateX(-50%);"
-    "display:flex;flex-direction:column;align-items:center;line-height:.7;font-size:.7rem;}"
-    ".jp-down{position:absolute;top:2.1em;left:50%;transform:translateX(-50%);"
-    "display:flex;flex-direction:column-reverse;align-items:center;line-height:.7;font-size:.7rem;}"
-    ".jp-dot{font-size:.7rem;line-height:.7;color:#1f2933;}"
-    ".jp-dot2{font-size:1rem;margin-left:1px;color:#1f2933;}"
-    ".jp-aug{font-size:1.15rem;letter-spacing:-2px;margin-left:2px;align-self:center;}"
+    "display:flex;flex-direction:column;align-items:center;line-height:.7;font-size:1.05rem;}"
+    ".jp-down{position:absolute;top:2.25em;left:50%;transform:translateX(-50%);"
+    "display:flex;flex-direction:column-reverse;align-items:center;line-height:.7;font-size:1.05rem;}"
+    ".jp-dot{font-size:1.05rem;line-height:.7;color:#1f2933;}"
+    ".jp-dot2{font-size:1.3rem;margin-left:2px;color:#1f2933;}"
+    ".jp-aug{font-size:1.15rem;letter-spacing:0;margin-left:2px;align-self:center;}"
     ".beam{position:relative;display:inline-flex;align-items:flex-end;}"
     ".beam-lines{position:absolute;left:8px;right:8px;bottom:3px;}"
     ".jp-under{position:absolute;left:50%;transform:translateX(-50%);bottom:2px;display:block;width:1.5em;}"
