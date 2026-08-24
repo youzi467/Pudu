@@ -10,7 +10,7 @@
 ;   * 文件关联（.pdf/.png/.musicxml）暂不做——桌面壳尚不支持 argv 传文件打开。
 
 #define MyAppName "谱渡 Pudu · 五线谱 ⇄ 简谱"
-#define MyAppVersion "0.9.0"
+#define MyAppVersion "0.9.1"
 #define MyAppExeName "pudu_desktop.exe"
 #define MyAppPublisher "朱禹泽"
 #define MyAppURL "https://github.com/"
