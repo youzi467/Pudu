@@ -404,7 +404,9 @@ int l2RestBeats(const JianpuNote& jn) {
     return static_cast<int>(std::lround(beats));
 }
 
-// 单数字核心（休止为 0；否则 数字 + 附点，临时记号作左上角标）
+// 单个音符数字核心：八度点(上/下) + 临时记号(左上角标) + 数字 + 附点。
+// 全部封进 .jp-core —— 它是居中与定位的参照，保证八度点/升降号都贴着数字，
+// 不会像之前那样锚在宽 .note 单元格上、被增时线撑出而错位。
 std::string l2Digit(const JianpuNote& jn) {
     if (jn.degree == 0) {
         // 休止符：不加增时线；长休止按拍数拆成多个 "0"（整小节 → 0 0 0 0）
@@ -418,12 +420,23 @@ std::string l2Digit(const JianpuNote& jn) {
         }
         return s;
     }
-    // 临时记号作音符左上角标（绝对定位，不进数字行内）
-    std::string core = "<span class=\"jp-num\">" + std::to_string(jn.degree) + "</span>";
+    std::string core = "<span class=\"jp-core\">";
+    core += l2OctaveDots(jn.octaveDots);                // 八度点贴数字顶部/底部
     std::string acc = l2Accidental(jn.accidental);
-    if (!acc.empty()) core = "<span class=\"jp-acc\">" + acc + "</span>" + core;
+    if (!acc.empty()) core += "<span class=\"jp-acc\">" + acc + "</span>"; // 左上角标
+    core += "<span class=\"jp-num\">" + std::to_string(jn.degree) + "</span>";
     core += l2Dots(jn.dots);
+    core += "</span>";
     return core;
+}
+
+// 和弦成员音：数字 + 该成员自身八度点（不带临时记号/附点——附点只在根音）
+std::string l2ChordMember(int degree, int octaveDots) {
+    std::string m = "<span class=\"jp-core\">";
+    m += l2OctaveDots(octaveDots);
+    m += "<span class=\"jp-num\">" + std::to_string(degree) + "</span>";
+    m += "</span>";
+    return m;
 }
 
 // 音符单元（不含减时线；减时线由小节层 beam 组统一绘制）
@@ -431,16 +444,14 @@ std::string l2NoteCell(const JianpuNote& jn) {
     std::string cell = "<span class=\"note";
     if (jn.isGrace) cell += " grace";
     cell += "\">";
-    cell += l2OctaveDots(jn.octaveDots);
     if (jn.tieToNext) cell += l2Tie();
     if (!jn.chordDegrees.empty()) {
         cell += "<span class=\"chord\">";
-        cell += l2Digit(jn);   // 根音点由上方 l2OctaveDots(jn.octaveDots) 负责
+        cell += l2Digit(jn);   // 根音：八度点/临时记号/附点已在 .jp-core 内
         for (size_t k = 0; k < jn.chordDegrees.size(); ++k) {
             int d = jn.chordDegrees[k];
             int od = (k < jn.chordOctaveDots.size()) ? jn.chordOctaveDots[k] : 0;
-            cell += "<span class=\"jp-num\">" + std::to_string(d) + "</span>";
-            cell += l2OctaveDots(od);   // M1.5-A：成员音八度点紧贴该成员数字
+            cell += l2ChordMember(d, od);   // M1.5-A：成员音八度点紧贴该成员数字
         }
         cell += "</span>";
     } else {
@@ -508,19 +519,19 @@ const char* kL2Css =
     ".barline.final{position:relative;}"
     ".barline.final::after{content:'';position:absolute;left:4px;top:0;width:2px;height:52px;background:#2b2b2b;}"
     ".note{position:relative;display:inline-flex;align-items:flex-end;justify-content:center;"
-    "min-width:1.9em;padding:24px 4px 12px;}"
+    "min-width:2.1em;padding:20px 4px 14px;}"
     ".note.grace .jp-num{font-size:1.05rem;opacity:.65;}"
-    ".jp-core{display:inline-flex;align-items:center;}"
+    ".jp-core{position:relative;display:inline-flex;align-items:center;line-height:1;}"
     ".jp-num{font-family:'Times New Roman',Georgia,serif;font-size:1.75rem;line-height:1;font-weight:600;}"
     ".jp-num.rest{font-weight:400;color:#555;}"
-    ".jp-acc{position:absolute;left:2px;top:2px;font-size:.85rem;line-height:1;"
-    "color:#1f2933;font-family:'Times New Roman',Georgia,serif;}"
+    ".jp-acc{position:absolute;left:0;top:-0.55em;font-size:.9rem;line-height:1;"
+    "color:#1f2933;font-family:'Times New Roman',Georgia,serif;white-space:nowrap;}"
     ".chord{display:flex;flex-direction:column;align-items:center;}"
     ".chord .jp-num{font-size:1.35rem;}"
-    ".chord .jp-acc{left:0;top:0;}"
-    ".jp-up{position:absolute;top:0;left:50%;transform:translateX(-50%);"
+    ".chord .jp-acc{left:0;top:-0.55em;}"
+    ".jp-up{position:absolute;left:50%;top:-0.65em;transform:translateX(-50%);"
     "display:flex;flex-direction:column;align-items:center;line-height:.7;font-size:1.05rem;}"
-    ".jp-down{position:absolute;top:2.25em;left:50%;transform:translateX(-50%);"
+    ".jp-down{position:absolute;left:50%;top:100%;transform:translateX(-50%);"
     "display:flex;flex-direction:column-reverse;align-items:center;line-height:.7;font-size:1.05rem;}"
     ".jp-dot{font-size:1.05rem;line-height:.7;color:#1f2933;}"
     ".jp-dot2{font-size:1.3rem;margin-left:2px;color:#1f2933;}"
