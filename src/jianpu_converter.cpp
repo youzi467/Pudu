@@ -531,7 +531,7 @@ const char* kL2Css =
     ".chord .jp-acc{left:0;top:-0.55em;}"
     ".jp-up{position:absolute;left:50%;top:-0.65em;transform:translateX(-50%);"
     "display:flex;flex-direction:column;align-items:center;line-height:.7;font-size:1.05rem;}"
-    ".jp-down{position:absolute;left:50%;top:100%;transform:translateX(-50%);"
+    ".jp-down{position:absolute;left:50%;top:calc(100% + 0.9em);transform:translateX(-50%);"
     "display:flex;flex-direction:column-reverse;align-items:center;line-height:.7;font-size:1.05rem;}"
     ".jp-dot{font-size:1.05rem;line-height:.7;color:#1f2933;}"
     ".jp-dot2{font-size:1.3rem;margin-left:2px;color:#1f2933;}"
