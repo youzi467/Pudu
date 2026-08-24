@@ -148,6 +148,7 @@
 | 生命周期 | %APPDATA%/jobs 7 天保留 + desktop.log 1MB 轮转 | ✅ |
 | 已知限制 | oemer 不随包（AV 缺失降级提示）；文件关联未做（壳不支持 argv 传文件）；干净机器实机未验（已论证无系统 Python 依赖） | 记录在案 |
 | **发布** | **GitHub Release v0.9.0 已发布**（2026-08-14）：`https://github.com/youzi467/Pudu/releases/tag/v0.9.0`，双产物已上传 + 发布说明（功能/依赖/已知限制）；**f318511 图标全链路落地后资产已替换为图标构建**（ZIP 114MB + 安装包 90MB） | ✅ 已发布 |
+| **v0.9.1 重新打包 + 发布**（2026-08-24） | 源码更新（L2 渲染修正 + AV divisions 统一）后重跑 PyInstaller + 7z + ISCC：`PuduSetup-0.9.1-win64.exe`（90.0MB）+ `pudu-desktop-win64.zip`（110.6MB）；验收 --check exit 0 + 渲染修正/divisions 修复在包内生效；**Release v0.9.1 已发布**：`https://github.com/youzi467/Pudu/releases/tag/v0.9.1` | ✅ 已发布 |
 
 > **可分发条件齐备。** **应用图标已全链路落地（f318511）**：EXE 资源图标 + `/favicon.ico` 站点图标 + UI `<link rel=icon>` + Inno `SetupIconFile`（`ExtractAssociatedIcon` 三处 32×32 验证通过）。剩余可选增强：文件关联（桌面壳尚不支持 argv 传文件打开，需先加 `pudu_desktop.exe <image>` 直投）。
 

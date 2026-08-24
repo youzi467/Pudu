@@ -36,7 +36,7 @@
 
 - **现状**：**GitHub Release v0.9.0 已发布**（`https://github.com/youzi467/Pudu/releases/tag/v0.9.0`）——tag 已推、双产物已上传（ZIP 114MB + 安装包 90MB，f318511 图标构建）、发布说明齐备（功能/依赖/已知限制：oemer 不随包、文件关联未做、干净机器实机未验）。
 - **发布方式（非交互）**：`git credential fill` 取 GCM OAuth token → curl 打 Releases API；本机 curl 需 `--ssl-no-revoke`（schannel `CRYPT_E_NO_REVOCATION_CHECK`）。
-- **⚠ 发布资产已过期（2026-08-24 · 判断待执行）**：源码自 v0.9.0 后又更新——L2 渲染修正（43459a6→d17f512）+ AV 多页拼接 divisions 统一（4feaf85），这两处都打进发布产物（Pudu.exe = C++ 核心 / `omr_audiveris.py` = 纯数据随包）。**判断：release 需要重新打包**（重跑 PyInstaller + 7z + ISCC，见 §4 风险表）；本任务仅做判断与记录，未执行打包。
+- **✅ v0.9.1 已重新打包并发布（2026-08-24）**：源码自 v0.9.0 的 L2 渲染修正（43459a6→d17f512）+ AV 多页拼接 divisions 统一（4feaf85）都打进发布产物（Pudu.exe = C++ 核心 / `omr_audiveris.py` = 纯数据随包），故重新打包（重跑 PyInstaller + 7z + ISCC，见 §4 风险表）。Release v0.9.1 已发布：`https://github.com/youzi467/Pudu/releases/tag/v0.9.1`，双资产（ZIP 110.6MB + 安装包 90.0MB）；产物验收 --check exit 0 + 渲染修正/divisions 修复在包内生效。
 
 ### 🟡 版权申报决策（人拍板 · 暂停中）
 
