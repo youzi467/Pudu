@@ -3,7 +3,7 @@
 > 日期：2026-08-10
 > 状态：方案文档（未立项）。用户侧内容方向调研——引擎已就绪，缺一层 UI 壳。
 > 关联：`docs/product-status.md`（对外口径 83.3%）、`docs/f3-abtest.md`（技术账本）、
-> `docs/next-steps.md` §2 阶段5「GUI/工程化」、`docs/m2-increment-prd.md`（OMR 黑盒集成）。
+> `docs/next-steps.md` §2 阶段5「GUI/工程化」。
 
 ---
 

@@ -2,7 +2,7 @@
 
 五线谱与简谱互转工具。
 
-> 当前状态（2026-08-13）：已实现 **MusicXML ⇄ 简谱** 双向转换（阶段 2 + 阶段 3），支持纯文本(L1)、二维 HTML(L2)、结构化 JSON(L3)，并通过 music21 跨语言 100% 校验（13492/13492 音符）。OMR 识别（阶段 1）完成黑盒集成并迁移到 **Audiveris 默认引擎 + oemer 回退**（2026-08-12，note_pass 97.56%）；**P1-1 后处理音乐规则引擎已交付**（5 类规则，干净输入零修正）。仓库已于 2026-08-13 清理：测试代码、评测工具与调研文档移入 `to_be_delete/` 归档，功能代码不受影响。
+> 当前状态（2026-08-24）：已实现 **MusicXML ⇄ 简谱** 双向转换（阶段 2 + 阶段 3），支持纯文本(L1)、二维 HTML(L2)、结构化 JSON(L3)，并通过 music21 跨语言 100% 校验（13492/13492 音符）。OMR 识别（阶段 1）完成黑盒集成并迁移到 **Audiveris 默认引擎 + oemer 回退**（2026-08-12，note_pass 97.56%）；**P1-1 后处理音乐规则引擎已交付**（5 类规则，干净输入零修正）。**L2 简谱渲染已修正**（2026-08-24：休止符去增时线 / 增时线空格分隔 / 临时记号左上角标 / 八度点附点加大 / 降八度点移至减时线下方），**AV 多页拼接 divisions 统一**（16 分音符不再塌 8 分）。仓库已于 2026-08-13 清理：测试代码、评测工具与调研文档移入 `to_be_delete/` 归档，功能代码不受影响。
 
 ## 阶段与里程碑
 
@@ -216,7 +216,7 @@ Pudu/  (工作区当前磁盘名为 omr/，规划重命名为 Pudu/)
 ## 下一步
 
 - **阶段 3**：已完成（`jianpuToStaff` + `Score→MusicXML` 序列化 + round-trip 自测）。详见 `stage3_action_plan.md`。
-- **阶段 1 OMR**：已完成黑盒集成（**Audiveris 默认引擎 + oemer 回退 + fixture** 引擎 + CLI `--from-omr`），并落地评测 harness（`run_audiveris` / `run_oemer` 双入口、Plan A 调号后处理、H2 分维指标）。**2026-08-12 引擎迁移落地**：Audiveris A/B 在 keysig/时值/小节三项全面胜出（note_pass 84.5% → **97.56%**），AV 升为默认，oemer 保留回退（其 F3 几何校正器对 oemer 0.1.8 零效果已证实，保留为实验性基础设施、不作上线）；详见 `docs/audiveris-ab-verdict.md`、`docs/jianpu-ocr-optimization-plan.md` 与 `docs/m2-real-run-guide.md`。
+- **阶段 1 OMR**：已完成黑盒集成（**Audiveris 默认引擎 + oemer 回退 + fixture** 引擎 + CLI `--from-omr`），并落地评测 harness（`run_audiveris` / `run_oemer` 双入口、Plan A 调号后处理、H2 分维指标）。**2026-08-12 引擎迁移落地**：Audiveris A/B 在 keysig/时值/小节三项全面胜出（note_pass 84.5% → **97.56%**），AV 升为默认，oemer 保留回退（其 F3 几何校正器对 oemer 0.1.8 零效果已证实，保留为实验性基础设施、不作上线）；详见 `docs/audiveris-ab-verdict.md` 与 `docs/m2-real-run-guide.md`。
 
 > [!NOTE]
 > **准确性叙事更正（2026-08-06）**：本文此前若暗示"`pitch_degree`（音名）是 oemer 最弱短板、根因是 off-by-one 几何偏置"，该判断已被推翻。`pitch_degree` 13.6%（harness）是评测对齐在节奏漂移时退化为随机配对的**测量假象**，816 个失败音符音级偏移近似均匀分布（非 ±1 集中）；"off-by-one"归因不成立，F3 零效果正因此被解释。真实音名准确率**当前不可认证**（换序列对齐独立复算 step 38.4% / step+octave 25.7%，另 LCS 估计 ~91.6% / ~55%，三法发散证明标尺已坏）。须先修 `_merge_align` 为 Needleman–Wunsch 全局对齐（R1, ~1 人日）才能谈"80% 达标"。"真正短板是八度"属待证假设。详见 `docs/omr-engine-feasibility.md`。

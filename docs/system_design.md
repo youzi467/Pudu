@@ -3,7 +3,7 @@
 > 作者：架构师 高见远（software-architect）
 > 日期：2026-07-21
 > 类型：**架构设计 + 任务分解（只出设计/签名/契约，不写实现体）**
-> 关联：`docs/jianpu-ocr-optimization-plan.md` §3、`SESSION_SUMMARY_OMR_2026-07-17_18.md`、`tools/omr_oemer.py`、`tools/omr_eval_lib.py`、`tools/omr_eval_groundtruth.py`、`MEMORY.md`、`.workbuddy/memory/2026-07-20.md`
+> 关联：`SESSION_SUMMARY_OMR_2026-07-17_18.md`、`tools/omr_oemer.py`、`tools/omr_eval_lib.py`、`tools/omr_eval_groundtruth.py`、`MEMORY.md`、`.workbuddy/memory/2026-07-20.md`
 > 根因基线（07-20 concerto a 小调真实评测）：`note_pass` 2.65%；`pitch_degree` **14.0%**（最短板，占失败音符 ~86%，无方向性 升329/降366；F3 几何校正器全量 A/B 已证实零效果，非靶心）；`pitch_octave` 59.2%（加线整八度误计）；`rhythm` 45.3%；`octave_jump` 95.4%；`pitch_accidental` 82.7%（Plan A 已修）；`rest` 97.0%。
 
 > [!NOTE]

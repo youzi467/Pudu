@@ -2,7 +2,7 @@
 
 > 生成：2026-07-29 14:34 · 重刷：2026-08-14（同步至分发/桌面化 P0–P4 完成 + AV 主引擎时代）
 > 定位：聚焦「接下来做什么」的可执行路线图；历史全貌见 `product-status.md`，执行计划见 `distribution-plan.md`。
-> git 基线：2026-08-14 本地 `main` 已推送到 `origin/main`（0 未推送），工作区仅剩未跟踪的 `docs/software-user-manual.md`（AI 生成软著手册，按约束永不提交）。
+> git 基线：2026-08-24 本地 `main` 已推送到 `origin/main`（1483df8..4feaf85，5 commits），工作区仅剩未跟踪的 `docs/software-user-manual.md`（AI 生成软著手册，按约束永不提交）。
 
 ---
 
@@ -26,6 +26,7 @@
 | 8 | 版权/合规基线 | ✅ 部分 | 22ff6da：MIT LICENSE + 分发方案；软著申报暂停 |
 | 9 | **分发/桌面化 P0–P4**（2026-08-13~14） | ✅ | 943e5bc→4453166；pywebview 壳 + ZIP 107MB + Inno 86MB + 回归零劣化 |
 | 10 | **应用图标全链路 + GitHub Release v0.9.0 发布**（2026-08-14） | ✅ | f318511（EXE/favicon/SetupIconFile 图标）+ 441266e/f318511 后资产已替换为图标构建（ZIP 114MB + Inno 90MB） |
+| 11 | **L2 简谱渲染修正 + AV 多页拼接 divisions 统一**（2026-08-24） | ✅ | 43459a6→4feaf85；休止符去增时线 / 增时线空格分隔 / 临时记号左上角标 / 八度点附点加大 / 降八度点移至减时线下方（`.jp-core` 锚定）；AV 多页拼接 divisions 统一为最细粒度（16 分音符不再塌 8 分） |
 
 ---
 
@@ -35,6 +36,7 @@
 
 - **现状**：**GitHub Release v0.9.0 已发布**（`https://github.com/youzi467/Pudu/releases/tag/v0.9.0`）——tag 已推、双产物已上传（ZIP 114MB + 安装包 90MB，f318511 图标构建）、发布说明齐备（功能/依赖/已知限制：oemer 不随包、文件关联未做、干净机器实机未验）。
 - **发布方式（非交互）**：`git credential fill` 取 GCM OAuth token → curl 打 Releases API；本机 curl 需 `--ssl-no-revoke`（schannel `CRYPT_E_NO_REVOCATION_CHECK`）。
+- **⚠ 发布资产已过期（2026-08-24 · 判断待执行）**：源码自 v0.9.0 后又更新——L2 渲染修正（43459a6→d17f512）+ AV 多页拼接 divisions 统一（4feaf85），这两处都打进发布产物（Pudu.exe = C++ 核心 / `omr_audiveris.py` = 纯数据随包）。**判断：release 需要重新打包**（重跑 PyInstaller + 7z + ISCC，见 §4 风险表）；本任务仅做判断与记录，未执行打包。
 
 ### 🟡 版权申报决策（人拍板 · 暂停中）
 
