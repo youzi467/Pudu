@@ -11,7 +11,7 @@
 > `tools/omr_eval_groundtruth.py::run_audiveris`（评估入口）。基线已重立：
 > AV 97.56%（13 共有页）为权威基线，oemer 84.5% 降为 fallback 口径。
 > 多页 PDF 走 **AV 逐页 `-sheets N` 拼接**（整册 Book 模式因坏页拖垮弃用），
-> 见 [omr-engine-feasibility.md](omr-engine-feasibility.md) §2.2 与实施计划
+> 见 [omr-engine-feasibility.md](../to_be_delete/docs/omr-engine-feasibility.md) §2.2 与实施计划
 > `sorted-twirling-gizmo`。
 
 ---

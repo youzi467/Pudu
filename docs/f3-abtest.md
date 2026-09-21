@@ -6,7 +6,7 @@
 > 不用 F3/R-geo（AV 无 oemer geometry sidecar 源，节奏 99.26% 自带正确）。
 >
 > 配套：`tools/omr_eval_groundtruth.py`（已透传 `--f3-geometric`）、
-> `tools/omr_oemer.py`（F3 开关与 sidecar）、`docs/system_design.md` §6 T05。
+> `tools/omr_oemer.py`（F3 开关与 sidecar）、`../to_be_delete/docs/system_design.md` §6 T05。
 > 本说明面向 QA：如何用现有 harness 做 F3 的 on/off A/B 量化。
 >
 > ✅ **2026-08-08 修正结论（d69acf2）**：早期 A/B 报「F3 零效果」实为 **F3 自身的两个 bug**
@@ -303,7 +303,7 @@ F3 设计靶心是 `pitch_degree` / `pitch_octave`（修复后两者均大幅提
 降到 87（见顶部结论），残余多为 F3 几何 step/octave 尚未到位页面的连带误差
 （如 bach_p2/prelude_p2），非索引错位产物。
 
-## 5. 已知约束 / 风险（与 system_design.md §9 一致）
+## 5. 已知约束 / 风险（与归档的 `../to_be_delete/docs/system_design.md` §9 一致）
 
 - **sidecar 必须随 oemer 产出**：B 组命令默认即产出 `.geometry.json`（除非显式
   `--no-f3-sidecar`，那样 F3 无几何数据可用，会跳过并告警）。A 组默认也产出 sidecar，
