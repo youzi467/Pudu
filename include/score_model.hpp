@@ -90,6 +90,9 @@ struct Note {
                                   //   声部按统一时间轴归并比对（music21 不保留 <voice>）。
     int voice = 1;                 // 声部/层编号（来自 <voice>），默认 1。
                                   //   多声部谱中各层独立成线，简谱可按 voice 分行。
+    int staff = 0;                 // 谱表编号（来自 <staff>），默认 0=单谱表/未标注。
+                                  //   单 part 多谱表（大谱表）时用它区分上下行：1=上行, 2=下行。
+                                  //   P2 阶段补充，仅用于大谱表分组，不影响既有单谱表语义。
     std::vector<Pitch> chordPitches; // 和弦内【其余】音高（不含本 note.pitch）。
                                   //   仅当本音为和弦主音(首个、无 <chord/>) 时填充；
                                   //   后续 <chord/> 音并入此列表，不再单独成事件。
@@ -146,6 +149,8 @@ struct ScoreAttributes {
     int beatType = 4;              // 拍号分母
     std::string clefSign = "G";    // 谱号
     int clefLine = 2;              // 谱号线
+    int staves = 0;                // 谱表数（来自 <attributes><staves>）；0=未知/单谱表。
+                                  //   >1 表示单一 part 内含多谱表（大谱表），P2 用。
 };
 
 // 声部（单声部时 parts.size() == 1）

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <set>
+#include <utility>
 #include <vector>
 
 namespace pudu {
@@ -116,7 +117,8 @@ JianpuDoc staffToJianpu(const Score& score) {
 
     for (size_t pi = 0; pi < score.parts.size(); ++pi) {
         const auto& part = score.parts[pi];
-        // 收集本声部出现的 voice 集合（多声部 -> 多行），用 std::set 保证稳定升序
+        // 收集本声部出现的 voice 集合（多声部 -> 多行，保持既有 L0/L1/L3 语义不变）。
+        //   P2 只读谱表号并透传到 line.staff 供 L2 大谱表分组，不改 L0 的行划分。
         std::set<int> voiceSet;
         for (const auto& m : part.measures)
             for (const auto& n : m.notes)
@@ -126,6 +128,13 @@ JianpuDoc staffToJianpu(const Score& score) {
             JianpuLine line;
             line.voice = voice;
             line.partIndex = static_cast<int>(pi);
+            // P2：本声部音符的谱表归属（同一声部通常固定在一根谱表）。取最大值；
+            //   单谱表 / 未标注时为 0，不影响既有行为与 L1/L3 输出。
+            int lineStaff = 0;
+            for (const auto& m : part.measures)
+                for (const auto& n : m.notes)
+                    if (n.voice == voice && n.staff > lineStaff) lineStaff = n.staff;
+            line.staff = lineStaff;   // 仅供 L2 大谱表分组；pair 恒 -1，渲染器再配对
 
             for (const auto& measure : part.measures) {
                 JianpuMeasure jm;
@@ -138,7 +147,7 @@ JianpuDoc staffToJianpu(const Score& score) {
                 jm.implicit = measure.implicit;
                 jm.sectionEnd = measure.sectionEnd;
 
-                // 仅取本 voice 的音符，按 onset 升序（对齐演奏/书写顺序）
+                // 仅取本 voice 的音符，按 onset 升序（非常段既有语义，L1/L3 不变）
                 std::vector<const Note*> sel;
                 for (const auto& n : measure.notes)
                     if (n.voice == voice) sel.push_back(&n);
@@ -541,24 +550,275 @@ const char* kL2Css =
     ".jp-under{position:absolute;left:50%;transform:translateX(-50%);bottom:2px;display:block;width:1.5em;}"
     ".jp-tie{position:absolute;top:-12px;left:50%;transform:translateX(-50%);}";
 
+// P1：仅在固定每行小节数（measuresPerLine>0）时追加的系统样式，保证默认输出与 v0.9.1 逐字节一致
+const char* kL2SystemCss =
+    ".system{margin-bottom:14px;}"
+    ".line-number{font-size:.78rem;color:#5b6470;align-self:center;margin-right:8px;"
+    "min-width:2em;text-align:center;font-family:'Times New Roman',Georgia,serif;}";
+
+// P2：大谱表 —— 上下两行按小节纵向对齐（同一系统的列对齐），左侧花括号连接。
+// 仅在启用大谱表时追加，不影响普通输出。
+const char* kL2GrandCss =
+    ".grand-wrap{display:flex;align-items:stretch;gap:4px;margin:2px 0 12px;}"
+    ".grand-brace{width:20px;flex:0 0 20px;align-self:stretch;color:#2b2b2b;}"
+    ".grand-body{flex:1;min-width:0;}"
+    ".grand-label{align-self:stretch;display:flex;flex-direction:column;align-items:center;"
+    "justify-content:flex-start;padding-right:6px;padding-top:22px;"
+    "font-size:.72rem;color:#9aa0a6;line-height:1.3;}"
+    ".grand-label .line-number{margin:0;min-width:auto;font-size:.78rem;color:#5b6470;}"
+    ".grand-grid{display:grid;align-items:flex-end;row-gap:10px;}"
+    ".grand-grid .measure{padding:0 1px;}"
+    ".grand-cell{display:inline-block;min-width:2.1em;}";
+
+// —— P1：空声部休止符填充 ——
+// 把空小节（notes 为空、非 implicit）合成为等时值休止符序列。
+// 长效：先尝试单一长休止（全/二分+附点…）；非整数节拍回退为多个四分休止。
+std::vector<JianpuNote> l2MeasureRests(const JianpuMeasure& m, const JianpuDoc& doc) {
+    int beats = (m.beats > 0) ? m.beats : doc.beats;
+    int beatType = (m.beatType > 0) ? m.beatType : doc.beatType;
+    if (beatType <= 0) beatType = 4;
+    double ql = static_cast<double>(beats) * 4.0 / beatType;
+
+    std::vector<JianpuNote> out;
+    int ul, ad, dz;
+    if (quarterLengthToRhythm(ql, ul, ad, dz)) {
+        JianpuNote r; r.degree = 0; r.underlines = 0; r.augmentDashes = ad; r.dots = dz;
+        out.push_back(r);
+    } else {
+        int n = static_cast<int>(std::lround(ql));
+        if (n <= 0) n = 1;
+        if (n <= 16) {
+            for (int i = 0; i < n; ++i) { JianpuNote r; r.degree = 0; out.push_back(r); }
+        } else {
+            JianpuNote r; r.degree = 0; r.augmentDashes = 3; out.push_back(r);
+        }
+    }
+    return out;
+}
+
+// 渲染一个小节；空小节（非 implicit）按需填充休止
+std::string l2MeasureFilled(const JianpuMeasure& m, const JianpuDoc& doc, bool fillEmpty) {
+    if (fillEmpty && m.notes.empty() && !m.implicit) {
+        JianpuMeasure filled = m;
+        filled.notes = l2MeasureRests(m, doc);
+        filled.implicit = false;
+        return l2Measure(filled);
+    }
+    return l2Measure(m);
+}
+
+// 渲染一条 voice 行在 [begin,end) 之间的切片；系统首行插起始小节号
+std::string l2LineSlice(const JianpuLine& line, size_t begin, size_t end,
+                        const JianpuDoc& doc, bool fillEmpty, bool showNumber) {
+    std::string out = "<div class=\"line\">";
+    if (showNumber)
+        out += "<span class=\"line-number\">"
+               + std::to_string(line.measures[begin].number) + "</span>";
+    out += "<span class=\"voice-label\">voice" + std::to_string(line.voice) + "</span>";
+    for (size_t mi = begin; mi < end; ++mi) {
+        out += l2MeasureFilled(line.measures[mi], doc, fillEmpty);
+        if (mi + 1 < end) out += "<span class=\"barline\"></span>";
+    }
+    out += "<span class=\"barline final\"></span>";
+    out += "</div>";
+    return out;
+}
+
+// P1：按 N 小节切分为系统；每系统按 voice 行堆叠，仅首行标小节号
+std::string l2Systems(const JianpuDoc& doc, int N, bool fillEmpty) {
+    size_t maxM = 0;
+    for (const auto& line : doc.lines) maxM = std::max(maxM, line.measures.size());
+    size_t systems = (maxM + N - 1) / N;
+    if (systems == 0 && maxM > 0) systems = 1;
+
+    std::string out;
+    for (size_t k = 0; k < systems; ++k) {
+        size_t begin = k * N;
+        out += "<div class=\"system\">";
+        bool numbered = true;   // 该系统首个有内容的 voice 行带小节号
+        for (const auto& line : doc.lines) {
+            if (line.measures.size() <= begin) continue;
+            size_t le = std::min(begin + N, line.measures.size());
+            out += l2LineSlice(line, begin, le, doc, fillEmpty, numbered);
+            numbered = false;
+        }
+        out += "</div>";
+    }
+    return out;
+}
+
+// —— P2 大谱表渲染 ——
+// 大谱表 = 若干「上行行」(staff=1 / 手动配对上游) + 若干「下行行」(staff=2 / 下游)。
+// 同一系统的上下行按小节【列对齐】渲染（绝不各自换行错位），左侧花括号连接，
+// 行首小节号仅标在首个上行行。列对齐网格：每列 = 一个小节，跨所有上下行。
+
+std::string l2GrandBrace() {
+    // 经典花括号曲线（自上而下再折回中点）：空心朝左留白，贴近钢琴谱左花括号观感。
+    return "<svg class=\"grand-brace\" viewBox=\"0 0 20 100\" preserveAspectRatio=\"none\" aria-hidden=\"true\">"
+           "<path d=\"M16 6 C5 6 1 26 2 38 L13 50 L2 62 C1 74 5 94 16 94\" fill=\"none\" "
+           "stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"/></svg>";
+}
+
+// 渲染一个系统单位的整条大谱表（members 有序：上行行在前，下行行在后）。
+std::string l2GrandSystems(const JianpuDoc& doc, const std::vector<size_t>& members,
+                           const std::vector<int>& role, int N, bool fillEmpty) {
+    size_t maxM = 0;
+    for (auto li : members) maxM = std::max(maxM, doc.lines[li].measures.size());
+    if (maxM == 0) return "";
+    int W = (N > 0) ? N : static_cast<int>(maxM);   // 未指定时整段作一个系统（保持列对齐）
+    if (W <= 0) W = 1;
+
+    std::string out;
+    for (size_t k = 0; k * static_cast<size_t>(W) < maxM; ++k) {
+        size_t begin = k * static_cast<size_t>(W);
+        size_t cols = std::min(static_cast<size_t>(W), maxM - begin);
+        out += "<div class=\"system system-grand\"><div class=\"grand-wrap\">";
+        out += l2GrandBrace();
+        out += "<div class=\"grand-body\">";
+        // 【列对齐关键】所有上下行共用同一网格：第 0 列=行标签，其后每列=同一个小节。
+        //   网格列宽按全部行在对应列的 max-content 取最大，故上下行同名小节严格对齐。
+        out += "<div class=\"grand-grid\" style=\"grid-template-columns:auto repeat("
+               + std::to_string(cols) + ",max-content)\">";
+        bool numbered = true;   // 小节号只标首个上行行
+        for (auto li : members) {
+            const auto& L = doc.lines[li];
+            // 行标签（左列）：小区节号（仅首行）+ 上/下行标记
+            out += "<div class=\"grand-label\">";
+            if (numbered && begin < L.measures.size())
+                out += "<span class=\"line-number\">" + std::to_string(L.measures[begin].number) + "</span>";
+            numbered = false;
+            out += "<span>" + std::string(role[li] == 1 ? "下·" : "上·") +
+                   "v" + std::to_string(L.voice) + "</span>";
+            out += "</div>";
+            // 本行各小节（第 1..cols 列）
+            for (size_t c = 0; c < cols; ++c) {
+                size_t idx = begin + c;
+                if (idx < L.measures.size())
+                    out += l2MeasureFilled(L.measures[idx], doc, fillEmpty);
+                else
+                    out += "<div class=\"grand-cell\"></div>";
+            }
+        }
+        out += "</div></div></div>"; // grand-grid + grand-body + grand-wrap + system
+    }
+    return out;
+}
+
+// 单条非大谱表行、固定每行 N 小节：渲染为独立系统（每系统一行，行首带小节号）。
+std::string l2SingleLineSystems(const JianpuLine& line, const JianpuDoc& doc, int N, bool fillEmpty) {
+    size_t m = line.measures.size();
+    if (m == 0) return "";
+    std::string out;
+    for (size_t k = 0; k * static_cast<size_t>(N) < m; ++k) {
+        size_t begin = k * static_cast<size_t>(N);
+        size_t le = std::min(begin + static_cast<size_t>(N), m);
+        out += "<div class=\"system\">";
+        out += l2LineSlice(line, begin, le, doc, fillEmpty, true);
+        out += "</div>";
+    }
+    return out;
+}
+
+// 计算每行的大谱表配对：(pairId 组号, role 0=上行/1=下行)。返回是否启用了大谱表。
+//   手动 --grand-staff 优先；其次 autoGrandStaff 对含 staff≥2 的单 part 自动配对。
+//   配对只影响 L2 渲染分组，不回改 L0/lines。
+static bool l2ComputeGrand(const JianpuDoc& doc, const JianpuRenderConfig& cfg,
+                           std::vector<int>& pairId, std::vector<int>& role) {
+    const size_t n = doc.lines.size();
+    pairId.assign(n, -1);
+    role.assign(n, -1);
+    int gid = 1;
+
+    // 手动配对：{上游 part 下标, 下游 part 下标}
+    for (const auto& pr : cfg.grandStaffPairs) {
+        for (size_t i = 0; i < n; ++i) {
+            if (pairId[i] > 0) continue;
+            if (doc.lines[i].partIndex == pr.first)      { pairId[i] = gid; role[i] = 0; }
+            else if (doc.lines[i].partIndex == pr.second) { pairId[i] = gid; role[i] = 1; }
+        }
+        ++gid;
+    }
+
+    // 自动识别：单一 part 内含双谱表（存在 staff≥2 的行）→ 该 part 全部行配对
+    if (cfg.autoGrandStaff) {
+        std::set<int> multiParts;
+        for (size_t i = 0; i < n; ++i)
+            if (doc.lines[i].staff >= 2) multiParts.insert(doc.lines[i].partIndex);
+        for (int pi : multiParts) {
+            bool taken = false;
+            for (size_t i = 0; i < n; ++i)
+                if (doc.lines[i].partIndex == pi && pairId[i] > 0) { taken = true; break; }
+            if (taken) continue;
+            for (size_t i = 0; i < n; ++i)
+                if (doc.lines[i].partIndex == pi && pairId[i] < 0)
+                    pairId[i] = gid;
+            // 上下行按谱表归属定（staff≥2=下行，其余=上行）
+            for (size_t i = 0; i < n; ++i)
+                if (pairId[i] == gid) role[i] = (doc.lines[i].staff >= 2) ? 1 : 0;
+            ++gid;
+        }
+    }
+
+    for (size_t i = 0; i < n; ++i)
+        if (pairId[i] > 0) return true;
+    return false;
+}
+
+// 按 doc 顺序把行归并为「渲染单元」：要么单条普通行，要么包含上下行的大谱表组。
+struct RenderUnit { std::vector<size_t> lines; bool grand; };
+static std::vector<RenderUnit> l2BuildUnits(const std::vector<int>& pairId,
+                                            const std::vector<int>& role) {
+    const size_t n = pairId.size();
+    std::vector<unsigned char> emitted(n, 0);
+    std::vector<RenderUnit> units;
+    for (size_t i = 0; i < n; ++i) {
+        if (emitted[i]) continue;
+        if (pairId[i] < 0) { units.push_back({{i}, false}); emitted[i] = 1; continue; }
+        std::vector<size_t> mem;
+        for (size_t j = 0; j < n; ++j)
+            if (pairId[j] == pairId[i]) { mem.push_back(j); emitted[j] = 1; }
+        std::stable_sort(mem.begin(), mem.end(),
+                         [&](size_t a, size_t b) { return role[a] < role[b]; });  // 上行先于下行
+        units.push_back({std::move(mem), true});
+    }
+    return units;
+}
+
 } // anonymous namespace
 
-std::string jianpuToL2(const JianpuDoc& doc) {
+std::string jianpuToL2(const JianpuDoc& doc, const JianpuRenderConfig& cfg) {
     std::string title = doc.title.empty() ? "(无标题)" : doc.title;
     std::string key = doc.tonicLabel + " " + std::to_string(doc.beats) + "/" +
                       std::to_string(doc.beatType) + " (" + doc.mode + ")";
 
+    // —— P2：大谱表配对（仅影响 L2 渲染分组，不回改 L0/lines）——
+    std::vector<int> pairId, role;
+    const bool hasGrand = l2ComputeGrand(doc, cfg, pairId, role);
+
     std::string body;
-    for (const auto& line : doc.lines) {
-        body += "<div class=\"line\">";
-        body += "<span class=\"voice-label\">voice" + std::to_string(line.voice) + "</span>";
-        for (size_t mi = 0; mi < line.measures.size(); ++mi) {
-            body += l2Measure(line.measures[mi]);
-            if (mi + 1 < line.measures.size())
-                body += "<span class=\"barline\"></span>";
+    if (hasGrand) {
+        // 大谱表：按 doc 顺序归并渲染单元；上下行组内列对齐，普通行独立渲染
+        auto units = l2BuildUnits(pairId, role);
+        for (const auto& u : units) {
+            if (!u.grand) {
+                const auto& L = doc.lines[u.lines[0]];
+                if (cfg.measuresPerLine > 0)
+                    body += l2SingleLineSystems(L, doc, cfg.measuresPerLine, cfg.fillEmptyVoiceRest);
+                else
+                    body += l2LineSlice(L, 0, L.measures.size(), doc, cfg.fillEmptyVoiceRest, false);
+            } else {
+                body += l2GrandSystems(doc, u.lines, role, cfg.measuresPerLine, cfg.fillEmptyVoiceRest);
+            }
         }
-        body += "<span class=\"barline final\"></span>";
-        body += "</div>";
+    } else if (cfg.measuresPerLine > 0) {
+        // P1：固定每行小节数 → 按系统切分，仅系统首行标小节号
+        body = l2Systems(doc, cfg.measuresPerLine, cfg.fillEmptyVoiceRest);
+    } else {
+        // 默认：整段单行输出（与 v0.9.1 逐字节一致），空声部仍可按需补 0
+        for (const auto& line : doc.lines) {
+            body += l2LineSlice(line, 0, line.measures.size(), doc,
+                                cfg.fillEmptyVoiceRest, false);
+        }
     }
 
     std::string html;
@@ -566,7 +826,10 @@ std::string jianpuToL2(const JianpuDoc& doc) {
     html += "<html lang=\"zh\"><head><meta charset=\"utf-8\">";
     html += "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">";
     html += "<title>谱渡 · 简谱 L2 — " + l2Escape(title) + "</title>";
-    html += "<style>" + std::string(kL2Css) + "</style></head><body>";
+    std::string css = kL2Css;
+    if (cfg.measuresPerLine > 0) css += kL2SystemCss;
+    if (hasGrand) css += kL2GrandCss;
+    html += "<style>" + css + "</style></head><body>";
     html += "<div class=\"score\">";
     html += "<div class=\"header\"><div class=\"title\">" + l2Escape(title) + "</div>";
     html += "<div class=\"key\">" + l2Escape(key) + "</div></div>";

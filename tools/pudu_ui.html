@@ -92,6 +92,9 @@
   }
   .path-row { display:flex; gap:8px; margin-top:6px; }
   .path-row input { margin-top:0; flex:1; }
+  .modal-box label.check { display:flex; align-items:center; gap:8px;
+    font-size:14px; color:var(--text); cursor:pointer; }
+  .modal-box label.check input { width:auto; margin:0; }
   .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
 </style>
 </head>
@@ -277,6 +280,11 @@
     var s = state.settings || {};
     $("setEngine").value = s.default_engine || "audiveris";
     $("setAvExe").value = s.audiveris_exe || "";
+    $("setMeasures").value = String(s.measures_per_line == null ? 4 : s.measures_per_line);
+    $("setFill").checked = /^(true|1|yes|on)$/i.test(String(s.fill_empty_voice_rest || ""));
+    $("setAutoGrand").checked = /^(true|1|yes|on)$/i.test(
+      String(s.grand_staff_auto === undefined ? "true" : s.grand_staff_auto));
+    $("setGrandStaff").value = s.grand_staff || "";
     $("settingsMsg").textContent = "";
   }
   var setSave = $("setSave");
@@ -289,7 +297,11 @@
       var payload = {
         default_engine: $("setEngine").value,
         audiveris_exe: $("setAvExe").value.trim(),
-        oemer_model_dir: ""
+        oemer_model_dir: "",
+        measures_per_line: $("setMeasures").value,
+        fill_empty_voice_rest: $("setFill").checked ? "true" : "false",
+        grand_staff_auto: $("setAutoGrand").checked ? "true" : "false",
+        grand_staff: $("setGrandStaff").value.trim()
       };
       $("setSave").disabled = true;
       $("settingsMsg").textContent = "保存中…";
@@ -512,6 +524,24 @@
                placeholder="如 C:\Program Files\Audiveris\Audiveris.exe">
         <button id="setBrowse" class="btn ghost" type="button">浏览…</button>
       </div>
+    </label>
+    <label>每行小节数
+      <select id="setMeasures">
+        <option value="4">4（默认）</option>
+        <option value="6">6</option>
+        <option value="8">8</option>
+        <option value="10">10</option>
+        <option value="0">自动（不强制切行）</option>
+      </select>
+    </label>
+    <label class="check">
+      <input id="setFill" type="checkbox"> 空声部小节补休止符 0
+    </label>
+    <label class="check">
+      <input id="setAutoGrand" type="checkbox"> 单谱带双谱表自动合成大谱表（钢琴谱上下两行）
+    </label>
+    <label>手动大谱表配对（可多对，如"0,1;2,3"）
+      <input id="setGrandStaff" type="text" spellcheck="false" placeholder="留空不启用">
     </label>
     <div id="settingsMsg" class="muted"></div>
     <div class="modal-actions">

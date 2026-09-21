@@ -82,6 +82,11 @@ struct JianpuMeasure {
 struct JianpuLine {
     int voice = 1;
     int partIndex = 0;          // 所属声部在 Score.parts 中的下标（校验器按 (part,voice) 对齐）
+    int staff = 0;              // P2：谱表归属（透传 Note.staff）。0=单谱表/未标注；
+                                //   大谱表 1=上行, 2=下行。仅用于大谱表渲染分组，L1/L3 忽略。
+    int pair = -1;              // P2：大谱表配对组号；-1=不属任何大谱表对（普通多声部行）。
+                                //   同一 pair 的行渲染为一体（上行组 -> 下行组 + 左侧花括号）。
+                                //   该值由渲染器按配置写入（staffToJianpu 恒为 -1，保持 L0 纯净）。
     std::vector<JianpuMeasure> measures;
 };
 

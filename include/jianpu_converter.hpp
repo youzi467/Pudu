@@ -16,6 +16,8 @@
 #include "score_model.hpp"
 
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace pudu {
 
@@ -63,12 +65,28 @@ JianpuDoc staffToJianpu(const Score& score);
 //        和弦 [d d ...]；装饰音 g 前缀；连音线 ~ 后缀（L2 用 SVG 弧）。
 std::string jianpuToL1(const JianpuDoc& doc);
 
+// L2 渲染配置（P1：固定每行小节数 + 空声部休止符填充）。
+//   measuresPerLine>0：按 N 小节切分为「系统」，每系统仅首行标起始小节号；
+//   fillEmptyVoiceRest：对 notes 为空的小节（implicit 除外）补等时值休止符 0。
+struct JianpuRenderConfig {
+    int measuresPerLine = 0;        // 0=自动（现状，逐行整段输出）；4/6/8/10=固定
+    bool fillEmptyVoiceRest = false;// 空声部是否补 0
+
+    // —— P2 大谱表 ——
+    // 手动指定两平行 part 配对为大谱表。元素为 {上游 part 下标, 下游 part 下标}。
+    //   与 autoGrandStaff 同时存在时，手动配对优先于自动识别。
+    std::vector<std::pair<int,int>> grandStaffPairs;
+    // 单一 part 内含双谱表（staff 1|2）时自动合并为大谱表。默认开（不影响单谱表谱面）。
+    bool autoGrandStaff = true;
+};
+
 // L2 HTML/Unicode 二维渲染（规范 §3.2）：把 JianpuDoc 投影为真正的二维简谱。
 //   返回自包含、可直接浏览器打开的 .html 字符串（含最小内联 CSS）。
 //   核心要素：数字 span.jp-num；八度点上下定位(·)；减时线横向连写(同值连续音
 //     成 beam 组，单条/多条横线贯穿)；增时线 —；附点 ·；和弦纵向 flex 列；
 //     连音弧内联 SVG。仅投影 L0，不回改 Score。
-std::string jianpuToL2(const JianpuDoc& doc);
+//   默认配置（measuresPerLine=0, fillEmptyVoiceRest=false）输出与 v0.9.1 逐字节一致。
+std::string jianpuToL2(const JianpuDoc& doc, const JianpuRenderConfig& cfg = {});
 
 // L3 结构化输出（JSON 字符串）：把 JianpuDoc 投影为无损、可被脚本解析的 JSON，
 //   供 verify_jianpu_groundtruth.py 等外部校验器逐音比对。仅投影 L0，不回改 Score。

@@ -311,6 +311,58 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    // P1：L2 渲染配置（--measures-per-line <4|6|8|10> / --fill-empty-voice-rest）。
+    //   遍历解析（与 --divisions 一致，独立于下方 toJianpuL2 探测循环）。
+    pudu::JianpuRenderConfig l2Cfg;
+    bool hasMeasuresPerLine = false;
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "--measures-per-line" && i + 1 < argc) {
+            try {
+                int v = std::stoi(argv[i + 1]);
+                if (v != 0 && v != 4 && v != 6 && v != 8 && v != 10) {
+                    std::cerr << "[错误] --measures-per-line 取值须为 0|4|6|8|10（0=自动），收到: "
+                              << v << std::endl;
+                    return 1;
+                }
+                l2Cfg.measuresPerLine = v;
+                hasMeasuresPerLine = true;
+            } catch (const std::exception& e) {
+                std::cerr << "[错误] --measures-per-line 参数非法: " << e.what() << std::endl;
+                return 1;
+            }
+            ++i;
+        } else if (a == "--fill-empty-voice-rest") {
+            l2Cfg.fillEmptyVoiceRest = true;
+        } else if (a == "--grand-staff" && i + 1 < argc) {
+            // 手动配对两平行 part 为大谱表：格式 "a,b"（可重复出现）。
+            // a=上游部分, b=下游部分（part 下标从 0 起）。
+            std::string v = argv[i + 1];
+            auto comma = v.find(',');
+            if (comma == std::string::npos) {
+                std::cerr << "[错误] --grand-staff 须为 \"上游part下标,下游part下标\"，收到: "
+                          << v << std::endl;
+                return 1;
+            }
+            try {
+                int a = std::stoi(v.substr(0, comma));
+                int b = std::stoi(v.substr(comma + 1));
+                if (a < 0 || b < 0 || a == b) {
+                    std::cerr << "[错误] --grand-staff 下标非法（须非负且互异）: " << v << std::endl;
+                    return 1;
+                }
+                l2Cfg.grandStaffPairs.push_back({a, b});
+            } catch (const std::exception& e) {
+                std::cerr << "[错误] --grand-staff 参数非法: " << e.what() << std::endl;
+                return 1;
+            }
+            ++i;
+        } else if (a == "--no-grand-staff-auto") {
+            // 关闭单一 part+多 staff 的自动大谱表识别（默认开）
+            l2Cfg.autoGrandStaff = false;
+        }
+    }
+
     // 阶段 2：简谱 L2 二维渲染（HTML/Unicode），写出为自包含 .html
     bool toJianpuL2 = false;
     std::string l2OutPath = "jianpu_l2.html";
@@ -325,7 +377,7 @@ int main(int argc, char* argv[]) {
     }
     if (toJianpuL2) {
         pudu::JianpuDoc doc = buildDoc();
-        std::string html = pudu::jianpuToL2(doc);
+        std::string html = pudu::jianpuToL2(doc, l2Cfg);
         std::ofstream f(l2OutPath, std::ios::binary);
         if (!f) {
             std::cerr << "[错误] 无法写入文件: " << l2OutPath << std::endl;

@@ -79,11 +79,24 @@ target_link_libraries(Pudu PRIVATE
 )
 
 # ----------------------------------------------------------------------
-# 5. 单元测试目标已移除（2026-08-13 仓库清理）
-#    test/（C++ 单测，header-only 自研框架）随清理归档至 to_be_delete/，
-#    PuduTests 目标随之下线，仅保留 Pudu 主程序目标。若需恢复测试，
-#    从 to_be_delete/test/ 搬回并恢复本目标即可。
+# 5. 单元测试目标（header-only 自研框架，零外部依赖）
+#    编译共享源(jianpu_converter/musicxml_parser) + 测试框架 + 测试用例。
+#    运行：./build/windows-msvc-vcpkg/Debug/PuduTests
+#    （退出码：全绿 0 / 有失败非 0）
 # ----------------------------------------------------------------------
+enable_testing()
+add_executable(PuduTests
+    test/pudu_test_main.cpp
+    test/test_jianpu_render_config.cpp
+    src/jianpu_converter.cpp
+    src/musicxml_parser.cpp
+)
+target_include_directories(PuduTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+if(MSVC)
+    target_compile_options(PuduTests PRIVATE /utf-8)
+endif()
+target_link_libraries(PuduTests PRIVATE pugixml::pugixml)
+add_test(NAME pudu_render_config COMMAND PuduTests)
 
 # ----------------------------------------------------------------------
 # 4. Windows 下运行时 DLL 提示

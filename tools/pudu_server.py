@@ -174,7 +174,14 @@ DEFAULT_SETTINGS = {
     "default_engine": "audiveris",      # audiveris | oemer
     "audiveris_exe": "",                # 用户指定的 Audiveris.exe 绝对路径（可选）
     "oemer_model_dir": "",              # oemer 模型目录（可选；本分发不随包 oemer）
+
+    # —— P4：简谱 L2 渲染（透传给 Pudu.exe 的 --measures-per-line 等）——
+    "measures_per_line": "4",           # 每行小节数：0=自动 | 4|6|8|10（网页端默认 4）
+    "fill_empty_voice_rest": "false",   # 空声部小节是否补休止符 0
+    "grand_staff": "",                  # 手动大谱表配对，形如 "0,1;2,3"（分号分隔多对，逗号分隔两 part 下标）
+    "grand_staff_auto": "true",         # 单一 part 含双谱表时自动合成大谱表
 }
+_SETTINGS_MEASURES_OPTIONS = {0, 4, 6, 8, 10}
 
 _SETTINGS_KEYS = set(DEFAULT_SETTINGS)
 _SETTINGS_ENGINES = {"audiveris", "oemer"}
@@ -284,14 +291,47 @@ def build_ocr_cmd(image: str, mx_out: str, engine: str = DEFAULT_ENGINE) -> List
 
 
 def build_render_cmd(mx: str, l2_html: str) -> List[str]:
-    """L2 简谱渲染：Pudu.exe <mx> --to-jianpu-l2 <out.html>。"""
-    return [PUDU_EXE, mx, "--to-jianpu-l2", l2_html]
+    """L2 简谱渲染：Pudu.exe <mx> --to-jianpu-l2 <out.html> [渲染设置]。"""
+    return [PUDU_EXE, mx, "--to-jianpu-l2", l2_html] + render_flags()
+
+
+def render_flags() -> List[str]:
+    """依据持久化渲染设置，拼接 Pudu.exe 的 L2 渲染参数列表。
+
+    对应设置键（%APPDATA%/Pudu/settings.json）：
+      measures_per_line / fill_empty_voice_rest / grand_staff / grand_staff_auto。
+    依次映射为 CLI：--measures-per-line N / --fill-empty-voice-rest /
+      --grand-staff a,b（每对一次，可重复）/ --no-grand-staff-auto。
+    """
+    s = load_settings()
+    flags: List[str] = []
+    try:
+        mpl = int(s.get("measures_per_line", "4") or 0)
+    except ValueError:
+        mpl = 4
+    if mpl and mpl in _SETTINGS_MEASURES_OPTIONS:
+        flags += ["--measures-per-line", str(mpl)]
+    if str(s.get("fill_empty_voice_rest", "false")).lower() in ("true", "1", "yes", "on"):
+        flags.append("--fill-empty-voice-rest")
+    gs = str(s.get("grand_staff", "") or "").strip()
+    if gs:
+        for pair in gs.split(";"):
+            pair = pair.strip()
+            if not pair:
+                continue
+            if "," in pair:
+                flags += ["--grand-staff", pair]
+            else:
+                sys.stderr.write(f"[警告] grand_staff 非法对，忽略: {pair}\n")
+    if str(s.get("grand_staff_auto", "true")).lower() in ("false", "0", "no", "off"):
+        flags.append("--no-grand-staff-auto")
+    return flags
 
 
 def build_fixture_cmd(image: str, l2_html: str) -> List[str]:
     """fixture 演示：Pudu.exe --from-omr <img> --omr-engine fixture --to-jianpu-l2。"""
     return [PUDU_EXE, "--from-omr", image, "--omr-engine", "fixture",
-            "--to-jianpu-l2", l2_html]
+            "--to-jianpu-l2", l2_html] + render_flags()
 
 
 def parse_multipart(body: bytes, content_type: str) -> Tuple[str, bytes]:
@@ -955,6 +995,16 @@ class PuduHandler(BaseHTTPRequestHandler):
                         400, {"error": f"default_engine 须为 {'/'.join(sorted(_SETTINGS_ENGINES))}"})
                     return
                 settings[key] = val
+            elif key == "measures_per_line":
+                # 0=自动；4/6/8/10 之一才合法
+                try:
+                    mpl = int(str(val).strip())
+                except ValueError:
+                    mpl = -1
+                if mpl not in _SETTINGS_MEASURES_OPTIONS:
+                    self._send_json(400, {"error": "measures_per_line 须为 0|4|6|8|10"})
+                    return
+                settings[key] = str(mpl)
             else:
                 settings[key] = str(val).strip() if isinstance(val, str) else ""
         save_settings(settings)

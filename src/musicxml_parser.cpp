@@ -201,6 +201,10 @@ void MusicXMLParser::parseMeasure(const pugi::xml_node& measureNode, Part& part)
                     if (pugi::xml_node l = c.child("line"))
                         part.attributes.clefLine = l.text().as_int(2);
                 }
+
+                // P2：谱表数（<attributes><staves>）。>1 表示单 part 内含多谱表（大谱表）。
+                if (pugi::xml_node st = child.child("staves"))
+                    part.attributes.staves = st.text().as_int(0);
                 attributesSeen_ = true;
             }
 
@@ -287,6 +291,11 @@ void MusicXMLParser::parseNote(const pugi::xml_node& noteNode, Measure& measure,
     // 声部/层编号（来自 <voice>，默认 1）
     if (pugi::xml_node v = noteNode.child("voice"))
         note.voice = v.text().as_int(1);
+
+    // P2：谱表编号（来自 <staff>）。单谱表缺省即 0；大谱表 1=上行, 2=下行。
+    //   仅用于大谱表分组与行键，不参与时值/音高推导。
+    if (pugi::xml_node st = noteNode.child("staff"))
+        note.staff = st.text().as_int(0);
 
     // 时值（pugixml 新版以 as_llong 取代 as_long）；装饰音无 duration，按 0 处理
     long dur = 0;
