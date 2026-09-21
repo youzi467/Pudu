@@ -259,6 +259,49 @@ TEST(grand_merge_staffs_into_two_rows) {
     EXPECT_GT(countOcc(body, "class=\"grand-grid\""), 0u);
 }
 
+// —— P2c：声部谱表归属多数决（跨行音符不翻行）——
+// 真实案例（《我和我的祖国》第二钢琴，Audiveris 导出）：旋律 v1 的 674 个音符在
+// staff1、仅 7 个跨行到 staff2，旧 max 规则把整条 v1 判成下行 → 上行全休止。
+// 要求：多数决归属——v1 上行、v5 下行；平手取首个音符的谱表。
+TEST(grand_line_staff_majority_vote_cross_staff) {
+    pudu::Score s;
+    pudu::Measure m1, m2, m3;
+    m1.number = 1; m2.number = 2; m3.number = 3;
+    // v1：5 个音符 staff1 + 1 个跨行 staff2 → 归属上行 staff1
+    m1.notes.push_back(pudu::mkNote(pudu::mkPitch('C',0,5), "quarter", 0, 1, 0, 1));
+    m1.notes.push_back(pudu::mkNote(pudu::mkPitch('D',0,5), "quarter", 1, 1, 0, 1));
+    m2.notes.push_back(pudu::mkNote(pudu::mkPitch('C',0,5), "quarter", 0, 1, 0, 1));
+    m2.notes.push_back(pudu::mkNote(pudu::mkPitch('D',0,5), "quarter", 1, 1, 0, 1));
+    m3.notes.push_back(pudu::mkNote(pudu::mkPitch('E',0,5), "quarter", 0, 1, 0, 1));
+    m3.notes.push_back(pudu::mkNote(pudu::mkPitch('G',0,3), "quarter", 1, 1, 0, 2)); // 跨行
+    // v5：3 个音符 staff2 + 1 个跨行 staff1 → 归属下行 staff2
+    m1.notes.push_back(pudu::mkNote(pudu::mkPitch('C',0,3), "quarter", 0, 5, 0, 2));
+    m2.notes.push_back(pudu::mkNote(pudu::mkPitch('C',0,3), "quarter", 0, 5, 0, 2));
+    m3.notes.push_back(pudu::mkNote(pudu::mkPitch('C',0,3), "quarter", 0, 5, 0, 2));
+    m3.notes.push_back(pudu::mkNote(pudu::mkPitch('G',0,4), "quarter", 1, 5, 0, 1)); // 跨行
+    // v2：staff1 / staff2 各 1 个（平手），首音符在 staff1 → 归属上行
+    m1.notes.push_back(pudu::mkNote(pudu::mkPitch('E',0,5), "quarter", 0, 2, 0, 1));
+    m2.notes.push_back(pudu::mkNote(pudu::mkPitch('E',0,4), "quarter", 0, 2, 0, 2));
+    s.parts.push_back(pudu::mkPart("P1", "Piano", 0, 4, 4, {m1, m2, m3}, /*staves=*/2));
+
+    auto doc = pudu::staffToJianpu(s);
+    EXPECT_EQ(doc.lines.size(), 3u);
+    int staffV1 = -1, staffV5 = -1, staffV2 = -1;
+    for (const auto& l : doc.lines) {
+        if (l.voice == 1) staffV1 = l.staff;
+        if (l.voice == 5) staffV5 = l.staff;
+        if (l.voice == 2) staffV2 = l.staff;
+    }
+    EXPECT_EQ(staffV1, 1);   // 多数决：个别跨行音符不翻行（旧 max 规则会给 2）
+    EXPECT_EQ(staffV5, 2);
+    EXPECT_EQ(staffV2, 1);   // 平手 → 首个音符的谱表
+
+    // L2 大谱表：旋律回到上行（右手行），伴奏在下行
+    std::string body = l2Body(doc, pudu::JianpuRenderConfig{});
+    EXPECT_GT(countOcc(body, "上·v1,v2"), 0u);
+    EXPECT_GT(countOcc(body, "下·v5"), 0u);
+}
+
 // —— P1 扩展：自适应每行小节数 ——
 // 密排小节（每小节 7 个四分音符，估算宽 ≈ 7×33+2=233px）：
 //   measuresPerLine=4 且 autoFit 开 → 4×233≈932>772 放不下，自动降到 2（2×233≈466 放得下）；

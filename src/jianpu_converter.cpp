@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <set>
 #include <utility>
 #include <vector>
@@ -128,12 +129,32 @@ JianpuDoc staffToJianpu(const Score& score) {
             JianpuLine line;
             line.voice = voice;
             line.partIndex = static_cast<int>(pi);
-            // P2：本声部音符的谱表归属（同一声部通常固定在一根谱表）。取最大值；
-            //   单谱表 / 未标注时为 0，不影响既有行为与 L1/L3 输出。
-            int lineStaff = 0;
+            // P2：本声部音符的谱表归属（同一声部通常固定在一根谱表）。
+            //   多数决：取音符数最多的谱表号。钢琴谱常见少量跨行音符（如左手短暂
+            //   跨到高音谱表），旧 max 规则会被 1 个跨行音符带偏、把整条声部翻成
+            //   下行（旋律整行掉成"左手"、上行全休止）。平手取首个音符的谱表，
+            //   再兜底 1（大谱表上方=右手）。单谱表 / 未标注时为 0，
+            //   不影响既有行为与 L1/L3 输出。
+            std::map<int, int> staffVotes;
+            int firstStaff = -1;
             for (const auto& m : part.measures)
-                for (const auto& n : m.notes)
-                    if (n.voice == voice && n.staff > lineStaff) lineStaff = n.staff;
+                for (const auto& n : m.notes) {
+                    if (n.voice != voice) continue;
+                    ++staffVotes[n.staff];
+                    if (firstStaff < 0) firstStaff = n.staff;
+                }
+            int lineStaff = 0;
+            int bestVotes = 0;
+            bool tie = false;
+            for (const auto& kv : staffVotes) {
+                if (kv.first == 0) continue;              // 未标注不参与多数决
+                if (kv.second > bestVotes) {
+                    bestVotes = kv.second; lineStaff = kv.first; tie = false;
+                } else if (kv.second == bestVotes) {
+                    tie = true;
+                }
+            }
+            if (tie) lineStaff = (firstStaff > 0) ? firstStaff : 1;
             line.staff = lineStaff;   // 仅供 L2 大谱表分组；pair 恒 -1，渲染器再配对
 
             for (const auto& measure : part.measures) {
