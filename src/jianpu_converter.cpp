@@ -567,7 +567,13 @@ const char* kL2GrandCss =
     "font-size:.72rem;color:#9aa0a6;line-height:1.3;}"
     ".grand-label .line-number{margin:0;min-width:auto;font-size:.78rem;color:#5b6470;}"
     ".grand-grid{display:grid;align-items:flex-end;row-gap:10px;}"
-    ".grand-grid .measure{padding:0 1px;}"
+    // 大谱表小节线：每小节左侧一条纵线作小节分隔（首小节即系统开口线）；
+    // 系统末小节经 .final 追加一条细双纵线。box-sizing 全局 border-box，
+    // 故 2px 边框在列宽内、不破坏上下行列对齐。
+    ".grand-grid .measure{padding:0 1px;border-left:2px solid #2b2b2b;}"
+    ".grand-grid .measure.final{position:relative;}"
+    ".grand-grid .measure.final::after{content:'';position:absolute;top:0;"
+    "right:-4px;width:2px;height:100%;background:#2b2b2b;}"
     ".grand-cell{display:inline-block;min-width:2.1em;}";
 
 // —— P1：空声部休止符填充 ——
@@ -803,10 +809,16 @@ std::string l2GrandRow(const JianpuDoc& doc, const std::vector<size_t>& members,
     for (size_t c = 0; c < cols; ++c) {
         size_t idx = begin + c;
         JianpuMeasure merged = l2MergeStaffMeasure(doc, members, role, wantRole, idx, fillEmpty);
-        if (merged.notes.empty())
+        if (merged.notes.empty()) {
             out += "<div class=\"grand-cell\"></div>";
-        else
-            out += l2Measure(merged);
+        } else {
+            std::string md = l2Measure(merged);
+            if (c == cols - 1) {                       // 系统末小节 → 双纵线
+                size_t p = md.find("class=\"measure\"");
+                if (p != std::string::npos) md.replace(p, 15, "class=\"measure final\"");
+            }
+            out += md;
+        }
     }
     return out;
 }
