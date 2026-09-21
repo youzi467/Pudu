@@ -71,6 +71,10 @@ std::string jianpuToL1(const JianpuDoc& doc);
 struct JianpuRenderConfig {
     int measuresPerLine = 0;        // 0=自动（现状，逐行整段输出）；4/6/8/10=固定
     bool fillEmptyVoiceRest = false;// 空声部是否补 0
+    // 自适应每行小节数：当一行小节估算总宽超出可用宽度时，自动逐级降档
+    // （8→6→4→2，取第一个放得下的偶数）。仅对 measuresPerLine>0 生效；
+    // 关闭后严格按 measuresPerLine 渲染。默认开。
+    bool autoFitMeasures = true;
 
     // —— P2 大谱表 ——
     // 手动指定两平行 part 配对为大谱表。元素为 {上游 part 下标, 下游 part 下标}。

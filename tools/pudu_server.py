@@ -180,6 +180,7 @@ DEFAULT_SETTINGS = {
     "fill_empty_voice_rest": "false",   # 空声部小节是否补休止符 0
     "grand_staff": "",                  # 手动大谱表配对，形如 "0,1;2,3"（分号分隔多对，逗号分隔两 part 下标）
     "grand_staff_auto": "true",         # 单一 part 含双谱表时自动合成大谱表
+    "auto_fit_measures": "true",        # 每行小节数自适应降档（超宽自动 8→6→4→2）
 }
 _SETTINGS_MEASURES_OPTIONS = {0, 4, 6, 8, 10}
 
@@ -299,9 +300,9 @@ def render_flags() -> List[str]:
     """依据持久化渲染设置，拼接 Pudu.exe 的 L2 渲染参数列表。
 
     对应设置键（%APPDATA%/Pudu/settings.json）：
-      measures_per_line / fill_empty_voice_rest / grand_staff / grand_staff_auto。
+      measures_per_line / fill_empty_voice_rest / grand_staff / grand_staff_auto / auto_fit_measures。
     依次映射为 CLI：--measures-per-line N / --fill-empty-voice-rest /
-      --grand-staff a,b（每对一次，可重复）/ --no-grand-staff-auto。
+      --grand-staff a,b（每对一次，可重复）/ --no-grand-staff-auto / --no-autofit-measures。
     """
     s = load_settings()
     flags: List[str] = []
@@ -325,6 +326,8 @@ def render_flags() -> List[str]:
                 sys.stderr.write(f"[警告] grand_staff 非法对，忽略: {pair}\n")
     if str(s.get("grand_staff_auto", "true")).lower() in ("false", "0", "no", "off"):
         flags.append("--no-grand-staff-auto")
+    if str(s.get("auto_fit_measures", "true")).lower() in ("false", "0", "no", "off"):
+        flags.append("--no-autofit-measures")
     return flags
 
 
@@ -1168,6 +1171,15 @@ def _write_port_file(port: int) -> None:
         sys.stderr.write(f"[警告] 写端口文件失败 {path}: {e}\n")
 
 
+def _read_running_port(_default: int = PORT) -> int:
+    """读取现有实例的监听端口（port.txt 优先，否则回退默认端口）。"""
+    try:
+        with open(_port_file_path(), "r", encoding="utf-8") as f:
+            return int(f.read().strip())
+    except (OSError, ValueError):
+        return _default
+
+
 # ----------------------------------------------------------------------
 # MAIN
 # ----------------------------------------------------------------------
@@ -1186,7 +1198,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     # 单实例互斥（Windows；env PUDU_SINGLETON=0 关闭，便于测试/多实例）
     if not _acquire_single_instance():
-        sys.stderr.write("[提示] 谱渡 Pudu 已在运行；本次启动自动退出。\n")
+        # 已有实例在跑（单实例互斥）→ 不静默退出：把现有页面带到用户面前。
+        # 提示走 stdout（stderr 在 .bat 里看不到），让双击必出页面。
+        url = f"http://127.0.0.1:{_read_running_port()}/"
+        sys.stdout.write(f"[提示] 谱渡 Pudu 已在运行（单实例），正在打开现有页面: {url}\n")
+        try:
+            webbrowser.open(url)
+        except Exception:  # noqa: BLE001  开浏览器失败不致命
+            pass
         return 0
     import argparse
     p = argparse.ArgumentParser(prog="pudu_server",

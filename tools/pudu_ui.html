@@ -284,6 +284,8 @@
     $("setFill").checked = /^(true|1|yes|on)$/i.test(String(s.fill_empty_voice_rest || ""));
     $("setAutoGrand").checked = /^(true|1|yes|on)$/i.test(
       String(s.grand_staff_auto === undefined ? "true" : s.grand_staff_auto));
+    $("setAutoFit").checked = /^(true|1|yes|on)$/i.test(
+      String(s.auto_fit_measures === undefined ? "true" : s.auto_fit_measures));
     $("setGrandStaff").value = s.grand_staff || "";
     $("settingsMsg").textContent = "";
   }
@@ -301,6 +303,7 @@
         measures_per_line: $("setMeasures").value,
         fill_empty_voice_rest: $("setFill").checked ? "true" : "false",
         grand_staff_auto: $("setAutoGrand").checked ? "true" : "false",
+        auto_fit_measures: $("setAutoFit").checked ? "true" : "false",
         grand_staff: $("setGrandStaff").value.trim()
       };
       $("setSave").disabled = true;
@@ -539,6 +542,9 @@
     </label>
     <label class="check">
       <input id="setAutoGrand" type="checkbox"> 单谱带双谱表自动合成大谱表（钢琴谱上下两行）
+    </label>
+    <label class="check">
+      <input id="setAutoFit" type="checkbox"> 每行小节数自适应降档（超宽自动 4→2）
     </label>
     <label>手动大谱表配对（可多对，如"0,1;2,3"）
       <input id="setGrandStaff" type="text" spellcheck="false" placeholder="留空不启用">

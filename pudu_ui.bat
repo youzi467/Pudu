@@ -23,8 +23,7 @@ echo Starting Pudu local web app...
 echo Browser will open http://127.0.0.1:8765/ - closing this window stops the server.
 "%VENV_PY%" tools\pudu_server.py
 
-if errorlevel 1 (
-    echo.
-    echo [NOTE] Startup failed. If port 8765 is in use, close that program and retry.
-    pause
-)
+rem Pause on any exit so the window never vanishes with no message.
+echo.
+echo [INFO] Server exited. Press any key to close this window.
+pause

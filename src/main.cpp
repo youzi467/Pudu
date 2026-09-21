@@ -360,6 +360,9 @@ int main(int argc, char* argv[]) {
         } else if (a == "--no-grand-staff-auto") {
             // 关闭单一 part+多 staff 的自动大谱表识别（默认开）
             l2Cfg.autoGrandStaff = false;
+        } else if (a == "--no-autofit-measures") {
+            // 关闭自适应每行小节数（默认开；关闭后严格按 --measures-per-line 渲染）
+            l2Cfg.autoFitMeasures = false;
         }
     }
 

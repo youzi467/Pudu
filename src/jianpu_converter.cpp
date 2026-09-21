@@ -647,6 +647,121 @@ std::string l2Systems(const JianpuDoc& doc, int N, bool fillEmpty) {
     return out;
 }
 
+// —— P2b：同谱表声部合并（按拍并成一条音流）——
+// 把大谱表内同一谱表（上/下）的所有 voice 在 idx 处的小节合并：所有实音按 onset
+// 升序并流；同 onset（同拍）的重叠音叠成和弦（chordDegrees）。该谱表整列无实音时，
+// 按需合成休止（fillEmpty），否则留空槽。只影响 L2 渲染，不回改 L0/lines。
+static JianpuMeasure l2MergeStaffMeasure(const JianpuDoc& doc,
+                                         const std::vector<size_t>& members,
+                                         const std::vector<int>& role,
+                                         int wantRole, size_t idx, bool fillEmpty) {
+    JianpuMeasure merged;
+    std::vector<JianpuNote> pool;
+    bool anyReal = false;
+    int beatsD = 0, btD = 0;
+    for (auto li : members) {
+        if (role[li] != wantRole) continue;
+        const auto& L = doc.lines[li];
+        if (idx >= L.measures.size()) continue;
+        const auto& m = L.measures[idx];
+        if (merged.number == 0) merged.number = m.number;
+        if (m.beats)    { beatsD = m.beats;    merged.beats    = m.beats; }
+        if (m.beatType) { btD = m.beatType;    merged.beatType = m.beatType; }
+        merged.implicit = merged.implicit || m.implicit;
+        if (m.notes.empty()) continue;        // 空 voice：交给下方整体合成/忽略
+        anyReal = true;
+        for (const auto& n : m.notes) pool.push_back(n);
+    }
+    if (pool.empty()) {
+        // 该谱表整列无实音 → 按需合成休止；否则留空槽
+        if (fillEmpty && !merged.implicit) {
+            JianpuMeasure tmpl; tmpl.number = merged.number;
+            tmpl.beats = beatsD; tmpl.beatType = btD;
+            merged.notes = l2MeasureRests(tmpl, doc);
+        }
+        return merged;
+    }
+    // 按 onset 升序（同一单位；同起点视为拍对齐）。此时 anyReal 引用已无用，忽略。
+    std::stable_sort(pool.begin(), pool.end(),
+        [](const JianpuNote& a, const JianpuNote& b) { return a.onset < b.onset; });
+    std::vector<JianpuNote> out;
+    for (auto& n : pool) {
+        if (!out.empty() && (n.onset - out.back().onset) < 1e-6) {
+            JianpuNote& root = out.back();
+            if (root.degree == 0) {           // 休止让位给同拍实音
+                out.back() = n; continue;
+            }
+            if (n.degree != 0) {              // 同拍实音 → 叠成和弦成员（相对根音八度偏移）
+                root.chordDegrees.push_back(n.degree);
+                root.chordOctaveDots.push_back(n.octaveDots - root.octaveDots);
+            }
+        } else {
+            out.push_back(n);
+        }
+    }
+    merged.notes = std::move(out);
+    return merged;
+}
+
+// 估算单小节渲染宽度（px）：音符数 × 单音基准宽；长休止按拆拍数放宽；和弦成员叠
+// 在同一槽内不额外增宽；beam 组仍按各数字占宽计。
+static double l2MeasurePx(const JianpuMeasure& m) {
+    constexpr double kNotePx = 33.0;
+    double w = 2.0;                             // 小节左右 padding 余量
+    for (const auto& n : m.notes)
+        w += (n.degree == 0) ? kNotePx * l2RestBeats(n) : kNotePx;
+    return w;
+}
+
+// 大谱表某单位：逐列渲染宽 = max(上/下合并列宽)
+static std::vector<double> l2ColWidthsGrand(const JianpuDoc& doc,
+    const std::vector<size_t>& members, const std::vector<int>& role,
+    size_t maxM, bool fillEmpty) {
+    std::vector<double> w(maxM, 0.0);
+    for (size_t idx = 0; idx < maxM; ++idx) {
+        double up = l2MeasurePx(l2MergeStaffMeasure(doc, members, role, 0, idx, fillEmpty));
+        double dn = l2MeasurePx(l2MergeStaffMeasure(doc, members, role, 1, idx, fillEmpty));
+        w[idx] = (up > dn) ? up : dn;
+    }
+    return w;
+}
+
+// 普通行集合：逐列渲染宽 = 各行列宽取 max（自适应按最宽行/最挤分块决定 N）
+static std::vector<double> l2ColWidthsLines(const JianpuDoc& doc,
+                                            const std::vector<size_t>& lines,
+                                            size_t maxM) {
+    std::vector<double> w(maxM, 0.0);
+    for (auto li : lines) {
+        const auto& L = doc.lines[li];
+        for (size_t idx = 0; idx < L.measures.size() && idx < maxM; ++idx)
+            if (l2MeasurePx(L.measures[idx]) > w[idx]) w[idx] = l2MeasurePx(L.measures[idx]);
+    }
+    return w;
+}
+
+// 不重叠 N 档分块：是否每一块累计宽都不超可用宽
+static bool l2FitsChunk(const std::vector<double>& w, int n, double usable) {
+    for (size_t k = 0; k < w.size(); k += static_cast<size_t>(n)) {
+        double s = 0;
+        size_t lim = std::min(k + static_cast<size_t>(n), w.size());
+        for (size_t i = k; i < lim; ++i) s += w[i];
+        if (s > usable) return false;
+    }
+    return true;
+}
+
+// 逐偶数档降档求第一个放得下的 N（8→6→4→2），全不行则回退到 2
+static int l2FitN(const std::vector<double>& w, int desired, double usable) {
+    for (int n = desired - (desired & 1); n >= 2; n -= 2)
+        if (l2FitsChunk(w, n, usable)) return n;
+    return 2;
+}
+
+// 每行可用宽度（px）：内容宽 856 减去行首节号/声部标签（普通行），或花括号/列标签
+// /行首节号（大谱表）。略保守以留白。
+static constexpr double kLineUsablePx  = 772.0;
+static constexpr double kGrandUsablePx = 756.0;
+
 // —— P2 大谱表渲染 ——
 // 大谱表 = 若干「上行行」(staff=1 / 手动配对上游) + 若干「下行行」(staff=2 / 下游)。
 // 同一系统的上下行按小节【列对齐】渲染（绝不各自换行错位），左侧花括号连接，
@@ -659,7 +774,46 @@ std::string l2GrandBrace() {
            "stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"/></svg>";
 }
 
+// 大谱表一行（上=右手 / 下=左手）：标签列 + 该谱表合并后的各小节。
+// 标签列：行首小节号（仅上行）+ 「上/下·v…（合并声部名）」；小节列用共享网格占位，
+// 使上行/下行同名小节严格列对齐。
+std::string l2GrandRow(const JianpuDoc& doc, const std::vector<size_t>& members,
+                       const std::vector<int>& role, int wantRole,
+                       const std::vector<int>& voices, bool isFirst,
+                       size_t begin, size_t cols, bool fillEmpty) {
+    std::string out = "<div class=\"grand-label\">";
+    if (isFirst) {
+        for (auto li : members)
+            if (role[li] == wantRole) {
+                const auto& L = doc.lines[li];
+                if (begin < L.measures.size()) {
+                    out += "<span class=\"line-number\">" + std::to_string(L.measures[begin].number) + "</span>";
+                    break;
+                }
+            }
+    }
+    std::string side = (wantRole == 1) ? "下" : "上";
+    std::string vlabel;
+    for (size_t i = 0; i < voices.size(); ++i) {
+        if (i) vlabel += ",";
+        vlabel += "v" + std::to_string(voices[i]);
+    }
+    out += "<span>" + side + (vlabel.empty() ? "" : "·" + vlabel) + "</span>";
+    out += "</div>";
+    for (size_t c = 0; c < cols; ++c) {
+        size_t idx = begin + c;
+        JianpuMeasure merged = l2MergeStaffMeasure(doc, members, role, wantRole, idx, fillEmpty);
+        if (merged.notes.empty())
+            out += "<div class=\"grand-cell\"></div>";
+        else
+            out += l2Measure(merged);
+    }
+    return out;
+}
+
 // 渲染一个系统单位的整条大谱表（members 有序：上行行在前，下行行在后）。
+// [P2b 合并] 不再逐 voice 出行；同一谱表的所有 voice 合并成一行 → 每系统恰好两行：
+//   上行 = 所有上行(role 0) 声部合并，下行 = 所有下行(role 1) 声部合并。
 std::string l2GrandSystems(const JianpuDoc& doc, const std::vector<size_t>& members,
                            const std::vector<int>& role, int N, bool fillEmpty) {
     size_t maxM = 0;
@@ -668,6 +822,14 @@ std::string l2GrandSystems(const JianpuDoc& doc, const std::vector<size_t>& memb
     int W = (N > 0) ? N : static_cast<int>(maxM);   // 未指定时整段作一个系统（保持列对齐）
     if (W <= 0) W = 1;
 
+    // 按谱表分上/下两组（声部名供行标签显示）
+    std::vector<size_t> up, down;
+    std::vector<int> upV, downV;
+    for (auto li : members) {
+        if (role[li] == 1) { down.push_back(li); downV.push_back(doc.lines[li].voice); }
+        else               { up.push_back(li);   upV.push_back(doc.lines[li].voice); }
+    }
+
     std::string out;
     for (size_t k = 0; k * static_cast<size_t>(W) < maxM; ++k) {
         size_t begin = k * static_cast<size_t>(W);
@@ -675,30 +837,11 @@ std::string l2GrandSystems(const JianpuDoc& doc, const std::vector<size_t>& memb
         out += "<div class=\"system system-grand\"><div class=\"grand-wrap\">";
         out += l2GrandBrace();
         out += "<div class=\"grand-body\">";
-        // 【列对齐关键】所有上下行共用同一网格：第 0 列=行标签，其后每列=同一个小节。
-        //   网格列宽按全部行在对应列的 max-content 取最大，故上下行同名小节严格对齐。
+        // 【列对齐关键】上下两行共用同一网格：第 0 列=行标签，其后每列=同一个小节。
         out += "<div class=\"grand-grid\" style=\"grid-template-columns:auto repeat("
                + std::to_string(cols) + ",max-content)\">";
-        bool numbered = true;   // 小节号只标首个上行行
-        for (auto li : members) {
-            const auto& L = doc.lines[li];
-            // 行标签（左列）：小区节号（仅首行）+ 上/下行标记
-            out += "<div class=\"grand-label\">";
-            if (numbered && begin < L.measures.size())
-                out += "<span class=\"line-number\">" + std::to_string(L.measures[begin].number) + "</span>";
-            numbered = false;
-            out += "<span>" + std::string(role[li] == 1 ? "下·" : "上·") +
-                   "v" + std::to_string(L.voice) + "</span>";
-            out += "</div>";
-            // 本行各小节（第 1..cols 列）
-            for (size_t c = 0; c < cols; ++c) {
-                size_t idx = begin + c;
-                if (idx < L.measures.size())
-                    out += l2MeasureFilled(L.measures[idx], doc, fillEmpty);
-                else
-                    out += "<div class=\"grand-cell\"></div>";
-            }
-        }
+        out += l2GrandRow(doc, members, role, 0, upV,   true,  begin, cols, fillEmpty);
+        out += l2GrandRow(doc, members, role, 1, downV, false, begin, cols, fillEmpty);
         out += "</div></div></div>"; // grand-grid + grand-body + grand-wrap + system
     }
     return out;
@@ -795,24 +938,49 @@ std::string jianpuToL2(const JianpuDoc& doc, const JianpuRenderConfig& cfg) {
     std::vector<int> pairId, role;
     const bool hasGrand = l2ComputeGrand(doc, cfg, pairId, role);
 
+    // 自适应每行小节数（仅 measuresPerLine>0 时生效）
+    const bool autoFit = cfg.autoFitMeasures && cfg.measuresPerLine > 0;
+
     std::string body;
     if (hasGrand) {
-        // 大谱表：按 doc 顺序归并渲染单元；上下行组内列对齐，普通行独立渲染
+        // 大谱表：按 doc 顺序归并渲染单元；上下行组内列对齐、同谱表声部合并，普通行独立渲染
         auto units = l2BuildUnits(pairId, role);
         for (const auto& u : units) {
             if (!u.grand) {
                 const auto& L = doc.lines[u.lines[0]];
-                if (cfg.measuresPerLine > 0)
-                    body += l2SingleLineSystems(L, doc, cfg.measuresPerLine, cfg.fillEmptyVoiceRest);
+                int N = cfg.measuresPerLine;
+                if (autoFit) {
+                    size_t maxM = L.measures.size();
+                    auto w = l2ColWidthsLines(doc, {u.lines[0]}, maxM);
+                    N = l2FitN(w, cfg.measuresPerLine, kLineUsablePx);
+                }
+                if (N > 0)
+                    body += l2SingleLineSystems(L, doc, N, cfg.fillEmptyVoiceRest);
                 else
                     body += l2LineSlice(L, 0, L.measures.size(), doc, cfg.fillEmptyVoiceRest, false);
             } else {
-                body += l2GrandSystems(doc, u.lines, role, cfg.measuresPerLine, cfg.fillEmptyVoiceRest);
+                int N = cfg.measuresPerLine;
+                if (autoFit) {
+                    size_t maxM = 0;
+                    for (auto li : u.lines) maxM = std::max(maxM, doc.lines[li].measures.size());
+                    auto w = l2ColWidthsGrand(doc, u.lines, role, maxM, cfg.fillEmptyVoiceRest);
+                    N = l2FitN(w, cfg.measuresPerLine, kGrandUsablePx);
+                }
+                body += l2GrandSystems(doc, u.lines, role, N, cfg.fillEmptyVoiceRest);
             }
         }
-    } else if (cfg.measuresPerLine > 0) {
-        // P1：固定每行小节数 → 按系统切分，仅系统首行标小节号
-        body = l2Systems(doc, cfg.measuresPerLine, cfg.fillEmptyVoiceRest);
+    } else if (autoFit || cfg.measuresPerLine > 0) {
+        // P1：固定/自适应每行小节数 → 按系统切分，仅系统首行标小节号
+        int N = cfg.measuresPerLine;
+        if (autoFit) {
+            std::vector<size_t> all(doc.lines.size());
+            for (size_t i = 0; i < doc.lines.size(); ++i) all[i] = i;
+            size_t maxM = 0;
+            for (const auto& l : doc.lines) maxM = std::max(maxM, l.measures.size());
+            auto w = l2ColWidthsLines(doc, all, maxM);
+            N = l2FitN(w, cfg.measuresPerLine, kLineUsablePx);
+        }
+        body = l2Systems(doc, N, cfg.fillEmptyVoiceRest);
     } else {
         // 默认：整段单行输出（与 v0.9.1 逐字节一致），空声部仍可按需补 0
         for (const auto& line : doc.lines) {

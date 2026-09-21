@@ -258,6 +258,13 @@ C:/Users/13157/.workbuddy/binaries/python/envs/default/Scripts/python.exe tools/
 - --to-musicxml [out.musicxml]：输出反向生成的 MusicXML。未给路径时使用默认文件名。
 - --apply-postcorrect：在转换后挂载音乐规则后处理引擎。
 - --postcorrect-report <path>：把后处理的 applied / flagged 审计轨迹写入 JSON。
+- --measures-per-line <0|4|6|8|10>：L2 每行固定小节数（0=不强制切行，逐行整段输出）。
+- --no-autofit-measures：关闭「每行小节数自适应降档」。默认开启：当一行小节估算
+  总宽超出可用宽度时自动逐级降档（8→6→4→2），直到放得下；关闭后严格按
+  --measures-per-line 渲染。
+- --fill-empty-voice-rest：L2 对音空小节（implicit 外）补等时值休止符 0。
+- --grand-staff <上游part下标,下游part下标>：手动指定两平行 part 配对大谱表（可重复）。
+- --no-grand-staff-auto：关闭单 part 含双谱表时的自动大谱表合成（默认自动）。
 
 ### 4.4 变调重算
 
@@ -401,6 +408,26 @@ L2 输出自包含 HTML 文件，用浏览器打开即可查看：
 - 连音弧
 
 L2 适合直接阅读与打印，也是向非技术用户展示的推荐格式。
+
+#### 渲染设置
+
+以上均为 CLI 参数（也对应网页端「设置」弹窗与 `%APPDATA%/Pudu/settings.json` 键）：
+
+- **固定每行小节数**（`--measures-per-line <4|6|8|10>`，键 `measures_per_line`）：把谱面按
+  N 小节切分为「系统」，每系统仅首行标注起始小节号。默认由网页端发送 4。
+- **自适应降档**（键 `auto_fit_measures`，默认开）：当一行 N 小节估算总宽超出可用宽度时，
+  自动逐级降档（8→6→4→2），取第一个放得下的档位；稀疏小节不会误降。文件夹、切换
+  到非紧凑谱面可配合 `--no-autofit-measures` 关闭（严格按配置渲染）。
+- **空声部补 0**（`--fill-empty-voice-rest`，键 `fill_empty_voice_rest`）：对 `notes` 为空的
+  小节（不含弱起 implicit）补等时值休止符 `0`。
+- **大谱表**（钢琴谱上下两行）：
+  - **自动合成**（`autoGrandStaff`，键 `grand_staff_auto`，默认开）：单一 part 内含双谱表
+    （存在 `<staff> 2`）时自动合并为上下两行；`--no-grand-staff-auto` 可关闭。
+  - **手动配对**（`--grand-staff <上游part,下游part>`，可重复，键 `grand_staff`）：把两个平行
+    part 配为大谱表，形如 `0,1;2,3`。
+  - **同谱表声部合并**：每个系统恰好渲染**两行**——上行=所有上行声部（右手）合并，
+    下行=所有下行声部（左手）合并；同拍音符叠成和弦，不同拍按序并流。行标签形如
+    `上·v1,v2` / `下·v5,v6`。仅改变 L2 外观，不影响 L1 文本 / JSON 的逐声部语义。
 
 ### 6.3 L3 结构化 JSON
 

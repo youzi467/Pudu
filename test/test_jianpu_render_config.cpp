@@ -224,3 +224,76 @@ TEST(parser_reads_staff_and_staves) {
     EXPECT_TRUE(sawStaff1);
     EXPECT_TRUE(sawStaff2);
 }
+
+// —— P2b：同谱表声部合并成两行 ——
+// 单 part、双谱表、每谱表 2 voice（v1,v2 上行；v5,v6 下行）。
+// 要求：每系统恰好 2 行（上=合并上行声部，下=合并下行声部），同拍重叠音叠成和弦。
+TEST(grand_merge_staffs_into_two_rows) {
+    pudu::Score s;
+    pudu::Measure m1, m2;
+    m1.number = 1;
+    m2.number = 2;
+    // 上行 v1+v2：第 1 小节同拍(onset0) C5+E5 → 应叠成和弦(1+3)
+    m1.notes.push_back(pudu::mkNote(pudu::mkPitch('C',0,5), "quarter", 0, 1, 0, 1));
+    m1.notes.push_back(pudu::mkNote(pudu::mkPitch('E',0,5), "quarter", 0, 2, 0, 1));
+    // 下行 v5+v6：v5 整拍 C4(onset0)、v6 G4(onset2)
+    m1.notes.push_back(pudu::mkNote(pudu::mkPitch('C',0,4), "whole",    0, 5, 0, 2));
+    m1.notes.push_back(pudu::mkNote(pudu::mkPitch('G',0,4), "quarter",  2, 6, 0, 2));
+    // 第 2 小节：上行仅 v1、下行仅 v5（空声部不参与合并）
+    m2.notes.push_back(pudu::mkNote(pudu::mkPitch('G',0,5), "quarter", 0, 1, 0, 1));
+    m2.notes.push_back(pudu::mkNote(pudu::mkPitch('G',0,4), "quarter", 0, 5, 0, 2));
+    s.parts.push_back(pudu::mkPart("P1", "Piano", 0, 4, 4, {m1, m2}, /*staves=*/2));
+
+    auto doc = pudu::staffToJianpu(s);
+    // 4 个 distinct voice → 4 行（L0 保持原样，仅 L2 渲染合并）
+    EXPECT_EQ(doc.lines.size(), 4u);
+
+    std::string body = l2Body(doc, pudu::JianpuRenderConfig{});
+    // 恰好 2 个行标签（上行、下行），该谱表各 voice 已合并
+    EXPECT_EQ(countOcc(body, "class=\"grand-label\""), 2u);
+    EXPECT_GT(countOcc(body, "上·v1,v2"), 0u);   // 上行合并标签
+    EXPECT_GT(countOcc(body, "下·v5,v6"), 0u);   // 下行合并标签
+    // 上行同拍 C+E 已叠成和弦（chord 渲染类出现）
+    EXPECT_GT(countOcc(body, "<span class=\"chord\">"), 0u);
+    // 仍是列对齐网格
+    EXPECT_GT(countOcc(body, "class=\"grand-grid\""), 0u);
+}
+
+// —— P1 扩展：自适应每行小节数 ——
+// 密排小节（每小节 7 个四分音符，估算宽 ≈ 7×33+2=233px）：
+//   measuresPerLine=4 且 autoFit 开 → 4×233≈932>772 放不下，自动降到 2（2×233≈466 放得下）；
+//   autoFit 关 → 严格按 4 渲染。8 小节 → 自适应 4 个系统 / 固定 2 个系统。
+TEST(render_auto_fit_measures_downshift) {
+    pudu::JianpuDoc doc;
+    doc.mode = "major"; doc.tonicLabel = "1=C"; doc.beats = 4; doc.beatType = 4;
+    pudu::JianpuLine l; l.voice = 1;
+    for (int m = 1; m <= 8; ++m) {
+        pudu::JianpuMeasure jm; jm.number = m;
+        for (int i = 0; i < 7; ++i) {
+            pudu::JianpuNote jn;
+            jn.degree = (m + i) % 7 + 1;
+            jm.notes.push_back(jn);
+        }
+        l.measures.push_back(jm);
+    }
+    doc.lines.push_back(l);
+
+    pudu::JianpuRenderConfig on;   on.measuresPerLine = 4; // autoFitMeasures 默认 true
+    pudu::JianpuRenderConfig off;  off.measuresPerLine = 4; off.autoFitMeasures = false;
+
+    std::string bOn = l2Body(doc, on);
+    std::string bOff = l2Body(doc, off);
+    EXPECT_EQ(countOcc(bOn, "class=\"system\""), 4u);   // 自适应降到 2 → ceil(8/2)=4 系统
+    EXPECT_EQ(countOcc(bOff, "class=\"system\""), 2u);  // 固定 4 → ceil(8/4)=2 系统
+}
+
+// 稀疏小节（每小节 1 音）不触发降档：autoFit 与禁用结果一致（都为 ceil(9/4)=3 系统）
+TEST(render_auto_fit_sparse_no_downshift) {
+    auto doc = mkDoc(1, 9);
+    pudu::JianpuRenderConfig on;  on.measuresPerLine = 4;
+    pudu::JianpuRenderConfig off; off.measuresPerLine = 4; off.autoFitMeasures = false;
+    std::string bOn = l2Body(doc, on);
+    std::string bOff = l2Body(doc, off);
+    EXPECT_EQ(countOcc(bOn, "class=\"system\""), 3u);
+    EXPECT_EQ(countOcc(bOff, "class=\"system\""), 3u);
+}
