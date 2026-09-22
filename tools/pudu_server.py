@@ -291,9 +291,12 @@ def build_ocr_cmd(image: str, mx_out: str, engine: str = DEFAULT_ENGINE) -> List
             "--f3-geometric", "--rhythm-geometric"]
 
 
-def build_render_cmd(mx: str, l2_html: str) -> List[str]:
+def build_render_cmd(mx: str, l2_html: str, title: str = "") -> List[str]:
     """L2 简谱渲染：Pudu.exe <mx> --to-jianpu-l2 <out.html> [渲染设置]。"""
-    return [PUDU_EXE, mx, "--to-jianpu-l2", l2_html] + render_flags()
+    cmd = [PUDU_EXE, mx, "--to-jianpu-l2", l2_html]
+    if title:   # 手动标题兜底（AV 导出常无 credit，谱面标题缺失时由 UI 输入）
+        cmd += ["--title", title]
+    return cmd + render_flags()
 
 
 def render_flags() -> List[str]:
@@ -331,10 +334,13 @@ def render_flags() -> List[str]:
     return flags
 
 
-def build_fixture_cmd(image: str, l2_html: str) -> List[str]:
+def build_fixture_cmd(image: str, l2_html: str, title: str = "") -> List[str]:
     """fixture 演示：Pudu.exe --from-omr <img> --omr-engine fixture --to-jianpu-l2。"""
-    return [PUDU_EXE, "--from-omr", image, "--omr-engine", "fixture",
-            "--to-jianpu-l2", l2_html] + render_flags()
+    cmd = [PUDU_EXE, "--from-omr", image, "--omr-engine", "fixture",
+           "--to-jianpu-l2", l2_html]
+    if title:
+        cmd += ["--title", title]
+    return cmd + render_flags()
 
 
 def parse_multipart(body: bytes, content_type: str) -> Tuple[str, bytes]:
@@ -501,6 +507,7 @@ class Job:
     engine: str = DEFAULT_ENGINE   # "audiveris" | "oemer"
     demo: bool = False
     filename: str = ""
+    title: str = ""                # 手动标题（UI 输入，空 = 自动取谱面标题）
     input_ext: str = ""
     input_path: Optional[str] = None
     state: str = JobState.QUEUED
@@ -554,12 +561,12 @@ class JobManager:
         self._jobs: Dict[str, Job] = {}
 
     def create(self, ext: str, demo: bool = False, filename: str = "",
-               engine: str = DEFAULT_ENGINE) -> Job:
+               engine: str = DEFAULT_ENGINE, title: str = "") -> Job:
         job_id = _new_job_id()
         d = os.path.join(self.root, job_id)
         os.makedirs(d, exist_ok=True)
         job = Job(id=job_id, dir=d, engine=engine, demo=demo,
-                  filename=filename, input_ext=ext)
+                  filename=filename, title=title, input_ext=ext)
         with self._lock:
             self._jobs[job_id] = job
         return job
@@ -770,14 +777,14 @@ def _run_fixedpoint(mgr: JobManager, job: Job):
 
 def _run_render(mgr: JobManager, job: Job):
     """L2 简谱渲染子进程。"""
-    cmd = build_render_cmd(job.final_mx, job.l2_html)
+    cmd = build_render_cmd(job.final_mx, job.l2_html, job.title)
     _run_pudu(mgr, job, cmd, "render", "简谱渲染中…")
 
 
 def _run_demo(mgr: JobManager, job: Job):
     """fixture 演示管线（零 GPU）：Pudu 原生写 <input>.pudu.musicxml + L2。"""
     mgr.set_state(job, JobState.RUNNING, "extract", "演示样例生成中…")
-    cmd = build_fixture_cmd(job.input_path, job.l2_html)
+    cmd = build_fixture_cmd(job.input_path, job.l2_html, job.title)
     _run_pudu(mgr, job, cmd, "render", "简谱渲染中…")
     src = job.input_path + ".pudu.musicxml"
     if not os.path.isfile(src):
@@ -1030,6 +1037,7 @@ class PuduHandler(BaseHTTPRequestHandler):
         qs = urllib.parse.parse_qs(query)
         demo = qs.get("demo", ["0"])[0] in ("1", "true", "yes")
         engine = qs.get("engine", [DEFAULT_ENGINE])[0]
+        title = (qs.get("title", [""])[0] or "").strip()
         if engine not in _ENGINES:
             self._send_400(f"未知引擎: {engine}（可选: {sorted(_ENGINES)}）")
             return
@@ -1066,7 +1074,8 @@ class PuduHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            job = self.mgr.create(ext, demo=demo, filename=filename, engine=engine)
+            job = self.mgr.create(ext, demo=demo, filename=filename, engine=engine,
+                                  title=title)
             in_path = os.path.join(job.dir, "input" + ext)
             with open(in_path, "wb") as f:
                 f.write(body)
@@ -1093,6 +1102,7 @@ class PuduHandler(BaseHTTPRequestHandler):
             return
         src = (payload.get("path") or "").strip()
         engine = payload.get("engine", DEFAULT_ENGINE)
+        title = (payload.get("title") or "").strip()
         if engine not in _ENGINES:
             self._send_400(f"未知引擎: {engine}（可选: {sorted(_ENGINES)}）")
             return
@@ -1106,7 +1116,7 @@ class PuduHandler(BaseHTTPRequestHandler):
             return
         try:
             job = self.mgr.create(ext, demo=False, filename=os.path.basename(src),
-                                  engine=engine)
+                                  engine=engine, title=title)
             in_path = os.path.join(job.dir, "input" + ext)
             shutil.copyfile(src, in_path)
             job.input_path = in_path

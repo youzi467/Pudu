@@ -96,6 +96,13 @@
     font-size:14px; color:var(--text); cursor:pointer; }
   .modal-box label.check input { width:auto; margin:0; }
   .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+
+  /* ---- 手动标题兜底（谱面未识别出标题时由用户输入） ---- */
+  .title-input {
+    width:100%; margin-top:10px; padding:9px 12px;
+    border:1px solid var(--line); border-radius:8px;
+    font-size:14px; box-sizing:border-box; background:#fff;
+  }
 </style>
 </head>
 <body>
@@ -122,6 +129,8 @@
     <button id="demoBtn" class="demo-btn hidden" type="button">
       【运行演示样例（秒级，无需选图）】
     </button>
+    <input id="titleInput" class="title-input" type="text" maxlength="120"
+           placeholder="简谱标题（可选；谱面未识别出标题时手动指定）">
     <input id="fileInput" type="file" accept=".png,.jpg,.jpeg,.bmp,.webp,.pdf" class="hidden">
     <div id="busy">上传中…</div>
   </div>
@@ -202,7 +211,8 @@
     fetch("/api/open", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: path, engine: state.engine })
+      body: JSON.stringify({ path: path, engine: state.engine,
+                             title: ($("titleInput").value || "").trim() })
     }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { r: r, j: j }; }); })
       .then(function (res) {
         $("busy").style.display = "none";
@@ -394,6 +404,8 @@
     var q = [];
     if (state.demo) q.push("demo=1");
     else q.push("engine=" + encodeURIComponent(state.engine));
+    var title = ($("titleInput").value || "").trim();
+    if (title) q.push("title=" + encodeURIComponent(title));
     var url = "/api/ocr" + (q.length ? "?" + q.join("&") : "");
     var opts = { method: "POST" };
     if (state.pendingFile) {

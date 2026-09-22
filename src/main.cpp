@@ -10,7 +10,9 @@
 
 #include <iostream>
 #include <windows.h>
+#include <shellapi.h>
 #include <string>
+#include <vector>
 #include <fstream>
 #include <sstream>
 #include <climits>
@@ -82,6 +84,47 @@ const char* kEmbeddedSample = R"(<?xml version="1.0" encoding="UTF-8"?>
 
 int main(int argc, char* argv[]) {
     SetConsoleOutputCP(65001); // 设置控制台输出代码页为 UTF-8，消除中文乱码
+
+#ifdef _WIN32
+    // Windows 窄字符 argv 按 ANSI 代码页（cp936）解码，中文参数（如 --title）会
+    // 乱码。改用宽字符命令行重新取参并转 UTF-8；后续代码仍按 argc/argv 使用。
+    {
+        int wArgc = 0;
+        LPWSTR* wArgv = CommandLineToArgvW(GetCommandLineW(), &wArgc);
+        if (wArgv && wArgc > 0) {
+            static std::vector<std::string> argStore;
+            static std::vector<char*> argPtrs;
+            argStore.reserve(static_cast<size_t>(wArgc));
+            argPtrs.reserve(static_cast<size_t>(wArgc) + 1);
+            for (int i = 0; i < wArgc; ++i) {
+                int len = WideCharToMultiByte(CP_UTF8, 0, wArgv[i], -1,
+                                              nullptr, 0, nullptr, nullptr);
+                std::string s(len > 1 ? len - 1 : 0, '\0');
+                if (len > 1)
+                    WideCharToMultiByte(CP_UTF8, 0, wArgv[i], -1,
+                                        s.data(), len, nullptr, nullptr);
+                argStore.push_back(std::move(s));
+            }
+            for (auto& s : argStore) argPtrs.push_back(s.data());
+            argPtrs.push_back(nullptr);
+            argc = wArgc;
+            argv = argPtrs.data();
+            LocalFree(wArgv);
+        }
+    }
+#endif
+
+    // 标题覆盖：--title <字符串>。指定即优先生效，覆盖 MusicXML 内的标题/credit。
+    // 背景：AV 导出的 MusicXML 常无标题（无 OCR 语言包 → 无 credit），简谱会显示
+    // 「无标题」；桌面端 UI 允许手动输入标题兜底。
+    std::string titleOverride;
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--title" && i + 1 < argc) {
+            titleOverride = argv[i + 1];
+            ++i;
+        }
+    }
+
     std::cout << "=== 谱渡 Pudu · MusicXML 解析骨架 ===" << std::endl;
 
     // 阶段1 OMR 黑盒集成：--from-omr <input> [--omr-engine oemer|audiveris|fixture]
@@ -256,6 +299,7 @@ int main(int argc, char* argv[]) {
             std::cerr << "[错误] 简谱文本解析失败: " << perr << std::endl;
             return 1;
         }
+        if (!titleOverride.empty()) jianpuTextDoc.title = titleOverride;
     }
 
     pudu::Score score;
@@ -271,6 +315,9 @@ int main(int argc, char* argv[]) {
             return 1;
         }
     }
+
+    // 手动标题覆盖（--title 指定即优先生效，作用于 L1/L2/L3 与反向转换全部输出）
+    if (!titleOverride.empty()) score.title = titleOverride;
 
     // 统一构建简谱文档：若请求变调则先变调再投影（不就地修改 score）。
     //   P1-1：末端可选挂载后处理规则引擎。buildDoc 会被多个输出分支调用，
