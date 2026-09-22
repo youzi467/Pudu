@@ -651,25 +651,23 @@ std::string l2LineSlice(const JianpuLine& line, size_t begin, size_t end,
     return out;
 }
 
-// P1：按 N 小节切分为系统；每系统按 voice 行堆叠，仅首行标小节号
-std::string l2Systems(const JianpuDoc& doc, int N, bool fillEmpty) {
-    size_t maxM = 0;
-    for (const auto& line : doc.lines) maxM = std::max(maxM, line.measures.size());
-    size_t systems = (maxM + N - 1) / N;
-    if (systems == 0 && maxM > 0) systems = 1;
-
+// P1：按 counts 序列切分为系统（counts[k] = 第 k 系统的小节数，逐系统可不同）；
+// 每系统按 voice 行堆叠，仅首行标小节号
+std::string l2Systems(const JianpuDoc& doc, const std::vector<int>& counts, bool fillEmpty) {
     std::string out;
-    for (size_t k = 0; k < systems; ++k) {
-        size_t begin = k * N;
+    size_t begin = 0;
+    for (int c : counts) {
+        size_t n = static_cast<size_t>(c);
         out += "<div class=\"system\">";
         bool numbered = true;   // 该系统首个有内容的 voice 行带小节号
         for (const auto& line : doc.lines) {
             if (line.measures.size() <= begin) continue;
-            size_t le = std::min(begin + N, line.measures.size());
+            size_t le = std::min(begin + n, line.measures.size());
             out += l2LineSlice(line, begin, le, doc, fillEmpty, numbered);
             numbered = false;
         }
         out += "</div>";
+        begin += n;
     }
     return out;
 }
@@ -766,22 +764,37 @@ static std::vector<double> l2ColWidthsLines(const JianpuDoc& doc,
     return w;
 }
 
-// 不重叠 N 档分块：是否每一块累计宽都不超可用宽
-static bool l2FitsChunk(const std::vector<double>& w, int n, double usable) {
-    for (size_t k = 0; k < w.size(); k += static_cast<size_t>(n)) {
-        double s = 0;
-        size_t lim = std::min(k + static_cast<size_t>(n), w.size());
-        for (size_t i = k; i < lim; ++i) s += w[i];
-        if (s > usable) return false;
+// 逐系统贪心打包：从左往右累计列宽，每系统至多 desired 小节、累计宽不超 usable，
+// 放不下下一个小节即换行（单小节超宽仍独占一行）。返回每系统小节数。
+// 取代旧的全局一刀切降档（8→6→4→2 取第一个全篇放得下的 N）——旧规则会被个别
+// 密排小节拖累，稀疏段也被迫降档（整篇锁死 2 小节/行）。
+static std::vector<int> l2PackSystems(const std::vector<double>& w, int desired, double usable) {
+    std::vector<int> counts;
+    size_t i = 0;
+    while (i < w.size()) {
+        double s = 0.0;
+        int c = 0;
+        while (c < desired && i + static_cast<size_t>(c) < w.size() &&
+               (c == 0 || s + w[i + static_cast<size_t>(c)] <= usable)) {
+            s += w[i + static_cast<size_t>(c)];
+            ++c;
+        }
+        counts.push_back(c);
+        i += static_cast<size_t>(c);
     }
-    return true;
+    return counts;
 }
 
-// 逐偶数档降档求第一个放得下的 N（8→6→4→2），全不行则回退到 2
-static int l2FitN(const std::vector<double>& w, int desired, double usable) {
-    for (int n = desired - (desired & 1); n >= 2; n -= 2)
-        if (l2FitsChunk(w, n, usable)) return n;
-    return 2;
+// 固定每行 N 小节的均匀分块（末块可能不足 N）；N<=0 时整段作一个系统
+static std::vector<int> l2UniformCounts(size_t maxM, int N) {
+    std::vector<int> counts;
+    if (N <= 0) {
+        if (maxM > 0) counts.push_back(static_cast<int>(maxM));
+        return counts;
+    }
+    for (size_t i = 0; i < maxM; i += static_cast<size_t>(N))
+        counts.push_back(static_cast<int>(std::min(static_cast<size_t>(N), maxM - i)));
+    return counts;
 }
 
 // 每行可用宽度（px）：内容宽 856 减去行首节号/声部标签（普通行），或花括号/列标签
@@ -848,12 +861,11 @@ std::string l2GrandRow(const JianpuDoc& doc, const std::vector<size_t>& members,
 // [P2b 合并] 不再逐 voice 出行；同一谱表的所有 voice 合并成一行 → 每系统恰好两行：
 //   上行 = 所有上行(role 0) 声部合并，下行 = 所有下行(role 1) 声部合并。
 std::string l2GrandSystems(const JianpuDoc& doc, const std::vector<size_t>& members,
-                           const std::vector<int>& role, int N, bool fillEmpty) {
+                           const std::vector<int>& role, const std::vector<int>& counts,
+                           bool fillEmpty) {
     size_t maxM = 0;
     for (auto li : members) maxM = std::max(maxM, doc.lines[li].measures.size());
-    if (maxM == 0) return "";
-    int W = (N > 0) ? N : static_cast<int>(maxM);   // 未指定时整段作一个系统（保持列对齐）
-    if (W <= 0) W = 1;
+    if (maxM == 0 || counts.empty()) return "";
 
     // 按谱表分上/下两组（声部名供行标签显示）
     std::vector<size_t> up, down;
@@ -864,9 +876,10 @@ std::string l2GrandSystems(const JianpuDoc& doc, const std::vector<size_t>& memb
     }
 
     std::string out;
-    for (size_t k = 0; k * static_cast<size_t>(W) < maxM; ++k) {
-        size_t begin = k * static_cast<size_t>(W);
-        size_t cols = std::min(static_cast<size_t>(W), maxM - begin);
+    size_t begin = 0;
+    for (int c : counts) {
+        size_t cols = static_cast<size_t>(c);
+        if (cols == 0) continue;
         out += "<div class=\"system system-grand\"><div class=\"grand-wrap\">";
         out += l2GrandBrace();
         out += "<div class=\"grand-body\">";
@@ -876,21 +889,26 @@ std::string l2GrandSystems(const JianpuDoc& doc, const std::vector<size_t>& memb
         out += l2GrandRow(doc, members, role, 0, upV,   true,  begin, cols, fillEmpty);
         out += l2GrandRow(doc, members, role, 1, downV, false, begin, cols, fillEmpty);
         out += "</div></div></div>"; // grand-grid + grand-body + grand-wrap + system
+        begin += cols;
     }
     return out;
 }
 
-// 单条非大谱表行、固定每行 N 小节：渲染为独立系统（每系统一行，行首带小节号）。
-std::string l2SingleLineSystems(const JianpuLine& line, const JianpuDoc& doc, int N, bool fillEmpty) {
+// 单条非大谱表行按 counts 序列渲染为独立系统（每系统一行，行首带小节号）。
+std::string l2SingleLineSystems(const JianpuLine& line, const JianpuDoc& doc,
+                                const std::vector<int>& counts, bool fillEmpty) {
     size_t m = line.measures.size();
     if (m == 0) return "";
     std::string out;
-    for (size_t k = 0; k * static_cast<size_t>(N) < m; ++k) {
-        size_t begin = k * static_cast<size_t>(N);
-        size_t le = std::min(begin + static_cast<size_t>(N), m);
+    size_t begin = 0;
+    for (int c : counts) {
+        size_t n = static_cast<size_t>(c);
+        size_t le = std::min(begin + n, m);
+        if (le <= begin) break;
         out += "<div class=\"system\">";
         out += l2LineSlice(line, begin, le, doc, fillEmpty, true);
         out += "</div>";
+        begin = le;
     }
     return out;
 }
@@ -981,39 +999,47 @@ std::string jianpuToL2(const JianpuDoc& doc, const JianpuRenderConfig& cfg) {
         for (const auto& u : units) {
             if (!u.grand) {
                 const auto& L = doc.lines[u.lines[0]];
-                int N = cfg.measuresPerLine;
-                if (autoFit) {
-                    size_t maxM = L.measures.size();
-                    auto w = l2ColWidthsLines(doc, {u.lines[0]}, maxM);
-                    N = l2FitN(w, cfg.measuresPerLine, kLineUsablePx);
-                }
-                if (N > 0)
-                    body += l2SingleLineSystems(L, doc, N, cfg.fillEmptyVoiceRest);
-                else
+                if (cfg.measuresPerLine > 0) {
+                    std::vector<int> counts;
+                    if (autoFit) {
+                        auto w = l2ColWidthsLines(doc, {u.lines[0]}, L.measures.size());
+                        counts = l2PackSystems(w, cfg.measuresPerLine, kLineUsablePx);
+                    } else {
+                        counts = l2UniformCounts(L.measures.size(), cfg.measuresPerLine);
+                    }
+                    body += l2SingleLineSystems(L, doc, counts, cfg.fillEmptyVoiceRest);
+                } else {
                     body += l2LineSlice(L, 0, L.measures.size(), doc, cfg.fillEmptyVoiceRest, false);
-            } else {
-                int N = cfg.measuresPerLine;
-                if (autoFit) {
-                    size_t maxM = 0;
-                    for (auto li : u.lines) maxM = std::max(maxM, doc.lines[li].measures.size());
-                    auto w = l2ColWidthsGrand(doc, u.lines, role, maxM, cfg.fillEmptyVoiceRest);
-                    N = l2FitN(w, cfg.measuresPerLine, kGrandUsablePx);
                 }
-                body += l2GrandSystems(doc, u.lines, role, N, cfg.fillEmptyVoiceRest);
+            } else {
+                size_t maxM = 0;
+                for (auto li : u.lines) maxM = std::max(maxM, doc.lines[li].measures.size());
+                std::vector<int> counts;
+                if (autoFit) {
+                    auto w = l2ColWidthsGrand(doc, u.lines, role, maxM, cfg.fillEmptyVoiceRest);
+                    counts = l2PackSystems(w, cfg.measuresPerLine, kGrandUsablePx);
+                } else if (cfg.measuresPerLine > 0) {
+                    counts = l2UniformCounts(maxM, cfg.measuresPerLine);
+                } else {
+                    counts.push_back(static_cast<int>(maxM));   // 未指定：整段一个系统
+                }
+                body += l2GrandSystems(doc, u.lines, role, counts, cfg.fillEmptyVoiceRest);
             }
         }
     } else if (autoFit || cfg.measuresPerLine > 0) {
         // P1：固定/自适应每行小节数 → 按系统切分，仅系统首行标小节号
-        int N = cfg.measuresPerLine;
+        std::vector<size_t> all(doc.lines.size());
+        for (size_t i = 0; i < doc.lines.size(); ++i) all[i] = i;
+        size_t maxM = 0;
+        for (const auto& l : doc.lines) maxM = std::max(maxM, l.measures.size());
+        std::vector<int> counts;
         if (autoFit) {
-            std::vector<size_t> all(doc.lines.size());
-            for (size_t i = 0; i < doc.lines.size(); ++i) all[i] = i;
-            size_t maxM = 0;
-            for (const auto& l : doc.lines) maxM = std::max(maxM, l.measures.size());
             auto w = l2ColWidthsLines(doc, all, maxM);
-            N = l2FitN(w, cfg.measuresPerLine, kLineUsablePx);
+            counts = l2PackSystems(w, cfg.measuresPerLine, kLineUsablePx);
+        } else {
+            counts = l2UniformCounts(maxM, cfg.measuresPerLine);
         }
-        body = l2Systems(doc, N, cfg.fillEmptyVoiceRest);
+        body = l2Systems(doc, counts, cfg.fillEmptyVoiceRest);
     } else {
         // 默认：整段单行输出（与 v0.9.1 逐字节一致），空声部仍可按需补 0
         for (const auto& line : doc.lines) {

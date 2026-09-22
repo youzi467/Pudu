@@ -304,8 +304,8 @@ TEST(grand_line_staff_majority_vote_cross_staff) {
 
 // —— P1 扩展：自适应每行小节数 ——
 // 密排小节（每小节 7 个四分音符，估算宽 ≈ 7×33+2=233px）：
-//   measuresPerLine=4 且 autoFit 开 → 4×233≈932>772 放不下，自动降到 2（2×233≈466 放得下）；
-//   autoFit 关 → 严格按 4 渲染。8 小节 → 自适应 4 个系统 / 固定 2 个系统。
+//   autoFit 开 → 逐系统贪心：3×233≈699≤772 放得下、4×233≈932 超 → 每系统 3 小节，
+//   8 小节 → 3 系统（3+3+2）；autoFit 关 → 严格按 4 渲染 → 2 系统。
 TEST(render_auto_fit_measures_downshift) {
     pudu::JianpuDoc doc;
     doc.mode = "major"; doc.tonicLabel = "1=C"; doc.beats = 4; doc.beatType = 4;
@@ -326,8 +326,33 @@ TEST(render_auto_fit_measures_downshift) {
 
     std::string bOn = l2Body(doc, on);
     std::string bOff = l2Body(doc, off);
-    EXPECT_EQ(countOcc(bOn, "class=\"system\""), 4u);   // 自适应降到 2 → ceil(8/2)=4 系统
+    EXPECT_EQ(countOcc(bOn, "class=\"system\""), 3u);   // 贪心：3+3+2 = 3 系统
     EXPECT_EQ(countOcc(bOff, "class=\"system\""), 2u);  // 固定 4 → ceil(8/4)=2 系统
+}
+
+// 混合密度逐系统贪心：前 4 小节稀疏（1 音/小节，≈35px）、后 4 小节密排（7 音，≈233px）。
+//   旧全局降档会被密排块拖累到 N=2（8/2=4 系统，稀疏段被迫 2/行）；
+//   贪心逐系统：稀疏段满 4/行，密排段 3/行 → 3 系统（4+3+1），小节数守恒。
+TEST(render_auto_fit_mixed_density_per_system) {
+    pudu::JianpuDoc doc;
+    doc.mode = "major"; doc.tonicLabel = "1=C"; doc.beats = 4; doc.beatType = 4;
+    pudu::JianpuLine l; l.voice = 1;
+    for (int m = 1; m <= 8; ++m) {
+        pudu::JianpuMeasure jm; jm.number = m;
+        int notes = (m <= 4) ? 1 : 7;
+        for (int i = 0; i < notes; ++i) {
+            pudu::JianpuNote jn;
+            jn.degree = (m + i) % 7 + 1;
+            jm.notes.push_back(jn);
+        }
+        l.measures.push_back(jm);
+    }
+    doc.lines.push_back(l);
+
+    pudu::JianpuRenderConfig cfg; cfg.measuresPerLine = 4;
+    std::string body = l2Body(doc, cfg);
+    EXPECT_EQ(countOcc(body, "class=\"system\""), 3u);   // 稀疏 4/行 + 密排 3/行 + 1
+    EXPECT_EQ(countOcc(body, "class=\"measure\""), 8u);  // 小节数守恒
 }
 
 // 稀疏小节（每小节 1 音）不触发降档：autoFit 与禁用结果一致（都为 ceil(9/4)=3 系统）
