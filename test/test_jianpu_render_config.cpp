@@ -251,8 +251,9 @@ TEST(grand_merge_staffs_into_two_rows) {
     std::string body = l2Body(doc, pudu::JianpuRenderConfig{});
     // 恰好 2 个行标签（上行、下行），该谱表各 voice 已合并
     EXPECT_EQ(countOcc(body, "class=\"grand-label\""), 2u);
-    EXPECT_GT(countOcc(body, "上·v1,v2"), 0u);   // 上行合并标签
-    EXPECT_GT(countOcc(body, "下·v5,v6"), 0u);   // 下行合并标签
+    // 行首仅保留小节号：上/下·v… 声部描述已按需求去掉
+    EXPECT_EQ(countOcc(body, "上·"), 0u);
+    EXPECT_EQ(countOcc(body, "下·"), 0u);
     // 上行同拍 C+E 已叠成和弦（chord 渲染类出现）
     EXPECT_GT(countOcc(body, "<span class=\"chord\">"), 0u);
     // 仍是列对齐网格
@@ -296,16 +297,17 @@ TEST(grand_line_staff_majority_vote_cross_staff) {
     EXPECT_EQ(staffV5, 2);
     EXPECT_EQ(staffV2, 1);   // 平手 → 首个音符的谱表
 
-    // L2 大谱表：旋律回到上行（右手行），伴奏在下行
+    // L2 大谱表：旋律回到上行（右手行），伴奏在下行；行首标签已去掉，仅剩小节号
     std::string body = l2Body(doc, pudu::JianpuRenderConfig{});
-    EXPECT_GT(countOcc(body, "上·v1,v2"), 0u);
-    EXPECT_GT(countOcc(body, "下·v5"), 0u);
+    EXPECT_EQ(countOcc(body, "上·"), 0u);
+    EXPECT_EQ(countOcc(body, "下·"), 0u);
+    EXPECT_GT(countOcc(body, "class=\"line-number\""), 0u);
 }
 
-// —— P1 扩展：自适应每行小节数 ——
+// —— P1 扩展：自适应每行小节数（偶数档：以 2 小节为一对贪心打包）——
 // 密排小节（每小节 7 个四分音符，估算宽 ≈ 7×33+2=233px）：
-//   autoFit 开 → 逐系统贪心：3×233≈699≤772 放得下、4×233≈932 超 → 每系统 3 小节，
-//   8 小节 → 3 系统（3+3+2）；autoFit 关 → 严格按 4 渲染 → 2 系统。
+//   autoFit 开 → 一对 466px 放得下、两对 932 超 → 每系统 2 小节，
+//   8 小节 → 4 系统（2+2+2+2，偶数约束）；autoFit 关 → 严格按 4 渲染 → 2 系统。
 TEST(render_auto_fit_measures_downshift) {
     pudu::JianpuDoc doc;
     doc.mode = "major"; doc.tonicLabel = "1=C"; doc.beats = 4; doc.beatType = 4;
@@ -326,13 +328,13 @@ TEST(render_auto_fit_measures_downshift) {
 
     std::string bOn = l2Body(doc, on);
     std::string bOff = l2Body(doc, off);
-    EXPECT_EQ(countOcc(bOn, "class=\"system\""), 3u);   // 贪心：3+3+2 = 3 系统
+    EXPECT_EQ(countOcc(bOn, "class=\"system\""), 4u);   // 贪心偶数档：2+2+2+2 = 4 系统
     EXPECT_EQ(countOcc(bOff, "class=\"system\""), 2u);  // 固定 4 → ceil(8/4)=2 系统
 }
 
 // 混合密度逐系统贪心：前 4 小节稀疏（1 音/小节，≈35px）、后 4 小节密排（7 音，≈233px）。
 //   旧全局降档会被密排块拖累到 N=2（8/2=4 系统，稀疏段被迫 2/行）；
-//   贪心逐系统：稀疏段满 4/行，密排段 3/行 → 3 系统（4+3+1），小节数守恒。
+//   贪心逐系统（偶数档）：稀疏段满 4/行，密排段 2/行 → 3 系统（4+2+2），小节数守恒。
 TEST(render_auto_fit_mixed_density_per_system) {
     pudu::JianpuDoc doc;
     doc.mode = "major"; doc.tonicLabel = "1=C"; doc.beats = 4; doc.beatType = 4;

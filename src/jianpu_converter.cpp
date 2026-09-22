@@ -543,8 +543,9 @@ const char* kL2Css =
     ".key{margin-top:4px;color:#5b6470;font-size:.95rem;letter-spacing:.5px;}"
     ".line{display:flex;flex-wrap:wrap;align-items:flex-end;gap:2px;padding:18px 0;"
     "border-bottom:1px dashed #ece7d8;}"
-    ".voice-label{font-size:.75rem;color:#9aa0a6;margin-right:10px;align-self:center;min-width:42px;}"
     ".measure{display:inline-flex;align-items:flex-end;padding:0 1px;}"
+    // 小节等宽拉伸铺满整行：每小节均分行宽，音符在小节格内居中
+    ".line .measure{flex:1 1 0;justify-content:center;}"
     ".barline{display:inline-block;width:2px;height:52px;background:#2b2b2b;margin:0 4px;align-self:flex-end;}"
     ".barline.final{position:relative;}"
     ".barline.final::after{content:'';position:absolute;left:4px;top:0;width:2px;height:52px;background:#2b2b2b;}"
@@ -591,7 +592,8 @@ const char* kL2GrandCss =
     // 大谱表小节线：每小节左侧一条纵线作小节分隔（首小节即系统开口线）；
     // 系统末小节经 .final 追加一条细双纵线。box-sizing 全局 border-box，
     // 故 2px 边框在列宽内、不破坏上下行列对齐。
-    ".grand-grid .measure{padding:0 1px;border-left:2px solid #2b2b2b;}"
+    // 小节格随 1fr 列拉伸铺满（纵线贴列缘、上下行对齐），音符格内居中。
+    ".grand-grid .measure{padding:0 1px;border-left:2px solid #2b2b2b;justify-content:center;}"
     ".grand-grid .measure.final{position:relative;}"
     ".grand-grid .measure.final::after{content:'';position:absolute;top:0;"
     "right:-4px;width:2px;height:100%;background:#2b2b2b;}"
@@ -641,7 +643,6 @@ std::string l2LineSlice(const JianpuLine& line, size_t begin, size_t end,
     if (showNumber)
         out += "<span class=\"line-number\">"
                + std::to_string(line.measures[begin].number) + "</span>";
-    out += "<span class=\"voice-label\">voice" + std::to_string(line.voice) + "</span>";
     for (size_t mi = begin; mi < end; ++mi) {
         out += l2MeasureFilled(line.measures[mi], doc, fillEmpty);
         if (mi + 1 < end) out += "<span class=\"barline\"></span>";
@@ -764,21 +765,25 @@ static std::vector<double> l2ColWidthsLines(const JianpuDoc& doc,
     return w;
 }
 
-// 逐系统贪心打包：从左往右累计列宽，每系统至多 desired 小节、累计宽不超 usable，
-// 放不下下一个小节即换行（单小节超宽仍独占一行）。返回每系统小节数。
+// 逐系统贪心打包（偶数档）：以 2 小节为一对从左往右累计列宽，每系统至多 cap
+// 小节（desired 向下取偶）、累计宽不超 usable，放不下下一对即换行；每行小节数
+// 因此保证为偶数——总小节数为奇数时仅末行取余数（1 或 3）。
 // 取代旧的全局一刀切降档（8→6→4→2 取第一个全篇放得下的 N）——旧规则会被个别
 // 密排小节拖累，稀疏段也被迫降档（整篇锁死 2 小节/行）。
 static std::vector<int> l2PackSystems(const std::vector<double>& w, int desired, double usable) {
+    int cap = (desired >= 2) ? (desired - desired % 2) : 2;
     std::vector<int> counts;
     size_t i = 0;
     while (i < w.size()) {
         double s = 0.0;
         int c = 0;
-        while (c < desired && i + static_cast<size_t>(c) < w.size() &&
-               (c == 0 || s + w[i + static_cast<size_t>(c)] <= usable)) {
-            s += w[i + static_cast<size_t>(c)];
-            ++c;
+        while (c + 2 <= cap && i + static_cast<size_t>(c + 2) <= w.size()) {
+            double pair = w[i + static_cast<size_t>(c)] + w[i + static_cast<size_t>(c + 1)];
+            if (c > 0 && s + pair > usable) break;
+            s += pair;
+            c += 2;
         }
+        if (c == 0) c = 1;   // 行首只剩 1 个小节（奇数余数）：单独成行
         counts.push_back(c);
         i += static_cast<size_t>(c);
     }
@@ -815,12 +820,11 @@ std::string l2GrandBrace() {
 }
 
 // 大谱表一行（上=右手 / 下=左手）：标签列 + 该谱表合并后的各小节。
-// 标签列：行首小节号（仅上行）+ 「上/下·v…（合并声部名）」；小节列用共享网格占位，
-// 使上行/下行同名小节严格列对齐。
+// 标签列：仅上行标行首小节号（声部描述已按需求去掉）；小节列用共享网格占位，
+// 使上行/下行同名小节严格列对齐（列宽 1fr 等分铺满整行，内容居中）。
 std::string l2GrandRow(const JianpuDoc& doc, const std::vector<size_t>& members,
                        const std::vector<int>& role, int wantRole,
-                       const std::vector<int>& voices, bool isFirst,
-                       size_t begin, size_t cols, bool fillEmpty) {
+                       bool isFirst, size_t begin, size_t cols, bool fillEmpty) {
     std::string out = "<div class=\"grand-label\">";
     if (isFirst) {
         for (auto li : members)
@@ -832,13 +836,6 @@ std::string l2GrandRow(const JianpuDoc& doc, const std::vector<size_t>& members,
                 }
             }
     }
-    std::string side = (wantRole == 1) ? "下" : "上";
-    std::string vlabel;
-    for (size_t i = 0; i < voices.size(); ++i) {
-        if (i) vlabel += ",";
-        vlabel += "v" + std::to_string(voices[i]);
-    }
-    out += "<span>" + side + (vlabel.empty() ? "" : "·" + vlabel) + "</span>";
     out += "</div>";
     for (size_t c = 0; c < cols; ++c) {
         size_t idx = begin + c;
@@ -867,14 +864,6 @@ std::string l2GrandSystems(const JianpuDoc& doc, const std::vector<size_t>& memb
     for (auto li : members) maxM = std::max(maxM, doc.lines[li].measures.size());
     if (maxM == 0 || counts.empty()) return "";
 
-    // 按谱表分上/下两组（声部名供行标签显示）
-    std::vector<size_t> up, down;
-    std::vector<int> upV, downV;
-    for (auto li : members) {
-        if (role[li] == 1) { down.push_back(li); downV.push_back(doc.lines[li].voice); }
-        else               { up.push_back(li);   upV.push_back(doc.lines[li].voice); }
-    }
-
     std::string out;
     size_t begin = 0;
     for (int c : counts) {
@@ -883,11 +872,12 @@ std::string l2GrandSystems(const JianpuDoc& doc, const std::vector<size_t>& memb
         out += "<div class=\"system system-grand\"><div class=\"grand-wrap\">";
         out += l2GrandBrace();
         out += "<div class=\"grand-body\">";
-        // 【列对齐关键】上下两行共用同一网格：第 0 列=行标签，其后每列=同一个小节。
+        // 【列对齐关键】上下两行共用同一网格：第 0 列=行标签，其后每列=同一个小节；
+        // 列宽 1fr 等分 → 铺满整行、右缘对齐（等宽拉伸）。
         out += "<div class=\"grand-grid\" style=\"grid-template-columns:auto repeat("
-               + std::to_string(cols) + ",max-content)\">";
-        out += l2GrandRow(doc, members, role, 0, upV,   true,  begin, cols, fillEmpty);
-        out += l2GrandRow(doc, members, role, 1, downV, false, begin, cols, fillEmpty);
+               + std::to_string(cols) + ",1fr)\">";
+        out += l2GrandRow(doc, members, role, 0, true,  begin, cols, fillEmpty);
+        out += l2GrandRow(doc, members, role, 1, false, begin, cols, fillEmpty);
         out += "</div></div></div>"; // grand-grid + grand-body + grand-wrap + system
         begin += cols;
     }

@@ -71,9 +71,10 @@ std::string jianpuToL1(const JianpuDoc& doc);
 struct JianpuRenderConfig {
     int measuresPerLine = 0;        // 0=自动（现状，逐行整段输出）；4/6/8/10=固定
     bool fillEmptyVoiceRest = false;// 空声部是否补 0
-    // 自适应每行小节数：逐系统贪心打包——每系统从左往右累计小节宽，至多
-    // measuresPerLine 小节、估算总宽不超可用宽度即换行（放不下 4 才减，
-    // 稀疏段仍可满 4/行）。仅对 measuresPerLine>0 生效；关闭后严格按
+    // 自适应每行小节数：逐系统贪心打包——以 2 小节为一对从左往右累计小节宽，
+    // 每系统至多 measuresPerLine 小节（向下取偶）、估算总宽不超可用宽度即换行
+    // （放不下 4 才减，稀疏段仍可满 4/行）；每行小节数保证为偶数，
+    // 总小节数为奇数时仅末行取余数。仅对 measuresPerLine>0 生效；关闭后严格按
     // measuresPerLine 渲染。默认开。
     bool autoFitMeasures = true;
 
@@ -90,7 +91,8 @@ struct JianpuRenderConfig {
 //   核心要素：数字 span.jp-num；八度点上下定位(·)；减时线横向连写(同值连续音
 //     成 beam 组，单条/多条横线贯穿)；增时线 —；附点 ·；和弦纵向 flex 列；
 //     连音弧内联 SVG。仅投影 L0，不回改 Score。
-//   默认配置（measuresPerLine=0, fillEmptyVoiceRest=false）输出与 v0.9.1 逐字节一致。
+//   排版：行首仅标起始小节号（无声部描述）；小节等宽拉伸铺满整行，
+//     音符在小节格内居中；大谱表上下行共享 1fr 网格、列缘纵线对齐。
 std::string jianpuToL2(const JianpuDoc& doc, const JianpuRenderConfig& cfg = {});
 
 // L3 结构化输出（JSON 字符串）：把 JianpuDoc 投影为无损、可被脚本解析的 JSON，
